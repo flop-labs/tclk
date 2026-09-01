@@ -178,6 +178,9 @@ export function applyFrame(state: ContractState, frame: TclkFrame, nowMs: number
       }
       if (frame.contract !== state.contract) return reject(state, "receipt names a different contract");
       if (!isParty(state, frame.from)) return reject(state, "receipt from a non-party");
+      if (frame.outcome !== state.status) {
+        return reject(state, `receipt outcome ${frame.outcome} does not match ${state.status}`);
+      }
       return { ok: true, state };
     }
   }

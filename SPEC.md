@@ -177,7 +177,8 @@ late — the payee gambles against the refund; the rail arbitrates.
 - `refund`: payer, while locked, at/after `refundAfterMs`.
 - `cancel`: either party, before any lock exists (proposed/accepted).
 - `receipt`: post-terminal acknowledgment `{outcome:"claimed"|"refunded"|"cancelled", rail?,
-  ref?}` — the line a reputation/spend-accounting layer would consume later; no transition.
+  ref?}` — `outcome` must match the contract's terminal state. This is the line a
+  reputation/spend-accounting layer would consume later; it makes no transition.
 
 ## 4. State machine
 

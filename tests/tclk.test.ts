@@ -217,6 +217,13 @@ describe("tclk state machine", () => {
     }, T0 + 3);
     expect(receipt.ok).toBe(true);
     expect(receipt.state.status).toBe("claimed");
+
+    const contradictoryReceipt = applyFrame(claimed.state, {
+      type: "receipt", from: PAYER_DID, contract: state.contract!, outcome: "refunded",
+    }, T0 + 3);
+    expect(contradictoryReceipt.ok).toBe(false);
+    expect(contradictoryReceipt.reason).toMatch(/does not match claimed/);
+    expect(contradictoryReceipt.state).toBe(claimed.state);
   });
 
   it("payee-initiated offers assign roles correctly at accept", () => {

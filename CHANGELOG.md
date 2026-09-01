@@ -20,6 +20,9 @@ All notable changes to this project are documented here. Format follows
   `!res.ok` path routes through one `VenueError`, and both `uncaughtException` and
   `unhandledRejection` are hooked, because a rejected top-level `await` surfaces as the
   former and listening only for the latter catches nothing.
+- Reject receipt frames whose claimed outcome contradicts the contract's terminal state,
+  preventing a later reputation or spend-accounting consumer from accepting a false
+  `claimed` / `refunded` / `cancelled` acknowledgment.
 
 ## [0.1.0] - 2026-09-01
 
