@@ -104,14 +104,26 @@ async function req(url, init, what) {
   }
 }
 
-/** Read a room the way any stranger would. */
-async function readRoom(room) {
-  const res = await req(`${BASE}/r/${room}?format=json`, undefined, `read ${room}`);
+/**
+ * Read a room the way any stranger would. `since`, when given, narrows to seq > since —
+ * pass the seq a record of interest landed at (minus one) rather than nothing, or the
+ * venue's default window is the newest N records regardless of whether the one you want
+ * is still in it (#11).
+ */
+async function readRoom(room, since) {
+  const suffix = since === undefined ? "" : `&since=${since}`;
+  const res = await req(`${BASE}/r/${room}?format=json${suffix}`, undefined, `read ${room}`);
   if (!res.ok) throw await refusal(`read ${room}`, res);
   return res.json();
 }
 
-/** Post one frame through the signed lane, as the given identity. */
+/**
+ * Post one frame through the signed lane, as the given identity. Returns the swept text
+ * and the `seq` the venue assigned the record — a caller that reads the room back later
+ * (step 5 does, for `tclk-offers`) can anchor a `since` on that instead of trusting the
+ * venue's default trailing window, which a busy shared room can push a record out of
+ * before the read happens (#11).
+ */
 async function post(signer, room, frame) {
   // Sign the text AFTER the venue's single-line sweep — those are the bytes it stores and
   // the bytes a later reader re-verifies against. Our frames are already printable ASCII,
@@ -121,7 +133,7 @@ async function post(signer, room, frame) {
   const nonce = nextNonce();
   const sig = signer.sign(canonicalMessage(room, nonce, text));
   const res = await req(
-    `${BASE}/r/${room}`,
+    `${BASE}/r/${room}?format=json`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -130,7 +142,8 @@ async function post(signer, room, frame) {
     `post to ${room}`,
   );
   if (!res.ok) throw await refusal(`post to ${room}`, res);
-  return text;
+  const { posted } = await res.json();
+  return { text, seq: posted.seq };
 }
 
 /** The note surface the paper rail records onto, wired to the venue's /kv routes. */
@@ -242,7 +255,7 @@ const offer = makeOffer({
   expiresMs: now + 10 * 60_000,
   job: { proto: "a2a", id: taskId, context: `/kv/${specNote.ns}/${specNote.key}` },
 });
-await post(payer, OFFER_ROOM, offer);
+const { seq: offerSeq } = await post(payer, OFFER_ROOM, offer);
 log(1, `offer      posted to /r/${OFFER_ROOM}  id ${offer.id.slice(0, 18)}…`);
 
 // 2 — the payee mints the secret and publishes only its statement.
@@ -291,7 +304,10 @@ await notes.set(note.ns, note.key, stateNoteValue("claimed", ref), {
 // 5 — a third party, holding no secrets, reconstructs the deal from the venue alone.
 console.log();
 log(5, "third-party verification, from the rooms only:");
-const board = await readRoom(OFFER_ROOM);
+// Anchored on the offer's own seq (#11): `tclk-offers` is shared by every deal on the
+// venue, so the default trailing window can push this run's offer out before step 5 gets
+// here if enough other activity landed in between.
+const board = await readRoom(OFFER_ROOM, offerSeq - 1);
 const dealLog = await readRoom(room);
 
 const offerLine = board.messages.map((m) => tryDecodeFrame(m.text)).find((f) => f?.id === offer.id);

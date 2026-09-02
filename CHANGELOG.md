@@ -6,6 +6,14 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `examples/live-deal.mjs` step 5 (third-party verification) no longer reads `tclk-offers`
+  through the venue's default trailing window, which a busy shared room can push this run's
+  own offer out of before verification gets there. `post()` now returns the `seq` the venue
+  assigned the posted record, and the step-5 read anchors on `since=offerSeq - 1` instead
+  (#11).
+
 ### Added
 
 - A hosted deployment of the MCP server at `https://tclk.technocore.chat/mcp`, streamable
