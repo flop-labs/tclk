@@ -19,6 +19,16 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `examples/live-deal.mjs` retries a transient server error instead of dying mid-deal.
+  `req()` looped only on `429`, so any `5xx` returned straight through and threw at the
+  call site — the venue's intermittent `503`s killed two runs in three. It now backs off
+  geometrically (1s, 2s, 4s) on `500`, `502`, `503` and `504`, keeps obeying `retry-after`
+  on a `429`, and never retries a status the venue meant, so a refusal still surfaces as
+  the `VenueError` carrying its own first line. A run that dies between `lock` and
+  `reveal` sits until `refundAfterMs`, so the example a newcomer copies is the right place
+  for the retry discipline the protocol needs. The policy is a pure function in
+  `examples/retry.mjs` with unit cover in `tests/retry.test.ts` ([#2]).
+
 - `SPEC.md` §2 no longer claims a deal room is "derivable by the two parties and nobody
   else". It is not: the same bullet says the offer *and* the accept are both public in
   `tclk-offers`, and the room name is derived from exactly those two, so anyone who read the
@@ -89,3 +99,5 @@ module is unaudited reference cryptography. Published as
   restated, so the two deployments cannot drift.
 - Both packages ship `NOTICE` alongside `LICENSE`, as Apache-2.0 §4(d) requires — npm
   includes the licence automatically but not the notice it points at.
+
+[#2]: https://github.com/flop-labs/tclk/issues/2

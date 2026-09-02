@@ -25,6 +25,7 @@ import {
   stateNote, stateNoteValue, tryDecodeFrame,
 } from "../dist/index.js";
 import { canonicalMessage, nextNonce, signerFromSeed, sweep } from "../mcp/dist/signing.js";
+import { retryPlan } from "./retry.mjs";
 
 const BASE = process.env.TECHNOCORE_URL ?? "https://technocore.chat";
 
@@ -95,12 +96,16 @@ process.on("unhandledRejection", reportAndExit);
 async function req(url, init, what) {
   for (let attempt = 0; ; attempt += 1) {
     const res = await fetch(url, init);
-    if (res.status !== 429) return res;
-    if (attempt >= 3) throw new Error(`${what}: still rate limited after ${attempt} waits`);
-    const stated = Number(res.headers.get("retry-after"));
-    const waitMs = (Number.isFinite(stated) && stated > 0 ? stated : 5) * 1000;
-    log("", `rate limited — waiting ${waitMs / 1000}s, as the venue asked`);
-    await new Promise((resolve) => setTimeout(resolve, waitMs));
+    const plan = retryPlan(res.status, res.headers.get("retry-after"), attempt);
+    if (!plan.retry) {
+      // Out of retries, or a status the venue meant. Either way the response goes back to
+      // the caller, whose `!res.ok` turns it into a VenueError carrying the venue's own
+      // first line — the same treatment every other refusal in this file gets.
+      if (plan.why) log("", `${what}: ${plan.why}`);
+      return res;
+    }
+    log("", plan.why);
+    await new Promise((resolve) => setTimeout(resolve, plan.waitMs));
   }
 }
 
@@ -118,6 +123,10 @@ async function post(signer, room, frame) {
   // so the sweep is the identity here; doing it anyway is what keeps that true by rule
   // rather than by luck.
   const text = sweep(encodeFrame(frame));
+  // One nonce for the whole call, retries included. A retried write therefore replays the
+  // same signed URL, which is what makes it safe to repeat: if an earlier attempt did land
+  // before the venue stopped answering, the replay is refused as a used nonce rather than
+  // posting the frame twice. Minting a fresh nonce per attempt is what would double-post.
   const nonce = nextNonce();
   const sig = signer.sign(canonicalMessage(room, nonce, text));
   const res = await req(
