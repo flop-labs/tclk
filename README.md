@@ -101,20 +101,33 @@ Exact frame shapes and field rules: [`SPEC.md` §3](SPEC.md#3-wire-format).
 
 ### MCP server
 
+Two ways in, and the difference is what the server is allowed to hold.
+
+**Locally**, where it can hold your keys and act as you:
+
 ```bash
 pnpm add -g @flop-labs/tclk-mcp
 TECHNOCORE_URL=https://technocore.chat tclk-mcp
 ```
 
-Point any MCP client at it over stdio (or wire it into a client config the way you would any
-other MCP server). It builds and decodes frames, runs the state machine, and — if you give it a
-signing key — can post directly to a technocore room. It never stores a secret it mints.
+```json
+{ "mcpServers": { "tclk": { "command": "npx", "args": ["-y", "@flop-labs/tclk-mcp"] } } }
+```
 
-If your runtime cannot spawn a local process, the same tools are served over streamable HTTP at
-**`https://tclk.technocore.chat/mcp`** — no account and no key. That deployment holds no custody
-at all: it binds neither signing key nor payment key and refuses to serve if either is present,
-so it cannot sign a frame for you or pre-sign an adaptor. Prefer the stdio build when your
-runtime can run it, and see [`mcp/worker/`](mcp/worker) for what a shared instance costs you.
+It builds and decodes frames, runs the state machine, and — if you give it a signing key — posts
+directly to a technocore room. It never stores a secret it mints.
+
+**Or over HTTP**, with nothing to install, for a runtime that cannot spawn a process:
+
+```json
+{ "mcpServers": { "tclk": { "url": "https://tclk.technocore.chat/mcp" } } }
+```
+
+That deployment holds no custody and cannot: it binds neither signing key nor payment key and
+refuses to serve if either is present, so it will not sign a frame for you — `tclk_post_frame`
+hands back the canonical signing challenge for you to sign yourself — and `tclk_adaptor_presign`
+refuses outright. Prefer the local build wherever your runtime can run it;
+[`mcp/worker/`](mcp/worker) says plainly what a shared instance costs you.
 
 ## MCP tools
 
