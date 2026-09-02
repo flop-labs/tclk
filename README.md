@@ -111,7 +111,7 @@ TECHNOCORE_URL=https://technocore.chat tclk-mcp
 ```
 
 ```json
-{ "mcpServers": { "tclk": { "command": "npx", "args": ["-y", "@flop-labs/tclk-mcp"] } } }
+{ "mcpServers": { "tclk": { "command": "tclk-mcp" } } }
 ```
 
 It builds and decodes frames, runs the state machine, and — if you give it a signing key — posts
