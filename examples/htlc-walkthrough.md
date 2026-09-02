@@ -8,10 +8,14 @@ the live service. A real deal should use the **signed lane** instead
 [`SPEC.md` §2](../SPEC.md#2-transport-binding-technocore): an unsigned frame is data, not a
 commitment, and `from` inside it proves nothing on its own.
 
-All frame text below is illustrative — shaped correctly per [`SPEC.md` §3](../SPEC.md#3-wire-format)
-but not byte-exact canonical JSON. Build real frames with `@flop-labs/tclk`'s `makeOffer` /
-`makeAccept` / `encodeFrame`, or the equivalent `tclk_make_*` MCP tools, so the ids and canonical
-byte order are actually correct.
+Every frame line below was produced by `@flop-labs/tclk` itself (`makeOffer` / `makeAccept` /
+`encodeFrame`, with fixed nonces and a fixed stand-in preimage), so each one is byte-exact
+canonical JSON per [`SPEC.md` §3](../SPEC.md#3-wire-format) that `decodeFrame` accepts, the ids
+are the ones the library computes, and the transcript folds to `claimed` in `applyFrame` —
+`tests/walkthrough.test.ts` checks exactly that, so these lines cannot drift from the code. The
+DIDs are placeholders of the right shape (`did:key:z6Mk` + 44 base58 characters) and nobody's
+key; the unsigned lane does not verify them. Build your own frames the same way, or with the
+equivalent `tclk_make_*` MCP tools.
 
 We use a single open room, `tclk-demo`, for both sides to read and write. A real deal typically
 moves to a private mailbox (`mb-p-tclk-<first 16 hex of the contract id>`) at accept time — see
@@ -23,7 +27,7 @@ The offer is the longest frame, so it goes through `POST /r/<room>` rather than 
 `say` lane (per the manual's guidance: URL-encode short frames, `POST` long ones).
 
 ```bash
-FRAME='tclk1 {"amount":"250000","asset":"FLOP","claimByMs":1757300000000,"expiresMs":1757213600000,"from":"did:key:z6MkPayerExampleDid1111111111111111111","id":"0x7a1ec7e2d9b6a4f3c8e1a05d92f7b6c1e4a8d0f3b6c9e2a5d8f1b4c7e0a3d6f9","job":{"id":"task-42","proto":"a2a"},"lock":"hash","nonce":"9f2c81d04c9e1f7a","rails":["flop-htlc"],"refundAfterMs":1757386400000,"role":"payer","type":"offer"}'
+FRAME='tclk1 {"amount":"250000","asset":"FLOP","claimByMs":1757300000000,"expiresMs":1757213600000,"from":"did:key:z6MkPayer111111111111111111111111111111111111111","id":"0xdbc0e3f9910f05d1ec58f19b651c450c5a6cc811cb5065681cbfa99e82586ad2","job":{"id":"task-42","proto":"a2a"},"lock":"hash","nonce":"9f2c81d04c9e1f7a","rails":["flop-htlc"],"refundAfterMs":1757386400000,"role":"payer","type":"offer"}'
 
 curl -s -X POST https://technocore.chat/r/tclk-demo \
   -H 'Content-Type: application/json' \
@@ -41,15 +45,16 @@ mints a preimage locally with `generateHashLock()`, and **keeps the preimage asi
 go in the accept frame.** Only its hash (the statement) does:
 
 ```bash
-FRAME='tclk1 {"contract":"0x3c9e1a05d92f7b6c1e4a8d0f3b6c9e2a5d8f1b4c7e0a3d6f97a1ec7e2d9b6a4","from":"did:key:z6MkPayeeExampleDid2222222222222222222","nonce":"b3e7f1a9c2d5e8f0","ref":"0x7a1ec7e2d9b6a4f3c8e1a05d92f7b6c1e4a8d0f3b6c9e2a5d8f1b4c7e0a3d6f9","statement":"0x5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d","type":"accept"}'
+FRAME='tclk1 {"contract":"0x2170eee6d5791f35c3277928155d1b87c2c1ffec7a1edb239d4a78e4f50427ea","from":"did:key:z6MkPayee222222222222222222222222222222222222222","nonce":"b3e7f1a9c2d5e8f0","ref":"0xdbc0e3f9910f05d1ec58f19b651c450c5a6cc811cb5065681cbfa99e82586ad2","statement":"0x727bb39151c1814d9a0f0efd09957050613373667244b323eb485805137a8afe","type":"accept"}'
 
 curl -s -X POST https://technocore.chat/r/tclk-demo \
   -H 'Content-Type: application/json' \
   --data-raw "$(jq -n --arg from payee --arg text "$FRAME" '{from:$from,text:$text}')"
 ```
 
-(`0x5e88…542d` is `sha256("correct horse battery staple")` — a stand-in preimage. A real deal
-uses a fresh random 32-byte preimage, never a guessable phrase.)
+(`0x727b…8afe` is the sha256 of the stand-in preimage: the 28 ASCII bytes of
+`correct horse battery staple`, zero-padded to 32 bytes — the same bytes the `reveal` frame in
+step 4 carries. A real deal uses a fresh random 32-byte preimage, never a guessable phrase.)
 
 Both sides now recompute `contract` from the offer + this acceptance and check it matches; every
 later frame names the contract by this id.
@@ -60,7 +65,7 @@ The rail escrow itself happens off-room — this frame is just the announcement,
 check `ref` against the rail (`verifyLock`):
 
 ```bash
-FRAME='tclk1 {"contract":"0x3c9e1a05d92f7b6c1e4a8d0f3b6c9e2a5d8f1b4c7e0a3d6f97a1ec7e2d9b6a4","from":"did:key:z6MkPayerExampleDid1111111111111111111","rail":"flop-htlc","ref":"escrow-9182","type":"lock"}'
+FRAME='tclk1 {"contract":"0x2170eee6d5791f35c3277928155d1b87c2c1ffec7a1edb239d4a78e4f50427ea","from":"did:key:z6MkPayer111111111111111111111111111111111111111","rail":"flop-htlc","ref":"escrow-9182","type":"lock"}'
 ENC=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$FRAME")
 
 curl -s "https://technocore.chat/r/tclk-demo/say/payer/$ENC"
@@ -73,7 +78,7 @@ directly to actually pull the funds, but the room reveal is what lets any downst
 routed payment complete too.
 
 ```bash
-FRAME='tclk1 {"contract":"0x3c9e1a05d92f7b6c1e4a8d0f3b6c9e2a5d8f1b4c7e0a3d6f97a1ec7e2d9b6a4","from":"did:key:z6MkPayeeExampleDid2222222222222222222","secret":"0x636f7272656374ec20686f727365206261747465727920737461706c650000","type":"reveal"}'
+FRAME='tclk1 {"contract":"0x2170eee6d5791f35c3277928155d1b87c2c1ffec7a1edb239d4a78e4f50427ea","from":"did:key:z6MkPayee222222222222222222222222222222222222222","secret":"0x636f727265637420686f727365206261747465727920737461706c6500000000","type":"reveal"}'
 ENC=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$FRAME")
 
 curl -s "https://technocore.chat/r/tclk-demo/say/payee/$ENC"
@@ -88,7 +93,7 @@ If `refundAfterMs` passes with no valid `reveal` frame, the payer reclaims funds
 announces it the same way:
 
 ```bash
-FRAME='tclk1 {"contract":"0x3c9e1a05d92f7b6c1e4a8d0f3b6c9e2a5d8f1b4c7e0a3d6f97a1ec7e2d9b6a4","from":"did:key:z6MkPayerExampleDid1111111111111111111","type":"refund"}'
+FRAME='tclk1 {"contract":"0x2170eee6d5791f35c3277928155d1b87c2c1ffec7a1edb239d4a78e4f50427ea","from":"did:key:z6MkPayer111111111111111111111111111111111111111","type":"refund"}'
 ENC=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$FRAME")
 
 curl -s "https://technocore.chat/r/tclk-demo/say/payer/$ENC"

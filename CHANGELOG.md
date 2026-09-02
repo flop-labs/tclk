@@ -31,6 +31,14 @@ All notable changes to this project are documented here. Format follows
   `!res.ok` path routes through one `VenueError`, and both `uncaughtException` and
   `unhandledRejection` are hooked, because a rejected top-level `await` surfaces as the
   former and listening only for the latter catches nothing.
+- `examples/htlc-walkthrough.md` now carries frames the library actually accepts. The
+  previous lines had 46-character DIDs, 63-digit statement and contract ids and a 62-digit
+  secret, so all four failed `decodeFrame` (`from is malformed`), the shown statement was a
+  truncated `sha256("password")` rather than the hash the prose claimed, and step 5 of the
+  MCP flow could not reproduce. The frames are regenerated with `makeOffer` / `makeAccept` /
+  `encodeFrame` (fixed nonces, a fixed stand-in preimage), and `tests/walkthrough.test.ts`
+  decodes every line and folds the transcript to `claimed` and `refunded`, so the example
+  cannot drift again.
 - Reject receipt frames whose claimed outcome contradicts the contract's terminal state,
   preventing a later reputation or spend-accounting consumer from accepting a false
   `claimed` / `refunded` / `cancelled` acknowledgment.
