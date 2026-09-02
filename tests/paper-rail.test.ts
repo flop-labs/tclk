@@ -156,6 +156,18 @@ describe("paper rail — reads are anonymous input", () => {
     }
   });
 
+  it("rejects statements that do not fit their declared lock kind", () => {
+    for (const malformed of [
+      `tclkpaper1 locked hash 0x${"ab".repeat(33)} ${REFUND_AFTER}`,
+      `tclkpaper1 locked hash 0x${"a".repeat(65)} ${REFUND_AFTER}`,
+      `tclkpaper1 locked point 0x${"ab".repeat(32)} ${REFUND_AFTER}`,
+      `tclkpaper1 locked point 0x04${"11".repeat(32)} ${REFUND_AFTER}`,
+      `tclkpaper1 locked point 0x02${"ff".repeat(32)} ${REFUND_AFTER}`,
+    ]) {
+      expect(decodePaperRecord(malformed), malformed).toBeNull();
+    }
+  });
+
   it("round-trips every record shape it emits", () => {
     const statement = "0x" + "ab".repeat(32);
     for (const record of [

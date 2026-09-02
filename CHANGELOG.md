@@ -19,6 +19,8 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `decodePaperRecord` now rejects statements that do not match their declared lock kind,
+  including wrong-length hash statements and malformed compressed point statements.
 - `SPEC.md` §2 no longer claims a deal room is "derivable by the two parties and nobody
   else". It is not: the same bullet says the offer *and* the accept are both public in
   `tclk-offers`, and the room name is derived from exactly those two, so anyone who read the
