@@ -226,6 +226,34 @@ describe("tclk state machine", () => {
     expect(contradictoryReceipt.state).toBe(claimed.state);
   });
 
+  it.each([
+    ["NaN", Number.NaN],
+    ["Infinity", Number.POSITIVE_INFINITY],
+    ["negative", -1],
+  ])("rejects %s nowMs without changing state", (_label, nowMs) => {
+    const { state } = accepted();
+    const step = applyFrame(state, {
+      type: "lock", from: PAYER_DID, contract: state.contract!, rail: "flop-htlc", ref: "escrow-42",
+    }, nowMs);
+
+    expect(step.ok).toBe(false);
+    expect(step.reason).toBe("tclk: nowMs must be a finite non-negative number");
+    expect(step.state).toBe(state);
+  });
+
+  it("keeps exact expiry and refund deadline boundaries", () => {
+    const { offer, accept, state } = accepted();
+    expect(applyFrame(openContract(offer), accept, EXPIRES).ok).toBe(false);
+
+    const locked = applyFrame(state, {
+      type: "lock", from: PAYER_DID, contract: state.contract!, rail: "flop-htlc", ref: "escrow-42",
+    }, T0);
+    expect(locked.ok).toBe(true);
+    expect(applyFrame(locked.state, {
+      type: "refund", from: PAYER_DID, contract: state.contract!,
+    }, REFUND_AFTER).ok).toBe(true);
+  });
+
   it("payee-initiated offers assign roles correctly at accept", () => {
     const offer = makeOffer({
       from: PAYEE_DID, role: "payee", amount: "5", asset: "USDC", lock: "hash",
