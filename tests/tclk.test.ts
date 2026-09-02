@@ -226,6 +226,38 @@ describe("tclk state machine", () => {
     expect(contradictoryReceipt.state).toBe(claimed.state);
   });
 
+  it("binds a frame's `from` to the sender of the record that carried it", () => {
+    const { lock, state } = accepted();
+
+    // The whole point: `from` inside the JSON says PAYER_DID, but the record was signed
+    // by someone else. Without the binding this is an ordinary, valid lock frame — it
+    // passes `only the payer locks`, because that guard compares the attacker's claim
+    // against an offer field the attacker also read off a public board.
+    const forged = { type: "lock", from: PAYER_DID, contract: state.contract!, rail: "flop-htlc", ref: "escrow-42" } as const;
+    expect(applyFrame(state, forged, T0 + 1).ok).toBe(true);
+
+    const bound = applyFrame(state, forged, T0 + 1, PAYEE_DID);
+    expect(bound.ok).toBe(false);
+    expect(bound.reason).toMatch(/lock\.from is not the sender/);
+    expect(bound.state).toBe(state);
+
+    // A matching sender changes nothing.
+    expect(applyFrame(state, forged, T0 + 1, PAYER_DID).ok).toBe(true);
+
+    // And it holds for every frame type, including the ones whose only party guard is
+    // `isParty` — a forged cancel is how a stranger kills a deal it is not part of.
+    const cancel = { type: "cancel", from: PAYEE_DID, contract: state.contract! } as const;
+    expect(applyFrame(state, cancel, T0 + 1).ok).toBe(true);
+    expect(applyFrame(state, cancel, T0 + 1, PAYER_DID).ok).toBe(false);
+  });
+
+  it("openContract refuses an offer whose `from` is not the record's sender", () => {
+    const offer = baseOffer();
+    expect(() => openContract(offer, PAYEE_DID)).toThrow(/not the sender of the record/);
+    expect(openContract(offer, PAYER_DID).status).toBe("proposed");
+    expect(openContract(offer).status).toBe("proposed");
+  });
+
   it("payee-initiated offers assign roles correctly at accept", () => {
     const offer = makeOffer({
       from: PAYEE_DID, role: "payee", amount: "5", asset: "USDC", lock: "hash",

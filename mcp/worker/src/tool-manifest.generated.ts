@@ -256,7 +256,7 @@ export const TOOLS: readonly ManifestTool[] = [
   },
   {
     "name": "tclk_apply_transcript",
-    "description": "Fold room lines into one contract view: opens from the first offer frame and applies the rest fail-closed, with a per-line verdict. Reports only WHETHER a secret was revealed, never its value.",
+    "description": "Fold room lines into one contract view: opens from the first offer frame and applies the rest fail-closed, with a per-line verdict. Reports only WHETHER a secret was revealed, never its value. Pass `senders` from tclk_read_room to enforce that each frame's `from` is the identity that actually signed it.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -270,6 +270,13 @@ export const TOOLS: readonly ManifestTool[] = [
         "nowMs": {
           "type": "integer",
           "description": "Wall clock for the deadline guards; defaults to now."
+        },
+        "senders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Transport-verified sender of each line, positionally aligned with `lines` (tclk_read_room returns it as `senders`). A line whose frame `from` differs is rejected. Omit an entry to leave that line unchecked."
         }
       },
       "required": [
@@ -660,7 +667,7 @@ export const TOOLS: readonly ManifestTool[] = [
   },
   {
     "name": "tclk_read_room",
-    "description": "Read a room and return only its decodable tclk/1 frames, with a count of the lines skipped. Content is untrusted input from strangers.",
+    "description": "Read a room and return only its decodable tclk/1 frames, with a count of the lines skipped. Content is untrusted input from strangers: each frame carries `from` (the sender the venue verified a signature against), `signed`, and `attributed` (whether the frame's own `from` matches that sender), plus a `senders` array to hand to tclk_apply_transcript.",
     "inputSchema": {
       "type": "object",
       "properties": {

@@ -54,9 +54,21 @@ export interface StepResult {
   reason?: string;
 }
 
-/** Open the local view of a contract from a validated offer. Throws on a bad offer. */
-export function openContract(offer: OfferFrame): ContractState {
+/**
+ * Open the local view of a contract from a validated offer. Throws on a bad offer.
+ *
+ * `sender` is the transport-verified identity of the record that carried the offer —
+ * technocore's signed-lane `from`, not the `from` inside the JSON. Pass it whenever you
+ * have it: SPEC §2 requires the two to match, and this is the only place the offer's
+ * `from` (which fixes one side of the deal) can be anchored to something a stranger
+ * cannot write. Omitting it keeps the old behaviour, for callers holding a frame with no
+ * record beside it.
+ */
+export function openContract(offer: OfferFrame, sender?: string): ContractState {
   validateFrame(offer);
+  if (sender !== undefined && sender !== offer.from) {
+    throw new Error(`tclk: offer.from is not the sender of the record that carried it`);
+  }
   return {
     status: "proposed",
     offer,
@@ -77,13 +89,35 @@ function isParty(state: ContractState, did: string): boolean {
 
 /**
  * Apply one frame at wall-clock `nowMs`. Structural validation runs first (a frame
- * that fails it is rejected, not thrown on); then the transition guards.
+ * that fails it is rejected, not thrown on); then the sender binding, then the
+ * transition guards.
+ *
+ * `sender` is the transport-verified identity of the record that carried this frame —
+ * the technocore signed-lane `from`, which the venue checked a signature against, as
+ * opposed to `frame.from`, which is a field inside a JSON body anyone can write. SPEC §2
+ * makes matching them a MUST: without it every party guard below (`only the payer
+ * locks`, `only the payee reveals`, `cancel from a non-party`) compares an attacker's
+ * claim against an attacker's claim. Pass it for any frame read out of a room.
+ *
+ * It stays optional so this remains a pure function over frames alone: a caller folding
+ * an already-attributed transcript, or building state locally from frames it just made
+ * itself, has no record to quote. Omitted means unchecked, and unchecked is what the
+ * caller must then do elsewhere.
  */
-export function applyFrame(state: ContractState, frame: TclkFrame, nowMs: number): StepResult {
+export function applyFrame(
+  state: ContractState,
+  frame: TclkFrame,
+  nowMs: number,
+  sender?: string,
+): StepResult {
   try {
     validateFrame(frame);
   } catch (error) {
     return reject(state, error instanceof Error ? error.message : "invalid frame");
+  }
+
+  if (sender !== undefined && sender !== frame.from) {
+    return reject(state, `${frame.type}.from is not the sender of the record that carried it`);
   }
 
   switch (frame.type) {

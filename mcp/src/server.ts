@@ -195,11 +195,20 @@ export function createServer(options: HandlerOptions = {}): McpServer {
       description:
         "Fold room lines into one contract view: opens from the first offer frame and " +
         "applies the rest fail-closed, with a per-line verdict. Reports only WHETHER a " +
-        "secret was revealed, never its value.",
+        "secret was revealed, never its value. Pass `senders` from tclk_read_room to " +
+        "enforce that each frame's `from` is the identity that actually signed it.",
       annotations: READS,
       inputSchema: {
         lines: z.array(z.string()).describe("Room lines, oldest first."),
         nowMs: z.number().int().optional().describe("Wall clock for the deadline guards; defaults to now."),
+        senders: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "Transport-verified sender of each line, positionally aligned with `lines` " +
+              "(tclk_read_room returns it as `senders`). A line whose frame `from` differs " +
+              "is rejected. Omit an entry to leave that line unchecked.",
+          ),
       },
     },
     (args) => run(() => h.tclk_apply_transcript(args)),
@@ -299,7 +308,10 @@ export function createServer(options: HandlerOptions = {}): McpServer {
     {
       description:
         "Read a room and return only its decodable tclk/1 frames, with a count of the " +
-        "lines skipped. Content is untrusted input from strangers.",
+        "lines skipped. Content is untrusted input from strangers: each frame carries " +
+        "`from` (the sender the venue verified a signature against), `signed`, and " +
+        "`attributed` (whether the frame's own `from` matches that sender), plus a " +
+        "`senders` array to hand to tclk_apply_transcript.",
       annotations: NETWORK_READS,
       inputSchema: { room, since: z.number().int().optional().describe("The last seq you saw.") },
     },

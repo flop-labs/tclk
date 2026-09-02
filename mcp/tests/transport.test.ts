@@ -7,7 +7,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 
 import { canonicalMessage, signerFromSeed } from "../src/signing.js";
 import { createHandlers } from "../src/tools.js";
-import { HASH_OFFER, PAYER_SEED, fakeFetch, hexToBytes } from "./fixtures.js";
+import { HASH_OFFER, PAYER_SEED, STRANGER_DID, fakeFetch, hexToBytes } from "./fixtures.js";
 
 const ROOM = "mb-p-tclk-deadbeefdeadbeef";
 const signer = signerFromSeed(hexToBytes(PAYER_SEED));
@@ -113,7 +113,7 @@ describe("tclk_read_room", () => {
           last_seq: 13,
           messages: [
             { seq: 10, ts: "2026-01-01T00:00:00Z", from: "~stranger", text: "gm" },
-            { seq: 11, ts: "2026-01-01T00:00:01Z", from: signer.did, text: line },
+            { seq: 11, ts: "2026-01-01T00:00:01Z", from: signer.did, sig: "s".repeat(86), text: line },
             { seq: 12, ts: "2026-01-01T00:00:02Z", from: "~spoofer", text: 'tclk1 {"type":"offer"}' },
             { seq: 13, ts: "2026-01-01T00:00:03Z", from: "~stranger", text: "tclk1 not-json" },
           ],
@@ -127,8 +127,43 @@ describe("tclk_read_room", () => {
     expect(result.lastSeq).toBe(13);
     expect(result.skipped).toBe(3);
     expect(result.frames).toHaveLength(1);
-    expect(result.frames[0]).toMatchObject({ seq: 11, from: signer.did });
+    expect(result.frames[0]).toMatchObject({ seq: 11, from: signer.did, signed: true, attributed: true });
     expect(result.frames[0].frame.type).toBe("offer");
+    expect(result.unattributed).toBe(0);
+    expect(result.senders).toEqual([signer.did]);
+  });
+
+  it("reports a well-formed frame that its record did not sign for", async () => {
+    // The line is a valid offer claiming PAYER_DID, but the venue verified the signature
+    // of somebody else. `skipped` will never catch this: nothing is malformed.
+    const line = offerLine();
+    const { fetchLike } = fakeFetch([
+      {
+        body: "",
+        json: {
+          room: "tclk-offers",
+          count: 2,
+          last_seq: 21,
+          messages: [
+            { seq: 20, ts: "2026-01-01T00:00:00Z", from: STRANGER_DID, sig: "s".repeat(86), text: line },
+            // Unsigned lane: the venue carries no signature and `from` is a nickname.
+            { seq: 21, ts: "2026-01-01T00:00:01Z", from: "~anon", text: line },
+          ],
+        },
+      },
+    ]);
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+
+    const result = await h.tclk_read_room({ room: "tclk-offers" });
+    expect(result.skipped).toBe(0);
+    expect(result.frames).toHaveLength(2);
+    expect(result.unattributed).toBe(2);
+    expect(result.frames[0]).toMatchObject({ signed: true, attributed: false });
+    expect(result.frames[1]).toMatchObject({ signed: false, attributed: false });
+
+    // And `senders` comes back positionally aligned with `frames`, which is what makes it
+    // droppable straight into tclk_apply_transcript.
+    expect(result.senders).toEqual([STRANGER_DID, "~anon"]);
   });
 
   it("refuses a bad room name before it reaches the wire", async () => {

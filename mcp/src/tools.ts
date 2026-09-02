@@ -239,11 +239,23 @@ export function createHandlers(options: HandlerOptions = {}) {
      * Fold a room transcript into one contract view. Lines are anonymous input, so
      * nothing here throws on a bad one: every line gets an `{ ok, reason }` verdict and
      * money-state only advances on frames that verify.
+     *
+     * `senders[i]` is the transport-verified `from` of the record that carried `lines[i]`
+     * — `tclk_read_room` returns it as `from` on every frame. Supplying it is what makes
+     * the party guards mean anything: SPEC §2 requires a frame's own `from` to match the
+     * signed-lane sender, and a fold over bare lines cannot check that, because the only
+     * two identities it can see both came out of the same attacker-writable JSON body.
+     * A mismatch is a per-line rejection like any other, never a throw. Sparse arrays are
+     * fine: an absent entry leaves that line unchecked.
      */
-    tclk_apply_transcript(input: { lines: string[]; nowMs?: number }) {
+    tclk_apply_transcript(input: { lines: string[]; nowMs?: number; senders?: string[] }) {
       const nowMs = input.nowMs ?? Date.now();
       const steps: { index: number; type?: string; ok: boolean; reason?: string }[] = [];
       let state: ContractState | null = null;
+      // Why the first offer frame did not open a contract, if one was tried. Without it
+      // a transcript whose offer was rejected reports "contains no offer frame", which
+      // is the one thing that is not true about it.
+      let openFailure: string | null = null;
 
       input.lines.forEach((line, index) => {
         const frame = tryDecodeFrame(line);
@@ -263,19 +275,27 @@ export function createHandlers(options: HandlerOptions = {}) {
             return;
           }
           try {
-            state = openContract(frame);
+            state = openContract(frame, input.senders?.[index]);
             steps.push({ index, type: "offer", ok: true });
           } catch (error) {
-            steps.push({ index, type: "offer", ok: false, reason: errorMessage(error) });
+            const reason = errorMessage(error);
+            openFailure ??= reason;
+            steps.push({ index, type: "offer", ok: false, reason });
           }
           return;
         }
-        const result = applyFrame(state, frame, nowMs);
+        const result = applyFrame(state, frame, nowMs, input.senders?.[index]);
         state = result.state;
         steps.push({ index, type: frame.type, ok: result.ok, reason: result.reason });
       });
 
-      if (state === null) fail("transcript contains no offer frame to open a contract from");
+      if (state === null) {
+        fail(
+          openFailure === null
+            ? "transcript contains no offer frame to open a contract from"
+            : `no contract could be opened: ${openFailure}`,
+        );
+      }
       const open: ContractState = state;
 
       return {
@@ -422,19 +442,51 @@ export function createHandlers(options: HandlerOptions = {}) {
       };
     },
 
+    /**
+     * Read a room and return its decodable frames, each carrying the venue's own verdict
+     * on who sent it.
+     *
+     * `from` is the record's transport-verified sender; `frame.from` is a field inside a
+     * body anyone with a socket can write. They are different things, and SPEC §2 requires
+     * them to match, so this reports the comparison rather than leaving a caller to notice
+     * that it never happened: `signed` says the venue carried a signature at all (the
+     * unsigned lane carries none, and its `from` is a nickname that can never be a
+     * did:key), and `attributed` says the frame is what its own `from` claims. Nothing is
+     * dropped — an unattributed frame is still a fact about the room, and hiding it would
+     * lose the evidence that someone tried. Feed `senders` to `tclk_apply_transcript` to
+     * have the fold enforce it.
+     */
     async tclk_read_room(input: { room: string; since?: number }) {
       const view = await client.readRoom(input.room, input.since);
-      const frames: { seq: number; ts: string; from: string; frame: TclkFrame }[] = [];
+      const frames: {
+        seq: number;
+        ts: string;
+        from: string;
+        signed: boolean;
+        attributed: boolean;
+        frame: TclkFrame;
+      }[] = [];
       let skipped = 0;
+      let unattributed = 0;
       for (const message of view.messages) {
         const frame = typeof message.text === "string" ? tryDecodeFrame(message.text) : null;
         if (frame === null) {
           skipped += 1;
           continue;
         }
-        frames.push({ seq: message.seq, ts: message.ts, from: message.from, frame });
+        const signed = typeof message.sig === "string" && message.sig.length > 0;
+        const attributed = signed && message.from === frame.from;
+        if (!attributed) unattributed += 1;
+        frames.push({ seq: message.seq, ts: message.ts, from: message.from, signed, attributed, frame });
       }
-      return { room: view.room, frames, skipped, lastSeq: view.last_seq };
+      return {
+        room: view.room,
+        frames,
+        senders: frames.map((f) => f.from),
+        skipped,
+        unattributed,
+        lastSeq: view.last_seq,
+      };
     },
 
     tclk_whoami() {

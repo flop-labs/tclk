@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createHandlers } from "../src/tools.js";
-import { HASH_OFFER, NOW, PAYEE_DID, PAYER_DID } from "./fixtures.js";
+import { HASH_OFFER, NOW, PAYEE_DID, PAYER_DID, STRANGER_DID } from "./fixtures.js";
 
 const h = createHandlers({ env: {} });
 
@@ -136,5 +136,72 @@ describe("fail-closed folding", () => {
     expect(() => h.tclk_apply_transcript({ lines: ["gm", "still not a frame"] })).toThrow(
       /no offer frame/,
     );
+  });
+});
+
+describe("sender binding (SPEC §2)", () => {
+  it("rejects a frame whose `from` is not the identity that signed the record", () => {
+    const { offer, accept } = openDeal();
+    // A stranger reads the public board, copies the contract id, and posts a lock frame
+    // claiming to be the payer. The line itself is well-formed and the party guard is
+    // satisfied — both identities it compares came out of attacker-writable JSON.
+    const forgedLock = h.tclk_make_lock({
+      from: PAYER_DID,
+      contract: accept.contract,
+      rail: "flop-htlc",
+      ref: "escrow-does-not-exist",
+    });
+    const lines = [offer.line, accept.line, forgedLock.line];
+
+    const unbound = h.tclk_apply_transcript({ lines, nowMs: NOW + 1 });
+    expect(unbound.status).toBe("locked");
+
+    const bound = h.tclk_apply_transcript({
+      lines,
+      nowMs: NOW + 1,
+      senders: [PAYER_DID, PAYEE_DID, STRANGER_DID],
+    });
+    expect(bound.status).toBe("accepted");
+    expect(bound.steps[2]).toMatchObject({ index: 2, ok: false });
+    expect(bound.steps[2].reason).toMatch(/lock\.from is not the sender/);
+  });
+
+  it("a truthful transcript folds identically with senders supplied", () => {
+    const { offer, accept } = openDeal();
+    const lock = h.tclk_make_lock({
+      from: PAYER_DID,
+      contract: accept.contract,
+      rail: "flop-htlc",
+      ref: "escrow-42",
+    });
+    const reveal = h.tclk_make_reveal({
+      from: PAYEE_DID,
+      contract: accept.contract,
+      secret: accept.secret,
+    });
+    const lines = [offer.line, accept.line, lock.line, reveal.line];
+    const senders = [PAYER_DID, PAYEE_DID, PAYER_DID, PAYEE_DID];
+
+    const bound = h.tclk_apply_transcript({ lines, nowMs: NOW + 1, senders });
+    expect(bound.steps.map((s) => s.ok)).toEqual([true, true, true, true]);
+    expect(bound.status).toBe("claimed");
+  });
+
+  it("a forged offer cannot open a contract under someone else's identity", () => {
+    const { offer } = openDeal();
+    expect(() =>
+      h.tclk_apply_transcript({ lines: [offer.line], nowMs: NOW, senders: [STRANGER_DID] }),
+    ).toThrow(/no contract could be opened: .*not the sender of the record/);
+  });
+
+  it("a short `senders` array leaves the remaining lines unchecked", () => {
+    const { offer, accept } = openDeal();
+    const bound = h.tclk_apply_transcript({
+      lines: [offer.line, accept.line],
+      nowMs: NOW + 1,
+      senders: [PAYER_DID],
+    });
+    expect(bound.steps.map((s) => s.ok)).toEqual([true, true]);
+    expect(bound.status).toBe("accepted");
   });
 });

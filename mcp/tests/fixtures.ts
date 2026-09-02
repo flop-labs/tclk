@@ -17,6 +17,10 @@ export const PAYEE_SEED = "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf
 export const PAYER_DID = signerFromSeed(hexToBytes(PAYER_SEED)).did;
 export const PAYEE_DID = signerFromSeed(hexToBytes(PAYEE_SEED)).did;
 
+/** A third identity: party to nothing, able to write into any room the two parties use. */
+export const STRANGER_SEED = "c5aa8df43f9f837bedb7442f31dcb7b166d38535076f094b85ce3a2e0b4458f7";
+export const STRANGER_DID = signerFromSeed(hexToBytes(STRANGER_SEED)).did;
+
 /** A 32-byte secp256k1 scalar, valid for `TCLK_PAYMENT_KEY`. */
 export const PAYMENT_KEY = "1111111111111111111111111111111111111111111111111111111111111111";
 

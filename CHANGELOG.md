@@ -19,6 +19,26 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- The rule `SPEC.md` §2 states as a MUST is now something the code can enforce: a frame's
+  `from` must be the transport-verified sender of the record that carried it. Nothing
+  checked it. `applyFrame` and `openContract` take an optional `sender`, and a frame whose
+  `from` differs is rejected like any other bad frame; omitting it keeps the previous
+  behaviour, so no existing caller changes. Without this every party guard in the machine
+  (`only the payer locks`, `only the payee reveals`, `cancel from a non-party`) compares
+  one attacker-writable field against another: `frame.from` is a key in a JSON body, and
+  the identities it is matched against were themselves read out of earlier bodies. A
+  stranger who can write into the room could post a well-formed `lock` naming the payer
+  and every reader would fold it to `locked`, with no escrow behind it.
+- `tclk_read_room` reported the venue's verified sender and the frame's claimed one side
+  by side without ever comparing them. Each frame now carries `signed` and `attributed`,
+  the response carries an `unattributed` count and a `senders` array, and nothing is
+  dropped — an unattributed frame is evidence, not noise. `tclk_apply_transcript` takes
+  that `senders` array positionally, which is what the pipeline was missing: its input was
+  `lines` alone, so the documented read-then-fold path could not have enforced §2 no
+  matter how carefully a caller used it.
+- `tclk_apply_transcript` no longer reports "transcript contains no offer frame to open a
+  contract from" when a transcript's offer frame was found and rejected. It names the
+  rejection instead.
 - `SPEC.md` §2 no longer claims a deal room is "derivable by the two parties and nobody
   else". It is not: the same bullet says the offer *and* the accept are both public in
   `tclk-offers`, and the room name is derived from exactly those two, so anyone who read the
