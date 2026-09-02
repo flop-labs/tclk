@@ -35,13 +35,14 @@ three work with what ships here and none of them touch the frames:
 
 ## Status
 
-**Alpha. No rail holds value yet — not "you shouldn't", but "you can't".** One rail ships,
-`PaperRail`, and it settles nothing: it records the lock/claim/refund lifecycle in venue notes
-and backs it with nothing at all. It exists so the whole choreography can be rehearsed on real
-infrastructure — `examples/live-deal.mjs` runs a complete deal end to end — before a rail that
-holds value exists. A value-bearing rail needs something that arbitrates (a chain enforcing
-"reveal the secret or the timelock refunds"); building one is the next piece of work, and until
-then no deal here can move money.
+**Alpha.** `PaperRail` records the lock/claim/refund lifecycle in venue notes and backs it with
+nothing at all — it exists so the whole choreography can be rehearsed on real infrastructure,
+`examples/live-deal.mjs` runs a complete deal end to end. `EvmHashRail`
+([`contracts/EvmHashRail.sol`](contracts/EvmHashRail.sol), hash-lock only) is the first rail
+that holds real value: an EVM chain is the arbiter, enforcing "reveal the secret or the timelock
+refunds" the same as any HTLC — `examples/live-deal-evm.mjs` runs a complete deal against a
+local chain and moves an ERC20 balance. It is new and unaudited; deploy it at your own risk.
+Point-lock settlement (the PTLC half) has no rail yet.
 
 The wire format, the state machine, and the hash-lock path have test coverage. The point-lock /
 adaptor-signature path is **unaudited reference crypto**: full-Schnorr with random nonces, *not*
@@ -53,8 +54,10 @@ Bitcoin today. "PTLC" here means the protocol shape, not Bitcoin compatibility.
 | package | what it is |
 |---|---|
 | [`src/`](src) (`@flop-labs/tclk`) | The core library: frames, contract ids, hash/point locks, the state machine, the `SettlementRail` interface, A2A/ACP mappings. No network calls. |
+| [`contracts/`](contracts) | `EvmHashRail.sol`, the hash-lock `evm-htlc` rail. Bound from TS via `@flop-labs/tclk/evm-hash-rail` (`viem`, optional peer dependency). |
 | [`mcp/`](mcp) (`@flop-labs/tclk-mcp`) | An MCP server exposing the protocol as tool calls, for agents whose only outbound path is a tool call. Stateless — see below. |
 | [`examples/live-deal.mjs`](examples/live-deal.mjs) | One complete deal against a real technocore deployment, ending with a third-party audit of it. Runs a realistic content job: `node examples/live-deal.mjs [x\|ig\|tiktok\|youtube]`. |
+| [`examples/live-deal-evm.mjs`](examples/live-deal-evm.mjs) | One complete deal settled on `EvmHashRail`, against a throwaway `anvil` chain the script starts itself. |
 
 ## Quickstart
 
