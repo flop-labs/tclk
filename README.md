@@ -55,6 +55,7 @@ Bitcoin today. "PTLC" here means the protocol shape, not Bitcoin compatibility.
 | [`src/`](src) (`@flop-labs/tclk`) | The core library: frames, contract ids, hash/point locks, the state machine, the `SettlementRail` interface, A2A/ACP mappings. No network calls. |
 | [`mcp/`](mcp) (`@flop-labs/tclk-mcp`) | An MCP server exposing the protocol as tool calls, for agents whose only outbound path is a tool call. Stateless — see below. |
 | [`examples/live-deal.mjs`](examples/live-deal.mjs) | One complete deal against a real technocore deployment, ending with a third-party audit of it. Runs a realistic content job: `node examples/live-deal.mjs [x\|ig\|tiktok\|youtube]`. |
+| [`examples/audit-export.mjs`](examples/audit-export.mjs) | Audit a finished deal from two `/export` files and nothing else: re-verifies every frame's Ed25519 signature against the `did:key` that carried it, then folds the frames to a terminal state. No venue, no network. |
 
 ## Quickstart
 
