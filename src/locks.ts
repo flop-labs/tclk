@@ -44,7 +44,8 @@ export function verifyHashPreimage(hash: string, preimage: string | Uint8Array):
 /** Check a revealed secret against a statement for either lock kind. Fail-closed boolean. */
 export function verifySecret(lock: LockKind, statement: string, secret: string | Uint8Array): boolean {
   if (lock === "hash") return verifyHashPreimage(statement, secret);
-  return verifyPointWitness(statement, secret);
+  if (lock === "point") return verifyPointWitness(statement, secret);
+  return false;
 }
 
 /**

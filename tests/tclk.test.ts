@@ -21,6 +21,7 @@ import {
   generateHashLock,
   generatePointLock,
   hashLockFromPreimage,
+  isValidStatement,
   lockTerms,
   makeAccept,
   makeOffer,
@@ -181,6 +182,18 @@ describe("tclk locks", () => {
     expect(verifySecret("point", p.statement, p.witness)).toBe(true);
     expect(verifySecret("hash", h.hash, p.witness)).toBe(false);
     expect(verifySecret("point", p.statement, h.preimage)).toBe(false);
+    expect(verifySecret("banana" as never, p.statement, p.witness)).toBe(false);
+  });
+
+  it("rejects unknown lock kinds in statement checks", () => {
+    const h = generateHashLock();
+    const p = generatePointLock();
+
+    expect(isValidStatement("hash", h.hash)).toBe(true);
+    expect(isValidStatement("point", p.statement)).toBe(true);
+    expect(isValidStatement("hash", p.statement)).toBe(false);
+    expect(isValidStatement("point", h.hash)).toBe(false);
+    expect(isValidStatement("banana" as never, p.statement)).toBe(false);
   });
 
   it("validateDeadlines enforces both margins, fail-closed", () => {

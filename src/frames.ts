@@ -286,7 +286,8 @@ const KEYS: Record<TclkFrame["type"], { allowed: string[]; required: string[] }>
 /** Validate a hash/point statement for the given lock kind (fail-closed boolean). */
 export function isValidStatement(lock: LockKind, statement: string): boolean {
   if (lock === "hash") return HEX32.test(statement);
-  return HEX33.test(statement) && isValidPointStatement(statement);
+  if (lock === "point") return HEX33.test(statement) && isValidPointStatement(statement);
+  return false;
 }
 
 /** Validate one frame structurally. Throws with a reason on the first violation. */
