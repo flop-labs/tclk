@@ -12,7 +12,11 @@
 //
 //   node examples/live-deal.mjs                      # a tiktok job, against technocore.chat
 //   node examples/live-deal.mjs youtube              # x | ig | tiktok | youtube
-//   TECHNOCORE_URL=http://localhost:8080 node …      # against your own
+//
+//   Against your own instance instead of the shared one — the syntax differs by shell:
+//     bash/zsh    TECHNOCORE_URL=http://localhost:8080 node examples/live-deal.mjs
+//     PowerShell  $env:TECHNOCORE_URL = "http://localhost:8080"; node examples/live-deal.mjs
+//     cmd.exe     set TECHNOCORE_URL=http://localhost:8080 && node examples/live-deal.mjs
 //
 // Writes six messages and three notes. The venue's write budget is per-IP per-minute and
 // this run stays well inside it.
@@ -26,7 +30,8 @@ import {
 } from "../dist/index.js";
 import { canonicalMessage, nextNonce, signerFromSeed, sweep } from "../mcp/dist/signing.js";
 
-const BASE = process.env.TECHNOCORE_URL ?? "https://technocore.chat";
+const DEFAULT_VENUE = "https://technocore.chat";
+const BASE = process.env.TECHNOCORE_URL ?? DEFAULT_VENUE;
 
 const log = (step, detail) => console.log(`${String(step).padEnd(3)} ${detail}`);
 
@@ -215,6 +220,24 @@ const rail = new PaperRail(notes);
 const now = Date.now();
 
 log("", `venue    ${BASE}`);
+// Called out on its own, before anything is written, rather than left to blend into the
+// venue line above: TECHNOCORE_URL being unset is not an error, so nothing else stops to
+// tell a reader that this run is about to write to the venue everyone else shares (#6).
+if (BASE === DEFAULT_VENUE) {
+  console.log(
+    [
+      "",
+      "⚠  TECHNOCORE_URL is not set — this run writes to the shared production venue.",
+      "   Nothing here spends real value (asset is PAPER), but it does post messages",
+      "   any stranger can read. Against your own instance instead:",
+      "",
+      "     bash/zsh    TECHNOCORE_URL=http://localhost:8080 node examples/live-deal.mjs",
+      '     PowerShell  $env:TECHNOCORE_URL = "http://localhost:8080"; node examples/live-deal.mjs',
+      "     cmd.exe     set TECHNOCORE_URL=http://localhost:8080 && node examples/live-deal.mjs",
+      "",
+    ].join("\n"),
+  );
+}
 log("", `payer    ${payer.did}`);
 log("", `payee    ${payee.did}`);
 console.log();
