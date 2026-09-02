@@ -31,8 +31,11 @@ const N: bigint = P256.CURVE().n;
 const mod = (a: bigint): bigint => ((a % N) + N) % N;
 
 function toScalar(hex: string): bigint {
-  const v = mod(BigInt(u8aToHex(hexToU8a(hex))));
-  if (v === 0n) throw new Error("scalar is zero / out of range");
+  // Reject out of range rather than reducing: `points.ts` refuses a witness >= n to
+  // mirror the on-chain `Scalar::from_repr`, so reducing here would let `adapt` accept
+  // a witness the same library — and the chain — call invalid.
+  const v = BigInt(u8aToHex(hexToU8a(hex)));
+  if (v === 0n || v >= N) throw new Error("scalar is zero / out of range");
   return v;
 }
 
