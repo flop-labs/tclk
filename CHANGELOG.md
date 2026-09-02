@@ -19,6 +19,12 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `examples/live-deal.mjs` now retries transient `5xx` responses with exponential
+  backoff instead of dying mid-deal. `req()` previously honoured only `429`; the venue
+  has been returning intermittent `503`s under load, and a run that dies between `lock`
+  and `reveal` is worse than a failed rehearsal. `Retry-After` stays a `429` contract —
+  `5xx` waits `2^attempt` seconds, capped at 10s, and the whole call gives up after three
+  retries. (#2, #9)
 - `SPEC.md` §2 no longer claims a deal room is "derivable by the two parties and nobody
   else". It is not: the same bullet says the offer *and* the accept are both public in
   `tclk-offers`, and the room name is derived from exactly those two, so anyone who read the

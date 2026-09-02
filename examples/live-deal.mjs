@@ -86,20 +86,25 @@ process.on("uncaughtException", reportAndExit);
 process.on("unhandledRejection", reportAndExit);
 
 /**
- * Every request goes through here so a 429 is honoured rather than thrown. The venue
+ * Every request goes through here so a 429 is honoured rather than thrown, and a
+ * transient 5xx is retried instead of killing the run mid-deal. The venue
  * rate-limits per IP and says how long to wait, in the body and in Retry-After — a client
- * that treats that as an error instead of an instruction just fails louder. Anything
- * running deals in a loop WILL meet this: the write budget is per minute, and one deal
- * spends about nine of it.
+ * that treats that as an error instead of an instruction just fails louder. It has also
+ * been observed returning intermittent 503s under load, and a run that dies between
+ * `lock` and `reveal` is not merely inconvenient: on a rail that held value it sits
+ * there until `refundAfterMs`. Anything running deals in a loop WILL meet both: the
+ * write budget is per minute, and one deal spends about nine of it.
  */
 async function req(url, init, what) {
   for (let attempt = 0; ; attempt += 1) {
     const res = await fetch(url, init);
-    if (res.status !== 429) return res;
-    if (attempt >= 3) throw new Error(`${what}: still rate limited after ${attempt} waits`);
+    if (res.status !== 429 && res.status < 500) return res;
+    if (attempt >= 3) throw new Error(`${what}: gave up after ${attempt} retries (${res.status})`);
     const stated = Number(res.headers.get("retry-after"));
-    const waitMs = (Number.isFinite(stated) && stated > 0 ? stated : 5) * 1000;
-    log("", `rate limited — waiting ${waitMs / 1000}s, as the venue asked`);
+    const waitMs = res.status === 429
+      ? (Number.isFinite(stated) && stated > 0 ? stated : 5) * 1000
+      : Math.min(2 ** attempt, 10) * 1000; // exponential backoff for 5xx; Retry-After is a 429 contract
+    log("", `${res.status} — waiting ${waitMs / 1000}s, as the venue asked`);
     await new Promise((resolve) => setTimeout(resolve, waitMs));
   }
 }
