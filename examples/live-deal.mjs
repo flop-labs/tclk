@@ -104,11 +104,44 @@ async function req(url, init, what) {
   }
 }
 
-/** Read a room the way any stranger would. */
+/** Read a room the way any stranger would: the venue's tail window. */
 async function readRoom(room) {
   const res = await req(`${BASE}/r/${room}?format=json`, undefined, `read ${room}`);
   if (!res.ok) throw await refusal(`read ${room}`, res);
   return res.json();
+}
+
+/**
+ * Every record a room still holds, in the same shape `readRoom` returns.
+ *
+ * `?format=json` answers with the NEWEST `limit` records — 50 by default, 200 at most.
+ * That is a bound on the result, not a cursor into history: `since` narrows the window
+ * from below and never anchors it, so once more than `limit` records sit above a record,
+ * no combination of the two reaches it. `tclk-offers` is shared by every deal on this
+ * venue, so a run's own offer leaves that window while the deal is still in flight (#11).
+ *
+ * `/export` takes no `limit`: it streams the retained file, bounded by one fstat at open
+ * and truncated to the last complete line. Byte-exact, which is the property a fold of
+ * signed frames needs — a signed record re-verifies only against the bytes as stored.
+ * It is the whole ring rather than a page, so it belongs at a verification step and not
+ * in a loop.
+ */
+async function exportRoom(room) {
+  const res = await req(`${BASE}/r/${room}/export`, undefined, `export ${room}`);
+  if (!res.ok) throw await refusal(`export ${room}`, res);
+  const messages = [];
+  for (const line of (await res.text()).split("\n")) {
+    if (line.trim() === "") continue;
+    // Anything a stranger wrote is in here too, and step 5 folds it deliberately. A line
+    // that is not a record at all is skipped for the same reason `tryDecodeFrame` returns
+    // null rather than throwing: one unusable line must cost only itself.
+    try {
+      messages.push(JSON.parse(line));
+    } catch {
+      continue;
+    }
+  }
+  return { room, count: messages.length, messages };
 }
 
 /** Post one frame through the signed lane, as the given identity. */
@@ -291,7 +324,10 @@ await notes.set(note.ns, note.key, stateNoteValue("claimed", ref), {
 // 5 — a third party, holding no secrets, reconstructs the deal from the venue alone.
 console.log();
 log(5, "third-party verification, from the rooms only:");
-const board = await readRoom(OFFER_ROOM);
+// The board, whole: `tclk-offers` carries every deal on the venue, so the tail window
+// this used to read can no longer hold this run's offer by the time step 5 looks (#11).
+// The deal room stays a windowed read — it is derived per contract and holds four frames.
+const board = await exportRoom(OFFER_ROOM);
 const dealLog = await readRoom(room);
 
 const offerLine = board.messages.map((m) => tryDecodeFrame(m.text)).find((f) => f?.id === offer.id);

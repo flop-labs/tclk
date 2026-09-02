@@ -19,6 +19,16 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `examples/live-deal.mjs` step 5 reads the offer board through `/r/<room>/export` rather
+  than the venue's tail window. `?format=json` answers with the newest `limit` records — 50
+  by default, 200 at most — which bounds the result rather than paging through history, so
+  `since` narrows that window from below and never anchors it. `tclk-offers` is shared by
+  every deal on the venue, so a run's own offer leaves the window while its deal is still in
+  flight, and the third-party verification then fails to find a deal that completed
+  correctly. Measured on the hosted venue the day this was found: the board held 68 records
+  and the unqualified read returned the newest 50, putting 26.5% of it out of reach. Export
+  takes no `limit` and is byte-exact, which is also what a fold of signed frames needs. The
+  deal room keeps its windowed read: it is derived per contract and holds four frames.
 - `SPEC.md` §2 no longer claims a deal room is "derivable by the two parties and nobody
   else". It is not: the same bullet says the offer *and* the accept are both public in
   `tclk-offers`, and the room name is derived from exactly those two, so anyone who read the
