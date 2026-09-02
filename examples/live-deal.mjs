@@ -87,13 +87,15 @@ process.on("unhandledRejection", reportAndExit);
 
 /**
  * Every request goes through here so a 429 is honoured rather than thrown, and a
- * transient 5xx is retried instead of killing the run mid-deal. The venue
+ * transient 5xx is reconciled against venue state before being retried. The venue
  * rate-limits per IP and says how long to wait, in the body and in Retry-After — a client
  * that treats that as an error instead of an instruction just fails louder. It has also
- * been observed returning intermittent 503s under load, and a run that dies between
+ * been observed returning intermittent 503/524s under load, and a run that dies between
  * `lock` and `reveal` is not merely inconvenient: on a rail that held value it sits
- * there until `refundAfterMs`. Anything running deals in a loop WILL meet both: the
- * write budget is per minute, and one deal spends about nine of it.
+ * there until `refundAfterMs`. Worse: a 5xx does not prove the write failed, and a blind
+ * retry of a signed POST or a note CAS can fail on replay (400 nonce-not-greater; 409
+ * already-exists) and turn a successful write into an apparent failure. The transport
+ * here reconciles first, then retries only when the write is provably absent.
  */
 async function req(url, init, what) {
   for (let attempt = 0; ; attempt += 1) {
@@ -107,6 +109,16 @@ async function req(url, init, what) {
     log("", `${res.status} — waiting ${waitMs / 1000}s, as the venue asked`);
     await new Promise((resolve) => setTimeout(resolve, waitMs));
   }
+}
+
+/** GET a room and return a Set of `did|nonce|text` tuples stored there. */
+async function storedTuples(room) {
+  const data = await readRoom(room);
+  const out = new Set();
+  for (const m of data.messages ?? []) {
+    out.add(`${m.from}|${m.nonce}|${m.text}`);
+  }
+  return out;
 }
 
 /** Read a room the way any stranger would. */
@@ -125,17 +137,35 @@ async function post(signer, room, frame) {
   const text = sweep(encodeFrame(frame));
   const nonce = nextNonce();
   const sig = signer.sign(canonicalMessage(room, nonce, text));
-  const res = await req(
-    `${BASE}/r/${room}`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ did: signer.did, sig, nonce: String(nonce), text }),
-    },
-    `post to ${room}`,
-  );
-  if (!res.ok) throw await refusal(`post to ${room}`, res);
-  return text;
+  const body = { did: signer.did, sig, nonce: String(nonce), text };
+  const tuple = `${signer.did}|${nonce}|${text}`;
+
+  // Retry with reconciliation: a 5xx does not prove the write failed. If the exact
+  // signed tuple is already stored, the write is committed and the run proceeds on it —
+  // replaying a signed POST always returns `400 nonce not greater than`, so retrying
+  // here would turn a successful write into a hard failure. The retry only fires when
+  // the read-back shows nothing.
+  for (let attempt = 0; ; attempt += 1) {
+    const res = await req(
+      `${BASE}/r/${room}`,
+      { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) },
+      `post to ${room}`,
+    );
+    if (res.ok) return text;
+    if (res.status >= 500) {
+      const tuples = await storedTuples(room);
+      if (tuples.has(tuple)) {
+        log("", `${res.status} on post — reconciled: frame already stored, continuing`);
+        return text;
+      }
+      if (attempt >= 3) throw await refusal(`post to ${room}`, res);
+      const waitMs = Math.min(2 ** attempt, 10) * 1000;
+      log("", `${res.status} on post — no stored match, retrying in ${waitMs / 1000}s`);
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      continue;
+    }
+    throw await refusal(`post to ${room}`, res);
+  }
 }
 
 /** The note surface the paper rail records onto, wired to the venue's /kv routes. */
@@ -164,9 +194,26 @@ const notes = {
       : `?if=${encodeURIComponent(condition.if)}`;
     const url = `${BASE}/kv/${ns}/${key}/set/${encodeURIComponent(value)}${query}`;
     const res = await req(url, undefined, `kv set ${ns}/${key}`);
-    if (res.status === 409) return false; // lost the race; body carries the real value
-    if (!res.ok) throw await refusal(`kv set ${ns}/${key}`, res);
-    return true;
+    if (res.ok) return true;
+    if (res.status === 409 || res.status >= 500) {
+      // A 5xx does not prove the write failed, and a 409 does not prove this run lost:
+      // a committed-then-unacknowledged CAS leaves the note holding exactly the value
+      // this call wrote. Read back and decide on the venue's state, not the transport's.
+      const present = await this.get(ns, key);
+      if (present === value) return true;
+      if (res.status === 409) return false; // genuine lost race; body carries the real value
+      // For a 5xx with no stored value, the write can be retried when the pre-state
+      // still allows it: ?if_absent=1 requires the note to be absent; ?if=<old>
+      // requires it to still hold the old value. get() already reflects both.
+      if (condition === undefined || ("ifAbsent" in condition && present === null) || ("if" in condition && present === condition.if)) {
+        const retry = await req(url, undefined, `kv set ${ns}/${key}`);
+        if (retry.ok) return true;
+        if (retry.status === 409) return false;
+        throw await refusal(`kv set ${ns}/${key}`, retry);
+      }
+      throw await refusal(`kv set ${ns}/${key}`, res);
+    }
+    throw await refusal(`kv set ${ns}/${key}`, res);
   },
 };
 
