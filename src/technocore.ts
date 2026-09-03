@@ -41,6 +41,7 @@ export function capabilityToken(rails: readonly string[]): string {
   for (const rail of rails) {
     if (!RAIL.test(rail)) throw new Error(`tclk: malformed rail: ${rail}`);
   }
+  if (new Set(rails).size !== rails.length) throw new Error("tclk: rails must not contain duplicates");
   return `tclk1:${rails.join(",")}`;
 }
 

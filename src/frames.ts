@@ -308,6 +308,7 @@ export function validateFrame(value: unknown): TclkFrame {
       if (frame.lock !== "hash" && frame.lock !== "point") fail("lock must be hash|point");
       if (!Array.isArray(frame.rails) || frame.rails.length === 0) fail("rails must be a non-empty array");
       for (const rail of frame.rails) requireString(rail, "rail", RAIL);
+      if (new Set(frame.rails).size !== frame.rails.length) fail("rails must not contain duplicates");
       const claimBy = requireMs(frame.claimByMs, "claimByMs");
       const refundAfter = requireMs(frame.refundAfterMs, "refundAfterMs");
       requireMs(frame.expiresMs, "expiresMs");
