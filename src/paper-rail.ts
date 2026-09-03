@@ -60,10 +60,21 @@ const CONTRACT_ID = /^0x[0-9a-f]{64}$/;
 /**
  * Serialize a record to one note line. Single-line and space-separated so a human, a
  * shell, or an agent with only a fetch tool can read the state without a parser.
+ *
+ * Refuses a record this module's own decoder would reject, because this rail cannot repair
+ * the write: the `ifAbsent` slot is spent, `read` is null for every later poll, and only
+ * an unconditional note write from outside the rail can replace the line. `verifySecret`
+ * accepts either hex case and raw bytes, while SPEC.md §3 spells a statement and a secret
+ * as lowercase hex, so a claim that opens the statement can still carry a secret this
+ * grammar refuses. The refusal names the status only — the secret must not reach a log.
  */
 export function encodePaperRecord(record: PaperRecord): string {
   const head = `${PAPER_RECORD_PREFIX} ${record.status} ${record.lock} ${record.statement} ${record.refundAfterMs}`;
-  return record.secret === undefined ? head : `${head} ${record.secret}`;
+  const line = record.secret === undefined ? head : `${head} ${record.secret}`;
+  if (decodePaperRecord(line) === null) {
+    throw new Error(`tclk: refusing to write an unreadable paper record (${record.status})`);
+  }
+  return line;
 }
 
 /**
