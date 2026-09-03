@@ -204,6 +204,17 @@ describe("trusted transcript records", () => {
 
     expect(parseTranscriptExport(BOARD, `${raw}\n`)).toEqual([signed]);
     expect(() => parseTranscriptExport(BOARD, `${raw}\nnot json\n`)).toThrow(/line 2/);
+
+    const withoutTimezone = JSON.stringify({
+      ...JSON.parse(raw),
+      ts: "2026-01-01T00:00:00",
+    });
+    const localeTimestamp = JSON.stringify({
+      ...JSON.parse(raw),
+      ts: "January 1, 2026 00:00:00",
+    });
+    expect(() => parseTranscriptExport(BOARD, withoutTimezone)).toThrow(/timezone-qualified/);
+    expect(() => parseTranscriptExport(BOARD, localeTimestamp)).toThrow(/timezone-qualified/);
   });
 
   it("never synthesizes offer-before-accept order while selecting a board handshake", () => {

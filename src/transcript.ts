@@ -15,6 +15,7 @@ import { dealRoom, OFFER_ROOM } from "./technocore.js";
 const ROOM_NAME = /^[a-z0-9][a-z0-9_-]{0,47}$/;
 const NONCE = /^(?:0|[1-9][0-9]*)$/;
 const SIGNATURE = /^[A-Za-z0-9_-]{85}[AQgw]$/;
+const TIMESTAMP = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
 const DID_PREFIX = "did:key:z";
 
 /**
@@ -124,6 +125,9 @@ export function transcriptRecord(room: string, value: unknown): TranscriptRecord
     throw new Error("tclk: transcript message seq must be a non-negative safe integer");
   }
   if (typeof message.ts !== "string") throw new Error("tclk: transcript message has no timestamp");
+  if (!TIMESTAMP.test(message.ts)) {
+    throw new Error("tclk: transcript message timestamp must be timezone-qualified RFC 3339");
+  }
   const timestampMs = Date.parse(message.ts);
   if (!Number.isSafeInteger(timestampMs) || timestampMs < 0) {
     throw new Error("tclk: transcript message timestamp is invalid");
