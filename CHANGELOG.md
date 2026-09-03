@@ -8,6 +8,12 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `SPEC.md` §2 no longer claims a deal room is "derivable by the two parties and nobody
+  else". It is not: the same bullet says the offer *and* the accept are both public in
+  `tclk-offers`, and the room name is derived from exactly those two, so anyone who read the
+  board derives it too. `mb-` bounds who may write and `p-` keeps it out of the listing;
+  neither is confidentiality, and reads take no signature. A wrong privacy claim in a
+  normative document is worse than no claim, because someone acts on it.
 - `examples/live-deal.mjs` fails closed like the rest of the repository. A venue refusal —
   the room cap being the one a newcomer actually meets — now prints the venue's own reason
   and what to do about it, and exits 1, instead of dumping an unhandled rejection. Every
