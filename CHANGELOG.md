@@ -25,6 +25,18 @@ All notable changes to this project are documented here. Format follows
   documents what a shared instance costs, including that frames leave from its IP and share
   one rate budget.
 
+### Changed
+
+- Transcript folding now consumes complete signed records instead of bare `lines` plus
+  optional positional metadata. A record keeps its exact line, room, sequence, venue
+  timestamp, sender, nonce and signature together; `foldTranscript` verifies the signature
+  and sender binding and applies each frame at that record's timestamp. The MCP
+  `tclk_read_room` tool returns this shape directly and supports `full: true` for strict,
+  byte-exact `/export` history, while `tclk_apply_transcript` accepts only `records` and has
+  no fallback clock. `examples/audit-export.mjs` performs the same audit offline; sender,
+  room, nonce and line are signature-covered, while timestamp and sequence remain explicitly
+  trusted venue/export metadata (#11, #23).
+
 ### Fixed
 
 - Technocore note parsers now reject capability lists with empty rail entries and state

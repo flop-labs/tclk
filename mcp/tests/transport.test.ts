@@ -101,8 +101,9 @@ describe("tclk_post_frame — tier 2, server-signed", () => {
 });
 
 describe("tclk_read_room", () => {
-  it("returns decodable frames and counts what it skipped", async () => {
+  it("returns complete records without dropping unsigned or malformed frame lines", async () => {
     const line = offerLine();
+    const nonce = 11;
     const { calls, fetchLike } = fakeFetch([
       {
         body: "",
@@ -113,7 +114,14 @@ describe("tclk_read_room", () => {
           last_seq: 13,
           messages: [
             { seq: 10, ts: "2026-01-01T00:00:00Z", from: "~stranger", text: "gm" },
-            { seq: 11, ts: "2026-01-01T00:00:01Z", from: signer.did, text: line },
+            {
+              seq: 11,
+              ts: "2026-01-01T00:00:01Z",
+              from: signer.did,
+              nonce: String(nonce),
+              sig: signer.sign(canonicalMessage("lobby", nonce, line)),
+              text: line,
+            },
             { seq: 12, ts: "2026-01-01T00:00:02Z", from: "~spoofer", text: 'tclk1 {"type":"offer"}' },
             { seq: 13, ts: "2026-01-01T00:00:03Z", from: "~stranger", text: "tclk1 not-json" },
           ],
@@ -125,10 +133,44 @@ describe("tclk_read_room", () => {
     const result = await h.tclk_read_room({ room: "lobby", since: 9 });
     expect(calls[0].url).toBe("https://technocore.chat/r/lobby?format=json&since=9");
     expect(result.lastSeq).toBe(13);
-    expect(result.skipped).toBe(3);
-    expect(result.frames).toHaveLength(1);
-    expect(result.frames[0]).toMatchObject({ seq: 11, from: signer.did });
-    expect(result.frames[0].frame.type).toBe("offer");
+    expect(result.source).toBe("window");
+    expect(result.records).toHaveLength(4);
+    expect(result.records[1]).toMatchObject({
+      room: "lobby",
+      seq: 11,
+      sender: signer.did,
+      nonce: "11",
+      line,
+    });
+    expect(result.records[0]).toMatchObject({ signature: null, nonce: null, line: "gm" });
+
+    const folded = h.tclk_apply_transcript({ records: result.records });
+    expect(folded.status).toBe("proposed");
+    expect(folded.steps.map((step) => step.ok)).toEqual([false, true, false, false]);
+  });
+
+  it("reads and strictly parses the full JSONL export", async () => {
+    const line = offerLine();
+    const nonce = 17;
+    const exported = JSON.stringify({
+      seq: 17,
+      ts: "2026-01-01T00:00:01Z",
+      from: signer.did,
+      nonce: String(nonce),
+      sig: signer.sign(canonicalMessage("tclk-offers", nonce, line)),
+      text: line,
+    });
+    const { calls, fetchLike } = fakeFetch([{ body: `${exported}\n` }]);
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+
+    const result = await h.tclk_read_room({ room: "tclk-offers", full: true });
+    expect(calls[0].url).toBe("https://technocore.chat/r/tclk-offers/export");
+    expect(result.source).toBe("export");
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({ seq: 17, sender: signer.did, line });
+    await expect(
+      h.tclk_read_room({ room: "tclk-offers", full: true, since: 3 }),
+    ).rejects.toThrow(/cannot be combined/);
   });
 
   it("refuses a bad room name before it reaches the wire", async () => {

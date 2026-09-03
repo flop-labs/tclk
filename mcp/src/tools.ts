@@ -13,17 +13,17 @@
 // pre-signatures). Neither is echoed by any tool, `tclk_whoami` included.
 
 import {
-  applyFrame,
   decodeFrame,
   dealRoom,
   encodeFrame,
+  foldTranscript,
   generateHashLock,
   generatePointLock,
   makeAccept,
   makeOffer,
-  openContract,
   schnorrAdaptor,
   stateNote,
+  transcriptRecord,
   tryDecodeFrame,
   verifySecret,
   type ContractState,
@@ -32,6 +32,7 @@ import {
   type OfferFrame,
   type PresigRef,
   type TclkFrame,
+  type TranscriptRecord,
 } from "@flop-labs/tclk";
 
 import { canonicalMessage, loadSigner, nextNonce, sweep, type Signer } from "./signing.js";
@@ -236,47 +237,21 @@ export function createHandlers(options: HandlerOptions = {}) {
     },
 
     /**
-     * Fold a room transcript into one contract view. Lines are anonymous input, so
-     * nothing here throws on a bad one: every line gets an `{ ok, reason }` verdict and
-     * money-state only advances on frames that verify.
+     * Fold complete signed records, never positionally related arrays. The core verifies
+     * each record signature and sender binding, then applies its frame at that record's
+     * venue timestamp. Every record gets a verdict and invalid input changes no state.
      */
-    tclk_apply_transcript(input: { lines: string[]; nowMs?: number }) {
-      const nowMs = input.nowMs ?? Date.now();
-      const steps: { index: number; type?: string; ok: boolean; reason?: string }[] = [];
-      let state: ContractState | null = null;
-
-      input.lines.forEach((line, index) => {
-        const frame = tryDecodeFrame(line);
-        if (frame === null) {
-          let reason = "not a tclk/1 frame";
-          try {
-            decodeFrame(line);
-          } catch (error) {
-            reason = errorMessage(error);
-          }
-          steps.push({ index, ok: false, reason });
-          return;
-        }
-        if (state === null) {
-          if (frame.type !== "offer") {
-            steps.push({ index, type: frame.type, ok: false, reason: "no contract open yet" });
-            return;
-          }
-          try {
-            state = openContract(frame);
-            steps.push({ index, type: "offer", ok: true });
-          } catch (error) {
-            steps.push({ index, type: "offer", ok: false, reason: errorMessage(error) });
-          }
-          return;
-        }
-        const result = applyFrame(state, frame, nowMs);
-        state = result.state;
-        steps.push({ index, type: frame.type, ok: result.ok, reason: result.reason });
-      });
-
-      if (state === null) fail("transcript contains no offer frame to open a contract from");
-      const open: ContractState = state;
+    tclk_apply_transcript(input: { records: TranscriptRecord[] }) {
+      const folded = foldTranscript(input.records);
+      if (folded.state === null) {
+        const offerFailure = folded.steps.find((step) => step.type === "offer" && !step.ok);
+        fail(
+          offerFailure?.reason === undefined
+            ? "transcript contains no authenticated offer frame to open a contract from"
+            : `no contract could be opened: ${offerFailure.reason}`,
+        );
+      }
+      const open: ContractState = folded.state;
 
       return {
         status: open.status,
@@ -294,7 +269,7 @@ export function createHandlers(options: HandlerOptions = {}) {
         // The revealed secret is deliberately NOT echoed: it is in the transcript the
         // caller already holds, and this server never republishes secret material.
         secretRevealed: open.secret !== undefined,
-        steps,
+        steps: folded.steps,
       };
     },
 
@@ -422,19 +397,28 @@ export function createHandlers(options: HandlerOptions = {}) {
       };
     },
 
-    async tclk_read_room(input: { room: string; since?: number }) {
-      const view = await client.readRoom(input.room, input.since);
-      const frames: { seq: number; ts: string; from: string; frame: TclkFrame }[] = [];
-      let skipped = 0;
-      for (const message of view.messages) {
-        const frame = typeof message.text === "string" ? tryDecodeFrame(message.text) : null;
-        if (frame === null) {
-          skipped += 1;
-          continue;
-        }
-        frames.push({ seq: message.seq, ts: message.ts, from: message.from, frame });
+    async tclk_read_room(input: { room: string; since?: number; full?: boolean }) {
+      if (input.full === true) {
+        if (input.since !== undefined) fail("`since` cannot be combined with a full room export");
+        const records = await client.exportRoom(input.room);
+        return {
+          room: input.room,
+          source: "export" as const,
+          records,
+          count: records.length,
+          lastSeq: records.at(-1)?.seq ?? null,
+        };
       }
-      return { room: view.room, frames, skipped, lastSeq: view.last_seq };
+
+      const view = await client.readRoom(input.room, input.since);
+      const records = view.messages.map((message) => transcriptRecord(input.room, message));
+      return {
+        room: input.room,
+        source: "window" as const,
+        records,
+        count: records.length,
+        lastSeq: view.last_seq,
+      };
     },
 
     tclk_whoami() {
