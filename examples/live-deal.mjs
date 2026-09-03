@@ -31,6 +31,61 @@ const BASE = process.env.TECHNOCORE_URL ?? "https://technocore.chat";
 const log = (step, detail) => console.log(`${String(step).padEnd(3)} ${detail}`);
 
 /**
+ * A refusal the venue chose to give, as opposed to a bug on this side. Its refusal bodies
+ * are written to be read — they name the cap that was hit and what a caller does about it —
+ * so the useful thing is to print that, not to bury it under a stack trace. The rest of
+ * this repository fails closed with a reason; the one file a newcomer runs should not be
+ * the exception.
+ */
+class VenueError extends Error {
+  constructor(what, status, body) {
+    super(`${what}: ${status} ${body}`);
+    this.name = "VenueError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
+/** Build a VenueError from a refused response, keeping the venue's own first line. */
+async function refusal(what, res) {
+  const body = (await res.text()).split("\n").filter((line) => line.trim())[0] ?? "";
+  return new VenueError(what, res.status, body);
+}
+
+// A VenueError is a fact about the venue and prints as one sentence; anything else is a bug
+// in this script or the library, and still deserves its stack. Both events are hooked on
+// purpose: a rejected top-level await surfaces as an uncaught exception (module evaluation
+// failed), not as an unhandled rejection, so listening for only the latter catches nothing.
+function reportAndExit(error) {
+  if (!(error instanceof VenueError)) {
+    console.error(error);
+    process.exit(1);
+  }
+  console.error(`\nThe venue refused. ${error.message}`);
+  if (error.status === 400 && /room limit|is the cap/i.test(error.body)) {
+    console.error(
+      [
+        "",
+        "A deal needs two rooms this venue will not create right now: the public offer room,",
+        "and a deal room named from the contract id. Neither is optional — the offer has to",
+        "rest somewhere strangers look, and the deal room is derived, not chosen.",
+        "",
+        "Run it against your own instance instead:",
+        "",
+        "  TECHNOCORE_URL=http://localhost:8080 node examples/live-deal.mjs",
+        "",
+        "The hosted venue clears on its own: idle rooms are reclaimed after 7 days, and one",
+        "still on its first message after 24 hours.",
+      ].join("\n"),
+    );
+  }
+  process.exit(1);
+}
+
+process.on("uncaughtException", reportAndExit);
+process.on("unhandledRejection", reportAndExit);
+
+/**
  * Every request goes through here so a 429 is honoured rather than thrown. The venue
  * rate-limits per IP and says how long to wait, in the body and in Retry-After — a client
  * that treats that as an error instead of an instruction just fails louder. Anything
@@ -52,7 +107,7 @@ async function req(url, init, what) {
 /** Read a room the way any stranger would. */
 async function readRoom(room) {
   const res = await req(`${BASE}/r/${room}?format=json`, undefined, `read ${room}`);
-  if (!res.ok) throw new Error(`read ${room}: ${res.status}`);
+  if (!res.ok) throw await refusal(`read ${room}`, res);
   return res.json();
 }
 
@@ -74,7 +129,7 @@ async function post(signer, room, frame) {
     },
     `post to ${room}`,
   );
-  if (!res.ok) throw new Error(`post to ${room}: ${res.status} ${(await res.text()).split("\n")[0]}`);
+  if (!res.ok) throw await refusal(`post to ${room}`, res);
   return text;
 }
 
@@ -83,7 +138,7 @@ const notes = {
   async get(ns, key) {
     const res = await req(`${BASE}/kv/${ns}/${key}`, undefined, `kv get ${ns}/${key}`);
     if (res.status === 404) return null;
-    if (!res.ok) throw new Error(`kv get ${ns}/${key}: ${res.status}`);
+    if (!res.ok) throw await refusal(`kv get ${ns}/${key}`, res);
     // The venue prefixes every note read with an untrusted-content banner and a blank
     // line — deliberately, since the value was written by a stranger. It is prose, not
     // the value, and `?format=json` does not remove it, so a client that forgets to strip
@@ -105,7 +160,7 @@ const notes = {
     const url = `${BASE}/kv/${ns}/${key}/set/${encodeURIComponent(value)}${query}`;
     const res = await req(url, undefined, `kv set ${ns}/${key}`);
     if (res.status === 409) return false; // lost the race; body carries the real value
-    if (!res.ok) throw new Error(`kv set ${ns}/${key}: ${res.status} ${await res.text()}`);
+    if (!res.ok) throw await refusal(`kv set ${ns}/${key}`, res);
     return true;
   },
 };

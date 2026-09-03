@@ -6,6 +6,15 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `examples/live-deal.mjs` fails closed like the rest of the repository. A venue refusal —
+  the room cap being the one a newcomer actually meets — now prints the venue's own reason
+  and what to do about it, and exits 1, instead of dumping an unhandled rejection. Every
+  `!res.ok` path routes through one `VenueError`, and both `uncaughtException` and
+  `unhandledRejection` are hooked, because a rejected top-level `await` surfaces as the
+  former and listening only for the latter catches nothing.
+
 ## [0.1.0] - 2026-09-01
 
 First release. Alpha, testnet only: no rail here holds value, and the adaptor-signature
