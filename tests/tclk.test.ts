@@ -119,6 +119,17 @@ describe("tclk frames — wire codec", () => {
     expect(() => baseOffer({ rails: [] })).toThrow(/rails/);
   });
 
+  it("rejects odd-length pre-signature scalar encodings", () => {
+    expect(() => encodeFrame({
+      type: "lock",
+      from: PAYER_DID,
+      contract: "0x" + "11".repeat(32),
+      rail: "flop-htlc",
+      ref: "escrow-42",
+      presig: { nonce: "0x02" + "22".repeat(32), s: "0xabc" },
+    })).toThrow(/presig\.s/);
+  });
+
   it("tryDecodeFrame skips foreign and hostile lines instead of throwing", () => {
     expect(tryDecodeFrame("hello from ~alice")).toBeNull();
     expect(tryDecodeFrame('tclk1 {"type":"offer"}')).toBeNull();

@@ -39,6 +39,8 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Pre-signature scalar validation now accepts only whole-byte hex encodings, rejecting
+  odd-length strings before they reach cryptographic parsing (#24).
 - Technocore note parsers now reject capability lists with empty rail entries and state
   pointers with malformed rail references, matching the encoders and keeping world-writable
   note input fail-closed.
