@@ -11,7 +11,8 @@ All notable changes to this project are documented here. Format follows
 - A non-normative tclk/2 design proposal that separates commercial agreements, concrete transfer
   attempts, and verified rail observations; scopes the first profile to direct conditional
   payments for flop-core; and records the cross-project and formal-literature basis for the wire
-  break. tclk/1 remains normative and byte-for-byte replayable.
+  break. A companion decision note records the tclk/1 hardening boundary, merge order, property
+  rationale, and issue/PR disposition. tclk/1 remains normative and byte-for-byte replayable.
 - A schema-owned tclk/1 frame field contract, canonical settlement-rail registry and
   intersection-based, order-independent rail matching helpers. Generated decoder fields
   and the normative `SPEC.md` table are checked for drift in CI.

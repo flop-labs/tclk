@@ -161,6 +161,18 @@ API response or bilateral receipt. A consumer must never silently promote `pendi
 observations that claim incompatible terminal outcomes for one attempt are a verification or
 rail failure, not a last-write-wins update.
 
+For the initial direct-payment profile, `final` means economically irreversible within that
+profile's stated trust and finality model. A rail with returns, chargebacks, administrative
+rollback, or a still-live reorganization risk cannot map an observation to `final`. Reversible
+rails remain deferred and may require a separate profile with provisional-settlement and reversal
+semantics; the base observation contract does not predeclare a generic `reversed` state whose
+meaning would differ across rails.
+
+Reconciliation facts such as settled amount, fee, net amount, and value date remain in the closed
+rail-specific `evidence` schema in the initial profile. Applications may derive normalized local
+views, but those views are not authoritative protocol fields until their units, sign conventions,
+fee ownership, and value-date meaning are specified across real rails.
+
 ## Conditions and rail capabilities
 
 Conditions are typed suites, not informal shapes:
@@ -310,6 +322,9 @@ relayer assumptions. A state machine that merely contains a legal recovery actio
 that an honest party can get that action included in time.
 
 ## Wire and migration
+
+The detailed tclk/1 merge and migration rationale is recorded in
+[`TCLK1-TO-TCLK2-DECISION.md`](TCLK1-TO-TCLK2-DECISION.md).
 
 - Reserve `tclk2 ` for the new frame encoding and `FLOP::tclk::v2` for identifiers/signatures.
 - Keep the tclk/1 decoder, state fold, schema, and golden vectors for historical replay.
