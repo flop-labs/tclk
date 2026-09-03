@@ -190,6 +190,15 @@ describe("tclk locks", () => {
     expect(validateDeadlines(offer, T0, 3_600_000, 3_600_001)).toBe(false); // refund gap too short
     expect(validateDeadlines(offer, T0, 0, 1)).toBe(false); // degenerate margins refused
   });
+
+  it("validateDeadlines rejects malformed clocks and unvalidated offer times", () => {
+    const offer = { claimByMs: CLAIM_BY, refundAfterMs: REFUND_AFTER };
+    expect(validateDeadlines(offer, -Infinity, 1, 1)).toBe(false);
+    expect(validateDeadlines(offer, -1, 1, 1)).toBe(false);
+    expect(validateDeadlines({ ...offer, refundAfterMs: Infinity }, T0, 1, 1)).toBe(false);
+    expect(validateDeadlines({ ...offer, claimByMs: 1.5 }, 0, 1, 1)).toBe(false);
+    expect(validateDeadlines(offer, T0, Infinity, 1)).toBe(false);
+  });
 });
 
 describe("tclk state machine", () => {

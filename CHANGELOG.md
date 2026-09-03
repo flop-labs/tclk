@@ -19,6 +19,10 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `validateDeadlines` now rejects malformed clocks, non-finite safety margins, and
+  unvalidated offer timestamps before doing arithmetic. A negative-infinite clock or an
+  infinite refund deadline could previously manufacture a safe-looking window even though
+  the helper promises to fail closed.
 - `SPEC.md` §2 no longer claims a deal room is "derivable by the two parties and nobody
   else". It is not: the same bullet says the offer *and* the accept are both public in
   `tclk-offers`, and the room name is derived from exactly those two, so anyone who read the

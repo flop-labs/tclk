@@ -60,7 +60,25 @@ export function validateDeadlines(
   minClaimWindowMs: number,
   minRefundGapMs: number,
 ): boolean {
-  if (minClaimWindowMs < 1 || minRefundGapMs < 1) return false;
+  // This helper is a trust boundary for callers that have not necessarily passed an
+  // offer through validateFrame first. JavaScript comparisons with NaN are false in both
+  // directions, while subtracting -Infinity manufactures an infinite "safe" window.
+  // Validate every operand before doing deadline arithmetic so malformed clocks and
+  // hand-built offers fail closed rather than widening the caller's safety margin.
+  if (
+    !Number.isSafeInteger(offer.claimByMs) ||
+    offer.claimByMs <= 0 ||
+    !Number.isSafeInteger(offer.refundAfterMs) ||
+    offer.refundAfterMs <= 0 ||
+    !Number.isFinite(nowMs) ||
+    nowMs < 0 ||
+    !Number.isFinite(minClaimWindowMs) ||
+    minClaimWindowMs < 1 ||
+    !Number.isFinite(minRefundGapMs) ||
+    minRefundGapMs < 1
+  ) {
+    return false;
+  }
   return (
     offer.claimByMs - nowMs >= minClaimWindowMs &&
     offer.refundAfterMs - offer.claimByMs >= minRefundGapMs
