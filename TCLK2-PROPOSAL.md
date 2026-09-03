@@ -23,6 +23,10 @@ for the initial flop-core HTLC. Routed payments, general atomic swaps, redundant
 payments, and point/adaptor locks should be separate later profiles. In particular, tclk/2 must
 not claim that publishing one witness in a room is a generic routed-payment protocol.
 
+The first implementation needs at most one transfer attempt per agreement. The separate attempt
+identity prevents the agreement and the rail reservation from becoming the same object, but
+replacement and multipart attempt collections remain deferred until a profile needs them.
+
 This is intentionally a wire break. tclk/1 remains decodable and replayable; new tclk/2
 messages use a new prefix and domain. The tclk/1 golden vectors must not be edited.
 
@@ -71,6 +75,8 @@ and the safety properties consumers may rely on.
 - The rail profile states who may submit claim and refund operations. Submission authority is
   not inferred from the payout address.
 - Settlement is terminal only after a trusted rail observation.
+- The profile fixes the expiry clock and boundary semantics. The agreement carries one
+  rail-native expiry; an earlier safe claim deadline is local policy, not protocol state.
 
 This profile is the intended contract between tclk/2 and the first flop-core HTLC.
 
@@ -110,21 +116,21 @@ binds at least:
 interface TransferAttempt {
   attemptId: string;
   agreementId: string;
-  rail: { id: string; profile: string };
+  rail: { id: string; profile: string; profileHash: string };
   amount: string;
   asset: string;
   condition: Condition;
   claimTo: string;
   refundTo: string;
-  expiry: RailTime;
+  expiry: string; // canonical rail-native value; its profile defines the clock and comparison
   nonce: string;
 }
 ```
 
-The same agreement may create a replacement attempt after an earlier attempt fails, or several
-parts under an aggregate-payment profile. A condition is never an identifier: multiple attempts
-may intentionally share a witness, and unrelated attempts must not collide merely because they
-carry the same commitment.
+The initial direct-payment profile permits zero or one attempt. A later profile may permit a
+replacement after an earlier attempt fails, or several parts under aggregate-payment semantics.
+A condition is never an identifier: future attempts may intentionally share a witness, and
+unrelated attempts must not collide merely because they carry the same commitment.
 
 `railRef` is the rail's native identifier and is bound to exactly one `attemptId` after the rail
 accepts the reservation. Neither value substitutes for the other.
@@ -164,11 +170,6 @@ type Condition = {
   suite: "preimage-sha256@1";
   commitment: string; // canonical lowercase 0x + 32 bytes
 };
-
-type RailTime = {
-  clock: string; // for example "flop-core:block-height@1"
-  value: string; // canonical unsigned integer
-};
 ```
 
 A versioned rail profile should publish at least:
@@ -187,6 +188,47 @@ supports PREIMAGE-SHA-256, while FRAME's generic atomic-swap pallet uses Blake2 
 proof-size compatibility requirement. A registry update must not reinterpret an agreement that
 was signed against an older rail profile.
 
+### Built-in and custom rail registration
+
+tclk must ship useful built-in profiles without making that list a closed protocol namespace.
+An application may supply a caller-owned registry and register custom rail adapters before it
+creates or verifies an agreement. Registration is local configuration, not executable code
+downloaded from a room and not mutable global process state.
+
+Each entry binds:
+
+```ts
+interface RailProfileDescriptor {
+  id: string;            // namespaced stable identifier
+  profile: string;       // immutable semantic profile such as "direct-htlc@1"
+  conditionSuites: string[];
+  expiryClock: string;
+  expiryEncoding: string;
+  timeoutSemantics: "exclusive" | "refund-race" | "automatic-refund";
+  claimAuth: string;
+  refundAuth: string;
+  finalityRule: string;
+  verifier: string;      // stable local verifier interface/version identifier
+}
+```
+
+Registration computes `profileHash` from the canonical descriptor. The signed attempt binds
+`id`, `profile`, and that digest. The expiry is an opaque canonical string to the tclk core; only
+the registered adapter interprets and compares it. This permits block heights, consensus
+timestamps, ledger-close times, and custom monotonic counters without a generic clock union in
+protocol state.
+
+The registry must reject malformed identifiers, duplicate `(id, profile)` entries, attempts to
+rebind an existing entry to a different digest, and aliases in signed bytes. An unknown profile
+may be preserved while decoding or auditing, but it is unsupported for construction and cannot
+advance authoritative settlement state. Two valid registries lacking a common profile report
+"no match"; malformed or digest-conflicting entries fail closed.
+
+Custom identifiers should be owner-namespaced and versioned. For tclk/1's existing identifier
+grammar that means spellings such as `example.flop-htlc-v1`; tclk/2 may define a less ambiguous
+structured identifier. Registration establishes local trust in the adapter and verifier—it does
+not make the custom rail safe merely because it has a name.
+
 ## Time model
 
 tclk/2 separates three kinds of time:
@@ -194,8 +236,9 @@ tclk/2 separates three kinds of time:
 1. **Offer expiry** is a coordination deadline and may use qualified Unix time.
 2. **Delivery or work due time** is an optional commercial term. Passing it does not itself move
    money.
-3. **Attempt expiry** is a rail-native value boundary. Before it, the condition path may be
-   valid; at or after it, the refund path may be valid according to the selected rail profile.
+3. **Attempt expiry** is the one rail-native value boundary. Whether it disables the condition
+   path or merely enables a competing refund path is fixed by the selected rail profile. An
+   operational "claim by" margin is derived locally and does not create another protocol state.
 
 Expiry is not a settlement event. An expired escrow may still hold value until somebody submits
 a refund. The derived state is therefore `funded + expired`, not `refunded`.
@@ -203,6 +246,11 @@ a refund. The derived state is therefore `funded + expired`, not `refunded`.
 A future cross-rail profile must state and model the bounds it assumes for clock growth,
 transaction inclusion, finality, observation, and propagation. Deadline staggering is a policy
 over attempts in that profile, not a pair of universal wall-clock fields copied onto every rail.
+
+For the initial executable safety model, time can be a monotonic environment predicate such as
+`refundOpen`, rather than integer arithmetic. Numeric clock progress, inclusion bounds, and
+eventual refund are liveness assumptions supplied by the rail profile, not base-protocol safety
+facts.
 
 ## State derivation
 
@@ -270,6 +318,11 @@ that an honest party can get that action included in time.
   builders remain explicitly versioned.
 - Continue merging tclk/1 fixes that preserve existing bytes, reject malformed input, bound
   resources, or improve auditability.
+- Permit custom tclk/1 rail emission only through an explicit caller-owned registry. Because the
+  tclk/1 wire binds Unix milliseconds rather than a native expiry, such an adapter must define and
+  verify its versioned mapping from `refundAfterMs` to the rail lock. Unknown ids remain
+  decode-only. A process-global `registerRail()` would introduce cross-tenant ambiguity and is not
+  acceptable.
 - Do not add a new value-bearing rail or a large new tclk/1 client before the tclk/2 contract is
   settled. Those implementations would either encode the assumptions above or need an immediate
   rewrite.
