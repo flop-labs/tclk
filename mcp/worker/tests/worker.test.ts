@@ -6,13 +6,18 @@
 
 import { describe, expect, it } from "vitest";
 
-import { HASH_OFFER, PAYEE_DID, PAYER_DID, fakeFetch } from "../../tests/fixtures.js";
+import {
+  HASH_OFFER, PAYEE_DID, PAYEE_SEED, PAYER_DID, PAYER_SEED, fakeFetch, hexToBytes,
+} from "../../tests/fixtures.js";
+import { canonicalMessage, signerFromSeed } from "../../src/signing.js";
 import { handleRequest, type Env } from "../src/worker.js";
 import { TOOLS } from "../src/tool-manifest.generated.js";
 import type { FetchLike } from "../../src/technocore.js";
 
 const ENV: Env = { TECHNOCORE_URL: "https://technocore.chat" };
 const ROOM = "mb-p-tclk-deadbeefdeadbeef";
+const payer = signerFromSeed(hexToBytes(PAYER_SEED));
+const payee = signerFromSeed(hexToBytes(PAYEE_SEED));
 
 let nextId = 1;
 
@@ -176,8 +181,26 @@ describe("tools/call round trip", () => {
     expect(verified.value.valid).toBe(true);
 
     const folded = await callTool("tclk_apply_transcript", {
-      lines: [offer, accepted.value.line],
-      nowMs: HASH_OFFER.expiresMs - 1,
+      records: [
+        {
+          room: "tclk-offers",
+          seq: 1,
+          timestampMs: HASH_OFFER.expiresMs - 2,
+          sender: payer.did,
+          nonce: "1001",
+          signature: payer.sign(canonicalMessage("tclk-offers", 1001, offer)),
+          line: offer,
+        },
+        {
+          room: "tclk-offers",
+          seq: 2,
+          timestampMs: HASH_OFFER.expiresMs - 1,
+          sender: payee.did,
+          nonce: "1002",
+          signature: payee.sign(canonicalMessage("tclk-offers", 1002, accepted.value.line)),
+          line: accepted.value.line,
+        },
+      ],
     });
     expect(folded.value.status).toBe("accepted");
     expect(folded.value.secretRevealed).toBe(false);

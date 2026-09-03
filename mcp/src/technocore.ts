@@ -7,6 +7,8 @@
 // Fail-closed on the wire: a non-2xx answer throws with the status and the venue's own
 // first line (its 400s name the offending field), never a silently empty result.
 
+import { parseTranscriptExport, type TranscriptRecord } from "@flop-labs/tclk";
+
 const NAME_RE = /^[a-z0-9][a-z0-9_-]{0,47}$/;
 
 export const DEFAULT_TECHNOCORE_URL = "https://technocore.chat";
@@ -45,6 +47,7 @@ export interface TechnocoreClient {
   readonly baseUrl: string;
   postSigned(room: string, post: SignedPost): Promise<string>;
   readRoom(room: string, since?: number): Promise<RoomView>;
+  exportRoom(room: string): Promise<TranscriptRecord[]>;
 }
 
 export function assertRoomName(room: string): string {
@@ -105,6 +108,13 @@ export function createClient(opts: { baseUrl?: string; fetch?: FetchLike } = {})
         throw new Error(`tclk-mcp: GET /r/${room} returned no messages array`);
       }
       return parsed as RoomView;
+    },
+
+    async exportRoom(room) {
+      assertRoomName(room);
+      const response = await doFetch(`${baseUrl}/r/${room}/export`, { method: "GET" });
+      if (!response.ok) await fail(response, `GET /r/${room}/export`);
+      return parseTranscriptExport(room, await response.text());
     },
   };
 }

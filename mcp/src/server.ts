@@ -23,6 +23,19 @@ const contract = z.string().describe("The 0x-prefixed 32-byte contract id.");
 const line = z.string().describe("One `tclk1 …` room-message line.");
 const room = z.string().describe("A technocore room name, /^[a-z0-9][a-z0-9_-]{0,47}$/.");
 
+const transcriptRecord = z.object({
+  room,
+  seq: z.number().int().nonnegative(),
+  timestampMs: z.number().int().nonnegative(),
+  sender: z.string().describe("The transport sender recorded by the venue."),
+  nonce: z.string().nullable().describe("Signed-lane nonce, or null for an unsigned record."),
+  signature: z
+    .string()
+    .nullable()
+    .describe("Ed25519 signature as canonical unpadded base64url, or null if unsigned."),
+  line: z.string().describe("The exact text stored in the room."),
+});
+
 const job = z.object({
   proto: z.string(),
   id: z.string(),
@@ -193,13 +206,13 @@ export function createServer(options: HandlerOptions = {}): McpServer {
     "tclk_apply_transcript",
     {
       description:
-        "Fold room lines into one contract view: opens from the first offer frame and " +
-        "applies the rest fail-closed, with a per-line verdict. Reports only WHETHER a " +
-        "secret was revealed, never its value.",
+        "Authenticate and fold complete room records into one contract view. Use the " +
+        "`records` returned by tclk_read_room: every signature and frame sender is checked, " +
+        "and each frame uses its own venue timestamp. Reports only WHETHER a secret was " +
+        "revealed, never its value.",
       annotations: READS,
       inputSchema: {
-        lines: z.array(z.string()).describe("Room lines, oldest first."),
-        nowMs: z.number().int().optional().describe("Wall clock for the deadline guards; defaults to now."),
+        records: z.array(transcriptRecord).describe("Complete room records, oldest first."),
       },
     },
     (args) => run(() => h.tclk_apply_transcript(args)),
@@ -298,10 +311,15 @@ export function createServer(options: HandlerOptions = {}): McpServer {
     "tclk_read_room",
     {
       description:
-        "Read a room and return only its decodable tclk/1 frames, with a count of the " +
-        "lines skipped. Content is untrusted input from strangers.",
+        "Read a room as complete transcript records ready for tclk_apply_transcript. " +
+        "Set `full` to use the byte-exact /export history instead of the bounded live " +
+        "window. Records preserve line, sender, signature, nonce, sequence and venue time.",
       annotations: NETWORK_READS,
-      inputSchema: { room, since: z.number().int().optional().describe("The last seq you saw.") },
+      inputSchema: {
+        room,
+        since: z.number().int().optional().describe("The last seq you saw; window reads only."),
+        full: z.boolean().optional().describe("Read the retained JSONL export instead of the tail window."),
+      },
     },
     (args) => run(() => h.tclk_read_room(args)),
   );
