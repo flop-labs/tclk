@@ -8,7 +8,13 @@
 
 import { describe, it, expect } from "vitest";
 
-import { generatePointLock, schnorrAdaptor, verifyPointWitness } from "../src/index.js";
+import {
+  generatePointLock,
+  pointLockFromWitness,
+  schnorrAdaptor,
+  verifyPointWitness,
+} from "../src/index.js";
+import { SECP256K1_N } from "../src/points.js";
 
 const { getPublicKey, preSign, adapt, extractWitness, verifyPreSignature, verifySignature } =
   schnorrAdaptor;
@@ -89,5 +95,34 @@ describe("Schnorr adaptor signature", () => {
     expect(adapt({ nonce: "0xbad", s: pre.s }, t)).toBeNull();
     // extractWitness: malformed scalars.
     expect(extractWitness({ nonce: pre.nonce, s: "0xzz" }, { nonce: pre.nonce, s: pre.s })).toBeNull();
+  });
+});
+
+describe("scalar range", () => {
+  const OVER_ORDER = "0x" + (SECP256K1_N + 1n).toString(16).padStart(64, "0");
+
+  it("adapt refuses a witness the point lock refuses", () => {
+    // pointLockFromWitness rejects a scalar >= n, so no statement can ever carry this as
+    // its witness. Completing a pre-signature with it must fail rather than quietly adapt
+    // under `witness mod n`.
+    expect(() => pointLockFromWitness(OVER_ORDER)).toThrow();
+
+    const lock = generatePointLock();
+    const pre = preSign(SK, MSG, lock.statement);
+    expect(pre).not.toBeNull();
+    expect(adapt(pre!, OVER_ORDER)).toBeNull();
+  });
+
+  it("a secret key out of range has no public key", () => {
+    expect(getPublicKey(OVER_ORDER)).toBeNull();
+  });
+
+  it("a pre-signature scalar out of range does not verify", () => {
+    const lock = generatePointLock();
+    const publicKey = getPublicKey(SK)!;
+    const pre = preSign(SK, MSG, lock.statement)!;
+    expect(verifyPreSignature(publicKey, MSG, lock.statement, { ...pre, s: OVER_ORDER })).toBe(
+      false,
+    );
   });
 });
