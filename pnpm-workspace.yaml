@@ -1,3 +1,13 @@
 packages:
   - '.'
   - 'mcp'
+
+# esbuild and workerd ship prebuilt binaries that their postinstall scripts unpack;
+# vitest and wrangler do not run without them. pnpm blocks dependency lifecycle
+# scripts by default — which is the behaviour worth keeping, since a postinstall is
+# how a compromised transitive dependency runs code on a build machine. pnpm 11 turns
+# an unapproved script from a warning into a hard install error, so the two that are
+# genuinely needed have to be named here. Anything not on this list still cannot run.
+allowBuilds:
+  esbuild: true
+  workerd: true

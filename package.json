@@ -38,7 +38,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "packageManager": "pnpm@10.33.0",
+  "packageManager": "pnpm@11.25.0",
   "scripts": {
     "prepublishOnly": "pnpm build",
     "build": "tsc -p tsconfig.json",
