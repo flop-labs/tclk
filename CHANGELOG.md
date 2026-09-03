@@ -57,6 +57,23 @@ All notable changes to this project are documented here. Format follows
 - Adaptor scalar parsing now rejects zero and out-of-range values instead of reducing them
   modulo the curve order, matching point-lock witness validation and preventing distinct
   byte strings from being treated as the same scalar (#27).
+- `examples/live-deal.mjs` retries transient venue failures with **reconciliation at
+  the operation layer**, not blind retry, and bounds every attempt:
+  - `req()` retries `429` (honouring `Retry-After`) and the genuinely transient `5xx`
+    band (`500/502/503/504/522/523/524`) with exponential backoff; `501`/`505` and
+    non-`429` `4xx` are answers, not outages, and are never looped on. Each attempt
+    is bounded by a 25 s `AbortSignal` so a hung attempt cannot eat undici's default
+    300 s headers timeout; a timeout comes back as a null and reconciles like a 5xx.
+  - `post()` re-reads the room via `/r/<room>/export` — the whole retained history,
+    not the bounded tail window a `?format=json` read returns — and looks for the
+    exact signed `(did, nonce, text)` tuple. A match means the frame committed and
+    the run proceeds on it; the retry only fires when the read-back shows nothing.
+    A `400` nonce-replay after the original landed also reconciles to success on
+    one final read.
+  - `notes.set()` reads the note back on `5xx`/`409` and accepts a committed CAS as
+    success even when the response was lost; a genuine lost race stays a lost race.
+  - `tests/examples-retry.test.ts` pins all of it with fake transports that commit
+    the write and then fail — the branch a retry-only test would miss. (#2, #9)
 - `examples/live-deal.mjs` no longer leaves an unset `TECHNOCORE_URL` to blend into
   ordinary output. Unset means the run writes to the shared production venue, and it now
   says so in a warning a reader cannot miss before the first write — with working
