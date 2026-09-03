@@ -36,6 +36,18 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `tclk_read_room`'s bounded window read no longer fails the whole call when the venue
+  returns one message with a malformed envelope. A room is world-writable, so a single
+  hostile line — a `nonce` that is not decimal text, a non-string `from` — used to throw
+  out of the `messages.map`, denying every reader the rest of the room. Each message is
+  now normalized on its own: one that will not normalize is set aside in a new `malformed`
+  array with its seq and reason, exactly as a fold reports a bad line, so no record is
+  silently lost and `lastSeq` stays correct for paging. The `full` export path keeps the
+  opposite rule and is unchanged: an export claims to be the complete history, where a
+  partial answer is indistinguishable from a whole one, so `parseTranscriptExport` refuses
+  the file rather than hand back a transcript with a hole in it. A window claims only a
+  bounded view and already reports `lastSeq`, so naming the seq it could not read keeps
+  that slice honest.
 - `applyFrame` now rejects `receipt` frames whose `rail` or `ref` contradicts the contract's
   locked settlement terms, or that assert a settlement rail on a `cancelled` contract where
   no lock was ever established.
