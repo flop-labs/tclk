@@ -1,0 +1,23 @@
+{
+  // Typecheck only. Wrangler's own esbuild is what compiles and bundles the Worker — it
+  // resolves the TypeScript `./x.js` specifier to `x.ts` the same way tsc does — so a
+  // second emit here would produce a `dist/` that nothing reads and that could go stale
+  // against `src/`. `pnpm run build:worker` runs this, then asks wrangler for the real
+  // bundle.
+  //
+  // No `rootDir`: `src/worker.ts` imports `../../src/tools.ts` from the package it is a
+  // deployment of, and with nothing emitted there is nothing for a root directory to
+  // constrain.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "sourceMap": false,
+    // `@types/node` only for the Web globals it declares — `Request`, `Response`, `URL`,
+    // `fetch`. They are the platform's own types at runtime; nothing here touches a node:
+    // builtin, and `@cloudflare/workers-types` would add a dependency to say the same
+    // thing about four names.
+    "types": ["node"]
+  },
+  "include": ["src", "tests"]
+}

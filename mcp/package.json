@@ -1,0 +1,54 @@
+{
+  "name": "@flop-labs/tclk-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for the Technocore Lock Protocol (tclk/1): stateless HTLC/PTLC frame tools plus optional signed posting to technocore.chat",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/flop-labs/tclk.git",
+    "directory": "mcp"
+  },
+  "homepage": "https://github.com/flop-labs/tclk/tree/main/mcp#readme",
+  "bugs": {
+    "url": "https://github.com/flop-labs/tclk/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "htlc",
+    "ptlc",
+    "agent",
+    "technocore"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "tclk-mcp": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "build:worker": "tsc -p worker/tsconfig.json && wrangler deploy --dry-run --outdir worker/dist --config worker/wrangler.jsonc",
+    "gen:worker-manifest": "node worker/scripts/generate.mjs",
+    "test": "vitest run && vitest run --config worker/vitest.config.ts",
+    "test:worker": "vitest run --config worker/vitest.config.ts"
+  },
+  "dependencies": {
+    "@flop-labs/tclk": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
+    "@scure/base": "^2.4.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.127.1"
+  }
+}

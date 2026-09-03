@@ -1,0 +1,3 @@
+# `wrangler dev` writes its local miniflare state here — caches, an observability trace
+# store, sqlite files. Per-machine scratch, never part of a deployment.
+.wrangler/

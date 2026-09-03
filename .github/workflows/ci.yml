@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  # `push` is narrowed to main now that anyone can open a pull request: an unfiltered `push`
+  # runs this twice for every in-repo branch that also has a PR open, and once for every
+  # branch that has none.
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  # A newer commit makes an older result obsolete on both PRs and main.
+  cancel-in-progress: true
+
+# Read-only by default. This workflow builds and tests; nothing here writes to the repository,
+# and a fork PR runs untrusted code, so the token it gets should not be able to.
+permissions:
+  contents: read
+
+jobs:
+  # Separate job so it can be made a required check on its own once branch protection is
+  # available: a session link is a history problem, and history is the one thing a green
+  # build does not let you fix later.
+  commit-messages:
+    name: "commit messages carry no session links"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # The scan reads commits, not the tree, so the default shallow clone is not enough.
+          fetch-depth: 0
+
+      - name: Scan
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ -n "${BASE:-}" ]; then
+            mapfile -t shas < <(git rev-list "$BASE..$HEAD_SHA")
+          else
+            # push to main: the tip is the squash-merge commit, whose body GitHub builds out
+            # of the branch's commit messages — so a trailer reaches main through here even
+            # when no single commit on main ever carried one.
+            mapfile -t shas < <(git rev-list -1 HEAD)
+          fi
+          failed=0
+          for sha in "${shas[@]}"; do
+            git log -1 --format=%B "$sha" | ./scripts/no-agent-trailers.sh \
+              || { echo "    ^ in commit $sha" >&2; failed=1; }
+          done
+          exit "$failed"
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # No `version:` here on purpose — package.json's `packageManager` field pins
+      # pnpm, and specifying both makes action-setup fail with a version mismatch.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      # --include-workspace-root: the library IS the root package (mcp/ is the only
+      # child), and plain `pnpm -r` skips the root, so the library would never build.
+      - run: pnpm -r --include-workspace-root build
+      - run: pnpm -r --include-workspace-root test

@@ -1,0 +1,42 @@
+name: Report
+description: A bug, a spec/code disagreement, or a behavior finding
+body:
+  - type: input
+    id: commit
+    attributes:
+      label: Commit verified against
+      description: >-
+        `git rev-parse --short HEAD` of the checkout you saw this on. There is no release yet,
+        so `main` is the only artifact — a report against a cached copy of the source may
+        describe code that no longer exists.
+      placeholder: "e.g. bce0602"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where
+      options:
+        - Wire format / canonical encoding / ids
+        - State machine (applyFrame, guards, deadlines)
+        - Locks (hash, point, verifySecret)
+        - Adaptor signatures (unaudited reference crypto — see SECURITY.md first)
+        - Settlement rail / PaperRail
+        - MCP server (stdio)
+        - MCP server (Cloudflare Worker)
+        - SPEC.md
+        - Build, packaging, CI
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: Report
+      description: >-
+        What you observed, what the code or SPEC.md promises instead, and the smallest thing
+        that reproduces it — a frame line, a transcript, or a few lines calling the library.
+        If a golden vector in `tests/vectors.test.ts` fails, say which: that means the wire
+        format moved, and the vectors are not the thing to change.
+    validations:
+      required: true

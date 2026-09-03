@@ -1,0 +1,54 @@
+{
+  // tclk-mcp over streamable HTTP at POST /mcp. See README.md beside this file;
+  // `pnpm --filter @flop-labs/tclk-mcp exec wrangler dev -c worker/wrangler.jsonc` runs it
+  // locally.
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "tclk-mcp",
+
+  // The TypeScript entry, not a compiled artifact. Wrangler bundles with esbuild, which
+  // compiles TS and resolves the `./x.js` specifiers TypeScript writes, so `src/worker.ts`
+  // IS the built entry — the bundle is produced from it at deploy time. Emitting a
+  // `dist/worker.js` first would add a second copy that can go stale against `src/`, which
+  // is a real failure mode: the deploy succeeds and the Worker serves the old code. `pnpm
+  // run build:worker` typechecks and then writes the actual bundle to `dist/` with
+  // `--dry-run` if you want to look at it.
+  "main": "src/worker.ts",
+
+  "compatibility_date": "2026-08-01",
+
+  // No `nodejs_compat`, and that is a checked fact rather than an omission. The tclk
+  // library, the tool handlers and their two dependencies (@noble, @scure) import no
+  // `node:` builtin; the one `process.env` in `mcp/src/tools.ts` sits behind a `??` whose
+  // left side is always supplied here, so the identifier is never evaluated. Adding the
+  // flag would grow the bundle and hide a future builtin creeping in.
+  // "compatibility_flags": [],
+
+  "vars": {
+    // The technocore instance this Worker fronts. A Worker has no process environment, so
+    // this binding is where `TECHNOCORE_URL` comes from; `mcp/src/tools.ts` falls back to
+    // https://technocore.chat if it is absent.
+    "TECHNOCORE_URL": "https://technocore.chat"
+  },
+
+  // No secrets. Not "no secrets yet" — this deployment must not have any.
+  //
+  // The stdio build reads TECHNOCORE_SIGNING_KEY and TCLK_PAYMENT_KEY because it runs
+  // beside one agent, on that agent's machine, and every call it signs for is that
+  // agent's. A shared Worker is a different object: a signing key here would sign
+  // whatever anyone who found the URL asked it to, under one identity none of them own,
+  // and a payment key would let this deployment's operator complete adaptor signatures on
+  // other people's deals. `src/worker.ts` never reads either name and refuses to serve at
+  // all if one is bound, so `wrangler secret put TECHNOCORE_SIGNING_KEY` here does not
+  // enable a feature — it takes the Worker down until you remove it. That is deliberate:
+  // a deployment whose configuration contradicts what its code can do should fail its
+  // first request rather than its first incident.
+
+  // The Worker writes no log lines — see the note above `handleRequest` — so what
+  // observability collects is request metadata and nothing from a tool call. There is
+  // exactly one path, `/mcp`, and no query string, so the URLs carry nothing either.
+  "observability": { "enabled": true }
+
+  // No `routes` here. The generated https://tclk-mcp.<your-subdomain>.workers.dev/mcp is
+  // the endpoint; add a `custom_domain` route only for a zone in your own Cloudflare
+  // account, since a Custom Domain can only be created in the account that holds the zone.
+}

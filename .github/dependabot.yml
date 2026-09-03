@@ -1,0 +1,37 @@
+version: 2
+
+# Why this file exists: GitHub raises security alerts for a vulnerable dependency without any
+# config at all, but *version* updates need this, and GitHub Actions has no advisory feed of
+# comparable coverage — so without it nothing watches the workflows, and pinned actions drift
+# until they request a runtime GitHub has already deprecated. That is not a CVE; it is a build
+# that stops working on a date nobody is tracking. This is the thing that notices.
+updates:
+  # Two runtime dependencies (@noble/curves, @noble/hashes) sit directly on the money path:
+  # they are the hashing and the curve arithmetic behind every lock in this repo. Watching them
+  # is the point, and grouping keeps a routine week to one reviewable pull request.
+  #
+  # One entry, at the root: the library IS the root package and pnpm-workspace.yaml declares
+  # `mcp/` as the only child, so the root manifest plus pnpm-lock.yaml covers both. If a bump
+  # to something only `mcp/` depends on never appears, add a second entry with
+  # `directory: "/mcp"` rather than assuming it is quiet.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # Majors are where the runtime bumps live, so they must not be filtered out — grouping
+    # keeps that one pull request instead of one per action.
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"

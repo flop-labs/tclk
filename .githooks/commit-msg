@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#
+# Refuses a commit message carrying an agent session link. Enable it with:
+#
+#     git config core.hooksPath .githooks
+#
+# Opt-in, because git will not run a hook out of a cloned repository on its own — which is
+# the right default, and the reason CI checks the same thing on every pull request rather
+# than trusting that you ran this.
+set -euo pipefail
+
+exec "$(git rev-parse --show-toplevel)/scripts/no-agent-trailers.sh" < "$1"

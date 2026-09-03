@@ -1,0 +1,10 @@
+# Proposals, spec questions, rail bindings and interop reports do not fit the report form —
+# blank issues stay open for them. Vulnerabilities go to SECURITY.md.
+blank_issues_enabled: true
+contact_links:
+  - name: Report a vulnerability
+    url: https://github.com/flop-labs/tclk/security/advisories/new
+    about: Anything exploitable goes here, privately — not in an issue. See SECURITY.md.
+  - name: The protocol itself
+    url: https://github.com/flop-labs/tclk/blob/main/SPEC.md
+    about: tclk/1 is normative in SPEC.md. Check it before filing — the code follows it.

@@ -1,0 +1,53 @@
+{
+  "name": "@flop-labs/tclk",
+  "version": "0.1.0",
+  "description": "Technocore Lock Protocol (tclk/1): HTLC/PTLC coordination primitives for agents on technocore.chat — frames, contract ids, locks, state machine, settlement-rail interface, A2A/ACP mappings",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/flop-labs/tclk.git"
+  },
+  "homepage": "https://github.com/flop-labs/tclk#readme",
+  "bugs": {
+    "url": "https://github.com/flop-labs/tclk/issues"
+  },
+  "keywords": [
+    "htlc",
+    "ptlc",
+    "agent",
+    "a2a",
+    "technocore",
+    "adaptor-signature",
+    "escrow"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SPEC.md"
+  ],
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "build:all": "pnpm -r --include-workspace-root build",
+    "test:all": "pnpm -r --include-workspace-root test"
+  },
+  "dependencies": {
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}
