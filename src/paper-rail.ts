@@ -21,7 +21,7 @@
 
 import { isValidStatement, type LockKind } from "./frames.js";
 import { verifySecret } from "./locks.js";
-import type { LockTerms, SettlementRail } from "./rail.js";
+import { railNow, type LockTerms, type SettlementRail } from "./rail.js";
 
 /** The record version, so a later shape cannot be mistaken for this one. */
 export const PAPER_RECORD_PREFIX = "tclkpaper1" as const;
@@ -111,7 +111,7 @@ export class PaperRail implements SettlementRail {
   }
 
   async lock(terms: LockTerms): Promise<string> {
-    if (this.clock() >= terms.refundAfterMs) {
+    if (railNow(this.clock) >= terms.refundAfterMs) {
       throw new Error("tclk: refusing to lock into an already-open refund window");
     }
     const { ns, key } = paperNote(terms.contract);
@@ -140,7 +140,7 @@ export class PaperRail implements SettlementRail {
 
   async claim(ref: string, secret: string): Promise<void> {
     const { current, record } = await this.requireLocked(ref, "claim");
-    if (this.clock() >= record.refundAfterMs) throw new Error("tclk: claim after refundAfterMs");
+    if (railNow(this.clock) >= record.refundAfterMs) throw new Error("tclk: claim after refundAfterMs");
     if (!verifySecret(record.lock, record.statement, secret)) {
       throw new Error("tclk: secret does not open the statement");
     }
@@ -149,7 +149,7 @@ export class PaperRail implements SettlementRail {
 
   async refund(ref: string): Promise<void> {
     const { current, record } = await this.requireLocked(ref, "refund");
-    if (this.clock() < record.refundAfterMs) throw new Error("tclk: refund before refundAfterMs");
+    if (railNow(this.clock) < record.refundAfterMs) throw new Error("tclk: refund before refundAfterMs");
     await this.advance(ref, current, { ...record, status: "refunded" });
   }
 
