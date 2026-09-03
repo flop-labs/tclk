@@ -54,6 +54,11 @@ All notable changes to this project are documented here. Format follows
   append order.
 - Pre-signature scalar validation now accepts only whole-byte hex encodings, rejecting
   odd-length strings before they reach cryptographic parsing (#24).
+- `decodeFrame` now enforces the same `MAX_FRAME_CHARS` room-message cap `encodeFrame` does.
+  SPEC §2 states the cap as a property of a frame, and technocore refuses a longer text, so a
+  longer line was never a stored room message. The check runs before `JSON.parse`, which bounds
+  what one row of an untrusted `/export` can cost a `foldTranscript` call. No wire bytes move
+  and no golden vector changes.
 - Adaptor scalar parsing now rejects zero and out-of-range values instead of reducing them
   modulo the curve order, matching point-lock witness validation and preventing distinct
   byte strings from being treated as the same scalar (#27).
