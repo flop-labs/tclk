@@ -6,6 +6,17 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- A hosted deployment of the MCP server at `https://tclk.technocore.chat/mcp`, streamable
+  HTTP, no account and no key. It is the no-custody Worker build: it binds neither
+  `TECHNOCORE_SIGNING_KEY` nor `TCLK_PAYMENT_KEY` and refuses to serve if either is present,
+  so `tclk_post_frame` passes a caller's signature through or returns the signing challenge,
+  and `tclk_adaptor_presign` refuses and names where pre-signing can be done instead. The
+  stdio build remains the right choice wherever a local process can run — `mcp/worker/`
+  documents what a shared instance costs, including that frames leave from its IP and share
+  one rate budget.
+
 ### Fixed
 
 - `SPEC.md` §2 no longer claims a deal room is "derivable by the two parties and nobody

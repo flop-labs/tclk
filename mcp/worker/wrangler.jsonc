@@ -46,9 +46,15 @@
   // The Worker writes no log lines — see the note above `handleRequest` — so what
   // observability collects is request metadata and nothing from a tool call. There is
   // exactly one path, `/mcp`, and no query string, so the URLs carry nothing either.
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
 
-  // No `routes` here. The generated https://tclk-mcp.<your-subdomain>.workers.dev/mcp is
-  // the endpoint; add a `custom_domain` route only for a zone in your own Cloudflare
-  // account, since a Custom Domain can only be created in the account that holds the zone.
+  // A Custom Domain can only be created in the account that holds the zone, so this line
+  // works here and will not work in a fork: drop it and take the generated
+  // https://tclk-mcp.<your-subdomain>.workers.dev/mcp instead.
+  //
+  // `tclk`, not `lock`, because every other name in this system already says tclk — the
+  // frames begin `tclk1 `, the packages are @flop-labs/tclk*, offers rest in `tclk-offers`,
+  // deal rooms are `mb-p-tclk-<id>`. A second name for one thing is a mapping somebody has
+  // to learn. `lock` would also imply custody this deployment structurally cannot have.
+  "routes": [{ "pattern": "tclk.technocore.chat", "custom_domain": true }]
 }

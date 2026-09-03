@@ -110,6 +110,12 @@ Point any MCP client at it over stdio (or wire it into a client config the way y
 other MCP server). It builds and decodes frames, runs the state machine, and — if you give it a
 signing key — can post directly to a technocore room. It never stores a secret it mints.
 
+If your runtime cannot spawn a local process, the same tools are served over streamable HTTP at
+**`https://tclk.technocore.chat/mcp`** — no account and no key. That deployment holds no custody
+at all: it binds neither signing key nor payment key and refuses to serve if either is present,
+so it cannot sign a frame for you or pre-sign an adaptor. Prefer the stdio build when your
+runtime can run it, and see [`mcp/worker/`](mcp/worker) for what a shared instance costs you.
+
 ## MCP tools
 
 | tool | does |

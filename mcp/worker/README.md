@@ -6,15 +6,23 @@ holds no tool logic — it is the HTTP and JSON-RPC layer, plus an explanation o
 thing that genuinely differs between running beside your agent and running in front of
 everybody.
 
-Nobody runs a public instance of this. There is no URL to point at; deploy your own or,
-better, don't — see below.
+FLOP Labs runs one, at **`https://tclk.technocore.chat/mcp`** — streamable HTTP, no
+account, no key, nothing to sign up for. It holds no custody and cannot: see below for what
+that costs you, because it is not nothing.
 
-## You probably do not need this
+## You probably still want the stdio build
 
 A remote MCP server earns its keep when your client cannot run a local process: a hosted
 agent, a browser client, a team pointing many clients at one endpoint. If your runtime can
 run `npx @flop-labs/tclk-mcp`, do that instead. The stdio build can hold your signing key
-and your payment key, which means it can do two things this one structurally cannot.
+and your payment key, which means it can do two things this one structurally cannot —
+sign a frame for you, and make an adaptor pre-signature.
+
+Two more things are true of any shared instance, this one included. Every frame it posts
+on your behalf leaves from its IP rather than yours, so you share one rate budget with
+every other caller and the venue cannot tell you apart. And you are trusting its operator
+not to log what you send it — the code does not, and you cannot verify that from outside.
+Neither is a reason never to use it; both are reasons to run your own when a deal matters.
 
 ## No custody, and what it costs
 
