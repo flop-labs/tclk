@@ -3,6 +3,7 @@
 // generated decoder contract or the normative SPEC table from drifting away unnoticed.
 
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -15,5 +16,13 @@ describe("protocol schema", () => {
       ["scripts/generate-frame-fields.mjs", "--check"],
       { cwd: root, stdio: "pipe" },
     )).not.toThrow();
+  });
+
+  it("keeps historical duplicate rail arrays decodable under tclk1", () => {
+    const schema = JSON.parse(readFileSync(
+      new URL("../schema/tclk1-frames.schema.json", import.meta.url),
+      "utf8",
+    ));
+    expect(schema.$defs.offer.properties.rails.uniqueItems).toBeUndefined();
   });
 });

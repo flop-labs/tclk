@@ -298,6 +298,10 @@ replayable. Such legacy custom ids may complete their already-signed contracts b
 membership, but cannot be emitted by new builders or confused with a registered id. Closing
 historical decode as well would require a `tclk2 ` prefix.
 
+The same compatibility rule applies to duplicate entries: historical tclk/1 offers may contain
+them because the original decoder did, and their offer ids commit to the exact array. New
+builders deduplicate and sort; new emission rejects duplicates.
+
 Rail lists are sets, and “match” means non-empty intersection after normalization, not equality
 or subset. Order therefore never affects negotiation: `["paper","x402"]` matches
 `["x402","paper"]`, and `["flop-htlc","paper"]` matches `["paper","x402"]` through `paper`.

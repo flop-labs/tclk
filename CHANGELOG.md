@@ -44,8 +44,8 @@ All notable changes to this project are documented here. Format follows
   map `PaperRail`/`paper-rail` to canonical `paper`, and reject punctuation such as the live
   `flop-htlc.` typo instead of coercing it. `paper` is explicitly a non-value rehearsal rail
   (#31). New emissions reject unregistered ids, while tclk/1 decoding retains its historical
-  lowercase free-form grammar and exact membership so existing custom-rail contracts keep
-  replaying. No golden wire constants changed.
+  lowercase free-form grammar, duplicate arrays, and exact membership so existing custom-rail
+  contracts keep replaying. No golden wire constants changed.
 - Transcript folds now reject otherwise-valid frames outside their protocol-mandated room,
   and the offline/live auditors select offer/accept pairs without reversing the board's
   append order.

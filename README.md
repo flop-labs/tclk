@@ -26,7 +26,7 @@ payer                                        payee
 
 `cancel` (either side, before any lock exists), `heartbeat` (state-neutral liveness while
 accepted/locked), and `receipt` (a post-terminal acknowledgment) are
-the other two frame types — see [`SPEC.md` §4](SPEC.md#4-state-machine) for the full state
+the other frame types — see [`SPEC.md` §4](SPEC.md#4-state-machine) for the full state
 machine and its guards.
 
 A lock asks who knows the secret, never who agreed, so a deal that needs a referee arranges one

@@ -181,6 +181,27 @@ describe("live-wire conformance gaps", () => {
     }, NOW).ok).toBe(true);
   });
 
+  it("preserves historical duplicate rail arrays while new emission rejects them", () => {
+    const fields = {
+      type: "offer" as const,
+      from: PAYER,
+      role: "payer" as const,
+      amount: "1000",
+      asset: "USDC",
+      lock: "hash" as const,
+      rails: ["x402", "x402"],
+      claimByMs: NOW + 3_600_000,
+      refundAfterMs: NOW + 7_200_000,
+      expiresMs: NOW + 600_000,
+      nonce: "0011223344556677",
+    };
+    const historical = { ...fields, id: offerId(fields) };
+    const decoded = decodeFrame(`${TCLK_PREFIX}${canonicalJson(historical)}`);
+
+    expect(decoded).toEqual(historical);
+    expect(() => encodeFrame(decoded)).toThrow(/rails must not contain duplicates/);
+  });
+
   it("accepts a heartbeat from a party without changing contract state", () => {
     const { state } = accepted();
     const heartbeat = applyFrame(state, {
