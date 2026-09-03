@@ -132,6 +132,11 @@ All notable changes to this project are documented here. Format follows
 - Reject receipt frames whose claimed outcome contradicts the contract's terminal state,
   preventing a later reputation or spend-accounting consumer from accepting a false
   `claimed` / `refunded` / `cancelled` acknowledgment.
+- In `proposed` status, bind `cancel` frames to the targeted offer's `id`, preventing
+  a single signed cancel from terminating all pending offers from that sender, and
+  record that exact target so a later `receipt` can acknowledge a proposed-stage
+  cancellation without treating a missing contract id in any other state as an offer id
+  (#5, #17).
 
 ## [0.1.0] - 2026-09-01
 
