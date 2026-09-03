@@ -6,6 +6,14 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `examples/live-deal.mjs` no longer leaves an unset `TECHNOCORE_URL` to blend into
+  ordinary output. Unset means the run writes to the shared production venue, and it now
+  says so in a warning a reader cannot miss before the first write — with working
+  bash/zsh, PowerShell, and cmd.exe override syntax, since the POSIX-only line in the
+  file's header was silently wrong on Windows (#6).
+
 ### Added
 
 - A hosted deployment of the MCP server at `https://tclk.technocore.chat/mcp`, streamable
