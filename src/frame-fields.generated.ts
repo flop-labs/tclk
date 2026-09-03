@@ -83,7 +83,6 @@ export const FRAME_FIELDS = {
       "type",
       "from",
       "contract",
-      "ref",
       "secret"
     ]
   },
@@ -98,8 +97,7 @@ export const FRAME_FIELDS = {
     "required": [
       "type",
       "from",
-      "contract",
-      "ref"
+      "contract"
     ]
   },
   "cancel": {
@@ -148,6 +146,9 @@ export const FRAME_FIELDS = {
   }
 } as const;
 
+export const TCLK1_RAIL_PATTERN = "^(?:[a-z0-9][a-z0-9._-]{0,63}|PaperRail)$";
+export const CANONICAL_RAIL_ID_PATTERN = "^[a-z0-9]+(?:-[a-z0-9]+)*$";
+
 export const CANONICAL_RAIL_IDS = [
   "btc-htlc",
   "evm-htlc",
@@ -157,3 +158,8 @@ export const CANONICAL_RAIL_IDS = [
   "paper",
   "x402"
 ] as const;
+
+export const RAIL_ID_ALIASES = {
+  "paperrail": "paper",
+  "paper-rail": "paper"
+} as const;

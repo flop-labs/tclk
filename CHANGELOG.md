@@ -9,8 +9,8 @@ All notable changes to this project are documented here. Format follows
 ### Added
 
 - A schema-owned tclk/1 frame field contract, canonical settlement-rail registry and
-  order-independent rail matching helpers. Generated decoder fields and the normative
-  `SPEC.md` table are checked for drift in CI.
+  intersection-based, order-independent rail matching helpers. Generated decoder fields
+  and the normative `SPEC.md` table are checked for drift in CI.
 - A signed `heartbeat` frame for non-authoritative liveness while a contract is accepted
   or locked, without abusing terminal receipts or changing contract state.
 - A hosted deployment of the MCP server at `https://tclk.technocore.chat/mcp`, streamable
@@ -24,12 +24,16 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
-- Reveal and refund frames now require the preceding lock's rail reference, and the state
-  machine rejects a reference mismatch. This restores the intended wire binding in both
-  the normative schema and implementation without changing the existing golden vectors.
-- Rail aliases such as `PaperRail` and `paper-rail` normalize to canonical `paper` at
-  builder boundaries; unknown and non-canonical wire ids reject loudly, and rail-list
-  matching is explicitly set-based rather than order-sensitive.
+- New reveal/refund builders include the preceding lock's rail reference, and the state
+  machine rejects a supplied mismatch. The field remains optional when decoding tclk/1 so
+  contracts emitted before it existed remain replayable; making it mandatory is reserved
+  for a versioned wire change.
+- Rail migration: new frame builders and capability tokens trim and ASCII-lowercase ids,
+  map `PaperRail`/`paper-rail` to canonical `paper`, and reject punctuation such as the live
+  `flop-htlc.` typo instead of coercing it. `paper` is explicitly a non-value rehearsal rail
+  (#31). New emissions reject unregistered ids, while tclk/1 decoding retains its historical
+  lowercase free-form grammar and exact membership so existing custom-rail contracts keep
+  replaying. No golden wire constants changed.
 - Adaptor scalar parsing now rejects zero and out-of-range values instead of reducing them
   modulo the curve order, matching point-lock witness validation and preventing distinct
   byte strings from being treated as the same scalar (#27).

@@ -124,8 +124,8 @@ decoder uses. `type` is shown explicitly because it is part of every signed fram
 | `offer` | `type`, `from`, `role`, `amount`, `asset`, `lock`, `rails`, `claimByMs`, `refundAfterMs`, `expiresMs`, `nonce`, `id` | `paymentKey`, `job` |
 | `accept` | `type`, `from`, `ref`, `statement`, `contract`, `nonce` | `paymentKey` |
 | `lock` | `type`, `from`, `contract`, `rail`, `ref` | `presig` |
-| `reveal` | `type`, `from`, `contract`, `ref`, `secret` | — |
-| `refund` | `type`, `from`, `contract`, `ref` | `reason` |
+| `reveal` | `type`, `from`, `contract`, `secret` | `ref` |
+| `refund` | `type`, `from`, `contract` | `ref`, `reason` |
 | `cancel` | `type`, `from`, `contract` | `reason` |
 | `receipt` | `type`, `from`, `contract`, `outcome` | `rail`, `ref` |
 | `heartbeat` | `type`, `from`, `contract`, `nonce` | `note` |
@@ -148,10 +148,11 @@ tclk1 {"amount":"1000000","asset":"FLOP","claimByMs":1756800000000,"expiresMs":1
   implementations disagree on the id of any frame carrying a non-ASCII character, and
   every later frame names the contract by that id. For ASCII-only frames the two forms
   are identical, which is exactly why this is worth stating.
-- `lock` ∈ `hash | point`. `rails` is a non-empty set of registered canonical settlement-rail
-  ids (§5). Its array order is not meaningful. Builders normalize aliases, remove duplicates,
-  and emit lexical order before computing `id`; a decoder rejects aliases and unknown ids on
-  the wire.
+- `lock` ∈ `hash | point`. New `rails` values are a non-empty set of registered canonical
+  settlement-rail ids (§5). Its array order is not meaningful. Builders normalize aliases,
+  remove duplicates, and emit lexical order before computing `id`. A tclk/1 decoder preserves
+  the wider historical rail spelling verbatim because that spelling is part of the offer id;
+  the compatibility rule is in §5.
 - `claimByMs < refundAfterMs` strictly; the gap is the payee's safe claim window and each party
   validates it against its own risk tolerance before committing (`validateDeadlines`).
 - `paymentKey` (secp256k1) is required for `point` locks — adaptor signatures need it; optional
@@ -187,7 +188,9 @@ rail and — by `extractWitness` — hands `y` to anyone holding the pre-signatu
 ### 3.4 `reveal`
 
 Payee only, while locked, before `refundAfterMs`:
-`{type:"reveal", from, contract, ref, secret}` — `ref` MUST equal the preceding `lock.ref`, and
+`{type:"reveal", from, contract, ref?, secret}` — new senders SHOULD include `ref`, and when
+present it MUST equal the preceding `lock.ref`. The field remains optional in tclk/1 because
+frames emitted before it was introduced must remain replayable; a future version may require it.
 `secret` is the 32-byte preimage or scalar witness. Verification is local and total:
 `sha256(secret) == statement` or `compressed(secret·G) == statement`. Publishing it in the room
 is the claim *and* the propagation mechanism for routed payments. After `claimByMs` a reveal is
@@ -195,8 +198,9 @@ late — the payee gambles against the refund; the rail arbitrates.
 
 ### 3.5 `refund` / `cancel` / `receipt`
 
-- `refund`: payer, while locked, at/after `refundAfterMs`; its required `ref` MUST equal the
-  preceding `lock.ref`.
+- `refund`: payer, while locked, at/after `refundAfterMs`; new senders SHOULD include `ref`, and
+  when present it MUST equal the preceding `lock.ref`. As for `reveal`, it is optional on the
+  tclk/1 wire solely for replay compatibility.
 - `cancel`: either party, before any lock exists (proposed/accepted).
 - `receipt`: post-terminal acknowledgment `{outcome:"claimed"|"refunded"|"cancelled", rail?,
   ref?}` — `outcome` must match the contract's terminal state. This is the line a
@@ -219,8 +223,8 @@ an unchanged state plus a reason — never throws mid-poll, never moves on an in
 ```
 proposed ──accept(counterparty, statement ok, pre-expiry)──▶ accepted
 accepted ──lock(payer, rail ∈ offer.rails)────────────────▶ locked
-locked   ──reveal(payee, ref = lock.ref, secret opens statement, now < refundAfterMs)──▶ claimed
-locked   ──refund(payer, ref = lock.ref, now ≥ refundAfterMs)──────────▶ refunded
+locked   ──reveal(payee, ref absent or = lock.ref, secret opens statement, now < refundAfterMs)──▶ claimed
+locked   ──refund(payer, ref absent or = lock.ref, now ≥ refundAfterMs)──────────▶ refunded
 proposed | accepted ──cancel(either party)────────────────▶ cancelled             (terminal)
 accepted | locked ──heartbeat(either party)───────────────▶ same state
 ```
@@ -229,6 +233,13 @@ Duplicates and replays are rejections without state change; frames from non-part
 rejections; a reveal with a wrong secret is a rejection (the secret check is the transition
 guard, not an afterthought). The machine never touches money — it tracks what the signed
 transcript establishes, and the rail enforces the same predicates independently.
+
+Rail negotiation treats each list as an unordered set. Two parties have a rail match exactly
+when the normalized sets have a **non-empty intersection**; neither set needs to contain the
+other. A `lock.rail` MUST be in the offer's normalized set. An unregistered id is an input error,
+distinct from two valid sets having no overlap. For a historical custom tclk/1 id that cannot be
+normalized, replay uses the original exact-string membership rule and never treats it as equal
+to a registered rail.
 
 ## 5. Settlement rails
 
@@ -245,27 +256,45 @@ interface SettlementRail {
 }
 ```
 
-Rail IDs are protocol identifiers, not display labels. The tclk/1 registry is:
+Rail IDs are protocol identifiers, not display labels. New emissions use this closed registry:
 
-| canonical id | meaning |
-|---|---|
-| `btc-htlc` | Bitcoin HTLC/adaptor settlement |
-| `evm-htlc` | EVM escrow |
-| `flop-htlc` | FLOP typed escrow |
-| `memory` | in-process reference rail; no durable value |
-| `near-htlc` | NEAR escrow |
-| `paper` | technocore rehearsal rail; holds no value |
-| `x402` | x402 payment flow |
+| canonical id | settlement layer | `lock` | `claim` | `refund` | moves value? |
+|---|---|---|---|---|---|
+| `btc-htlc` | Bitcoin Script/Taproot | fund an output bound to the statement and timeout | spend with the preimage or completed adaptor signature | take the timeout spend | yes |
+| `evm-htlc` | EVM escrow contract | deposit under the statement and deadline | release with the preimage/witness | execute the expired refund path | yes |
+| `flop-htlc` | FLOP typed escrow | create an escrow with the matching hash/point and time policy | satisfy the hash/point release leaf | satisfy its refund-time leaf | yes |
+| `memory` | process-local reference implementation | record `LockTerms` in memory | verify the secret and mark claimed | check the supplied clock and mark refunded | no durable or external value |
+| `near-htlc` | NEAR escrow contract | deposit under the statement and deadline | release with the preimage/witness | execute the expired refund path | yes |
+| `paper` | technocore CAS note | write a rehearsal record containing the terms | verify the secret and CAS the record to claimed | CAS an expired record to refunded | **no** |
+| `x402` | HTTP payment/facilitator flow | authorize the payment under the advertised hash-lock extension | reveal the preimage to execute payment | let the authorization expire/refund | yes |
 
-At builder and configuration boundaries, trim whitespace, split lower-to-upper case with `-`,
-map spaces, `.`, and `_` to `-`, collapse repeated `-`, and lowercase. The legacy/display alias
-`paper-rail` maps to `paper`, so `PaperRail`, `paper-rail`, and `paper` all build the same wire
-value. Unknown ids reject loudly. Encoded frames contain canonical ids only.
+`paper` is the canonical spelling for the existing rehearsal rail implemented by `PaperRail`.
+It is first-class so live implementations can interoperate, but it backs the lifecycle with
+nothing and MUST NOT be offered as settlement outside an explicitly non-value test or rehearsal
+venue. Existing traffic that treated it as money was never value-backed; see issue #31 for the
+integrator-facing discussion.
 
-Rail lists are sets: equality and intersection ignore array order. For example, the abstract
-sets `["a","b"]` and `["b","a"]` match; with registry values, `["paper","x402"]` and
-`["x402","PaperRail"]` match after normalization. Array order still contributes bytes to a
-hand-built offer's id, but never changes which rails are selectable.
+The canonical id grammar is `^[a-z0-9]+(-[a-z0-9]+)*$`. Normalize application/configuration
+input in exactly this order: trim leading/trailing whitespace, lowercase ASCII letters, reject
+the result if it fails that grammar, then map the aliases `paperrail` and `paper-rail` to
+`paper`. No punctuation is rewritten: `flop-htlc.` is malformed, not `flop-htlc`, and `_`, `.`,
+or interior whitespace likewise fail. A grammar-valid but unregistered id fails as **unknown
+rail id**, which is distinguishable from a valid comparison with no overlap.
+
+Builders apply that rule before computing ids; capability-note encoders and parsers apply the
+same rule. Encoders require canonical registered ids and never rewrite signed frame bytes.
+Decoders also never rewrite: the original tclk/1 implementation admitted
+`^[a-z0-9][a-z0-9._-]{0,63}$`, and the live `PaperRail` alias predates this registry, so a decoder
+accepts that compatibility set and returns the exact spelling to keep old offer/contract ids
+replayable. Such legacy custom ids may complete their already-signed contracts by exact
+membership, but cannot be emitted by new builders or confused with a registered id. Closing
+historical decode as well would require a `tclk2 ` prefix.
+
+Rail lists are sets, and “match” means non-empty intersection after normalization, not equality
+or subset. Order therefore never affects negotiation: `["paper","x402"]` matches
+`["x402","paper"]`, and `["flop-htlc","paper"]` matches `["paper","x402"]` through `paper`.
+Array order still contributes bytes to a hand-built historical offer id, which is why decode
+preserves it.
 
 `LockTerms` is derived from an accepted contract (id, lock kind, statement, amount, asset,
 parties, deadlines). The library ships `MemoryRail`, a reference implementation that enforces

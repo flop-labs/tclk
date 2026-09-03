@@ -31,7 +31,16 @@
     },
     "rail": {
       "type": "string",
-      "enum": ["btc-htlc", "evm-htlc", "flop-htlc", "memory", "near-htlc", "paper", "x402"]
+      "description": "Decode-compatible tclk/1 spelling; new emissions use the canonical registry metadata below.",
+      "pattern": "^(?:[a-z0-9][a-z0-9._-]{0,63}|PaperRail)$",
+      "x-tclk-canonicalPattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "x-tclk-canonicalIds": [
+        "btc-htlc", "evm-htlc", "flop-htlc", "memory", "near-htlc", "paper", "x402"
+      ],
+      "x-tclk-aliases": {
+        "paperrail": "paper",
+        "paper-rail": "paper"
+      }
     },
     "job": {
       "type": "object",
@@ -121,7 +130,7 @@
         "ref": { "type": "string", "minLength": 1 },
         "secret": { "$ref": "#/$defs/hex32" }
       },
-      "required": ["type", "from", "contract", "ref", "secret"]
+      "required": ["type", "from", "contract", "secret"]
     },
     "refund": {
       "type": "object",
@@ -133,7 +142,7 @@
         "ref": { "type": "string", "minLength": 1 },
         "reason": { "type": "string", "minLength": 1 }
       },
-      "required": ["type", "from", "contract", "ref"]
+      "required": ["type", "from", "contract"]
     },
     "cancel": {
       "type": "object",

@@ -1,27 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Settlement-rail names are protocol identifiers, not display labels. Normalize inputs
-// before building a frame and reject unknown ids at every untrusted boundary so matching
-// is set membership over one vocabulary rather than array/string folklore.
+// Settlement-rail names are protocol identifiers, not display labels. Normalize caller
+// input before building a new frame, but do not rewrite historical tclk/1 bytes: old frames
+// used a wider free-form namespace and their ids commit to those exact spellings.
 
-import { CANONICAL_RAIL_IDS } from "./frame-fields.generated.js";
+import {
+  CANONICAL_RAIL_ID_PATTERN,
+  CANONICAL_RAIL_IDS,
+  RAIL_ID_ALIASES,
+} from "./frame-fields.generated.js";
 
 export { CANONICAL_RAIL_IDS } from "./frame-fields.generated.js";
 export type CanonicalRailId = (typeof CANONICAL_RAIL_IDS)[number];
 
 const CANONICAL = new Set<string>(CANONICAL_RAIL_IDS);
-const ALIASES: Readonly<Record<string, CanonicalRailId>> = {
-  "paper-rail": "paper",
-};
+const ALIASES: Readonly<Record<string, CanonicalRailId>> = RAIL_ID_ALIASES;
+const RAIL_ID = new RegExp(CANONICAL_RAIL_ID_PATTERN);
 
 function normalizedSpelling(value: string): string {
-  return value
-    .trim()
-    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
-    .replace(/[\s._]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .toLowerCase();
+  return value.trim().replace(/[A-Z]/g, (letter) => letter.toLowerCase());
 }
 
 /** Canonicalize a known rail id or throw loudly on an unknown namespace entry. */
@@ -30,6 +27,9 @@ export function normalizeRailId(value: string): CanonicalRailId {
     throw new Error("tclk: rail id must be a non-empty string");
   }
   const spelling = normalizedSpelling(value);
+  if (!RAIL_ID.test(spelling)) {
+    throw new Error(`tclk: malformed rail id: ${value}`);
+  }
   const canonical = ALIASES[spelling] ?? spelling;
   if (!CANONICAL.has(canonical)) {
     throw new Error(`tclk: unknown rail id: ${value}`);
@@ -45,11 +45,9 @@ export function normalizeRailIds(values: readonly string[]): CanonicalRailId[] {
   return [...new Set(values.map(normalizeRailId))].sort();
 }
 
-/** Set equality, independent of input order and aliases; unknown ids throw. */
+/** True when two rail sets have any canonical rail in common; unknown ids throw. */
 export function railSetsMatch(left: readonly string[], right: readonly string[]): boolean {
-  const a = normalizeRailIds(left);
-  const b = normalizeRailIds(right);
-  return a.length === b.length && a.every((rail, index) => rail === b[index]);
+  return matchingRails(left, right).length > 0;
 }
 
 /** Common canonical rails, independent of list order; unknown ids throw. */

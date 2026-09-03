@@ -12,11 +12,10 @@
 // Spec: technocore-lock-protocol.md
 
 import { sha256 } from "@noble/hashes/sha2.js";
-import { FRAME_FIELDS } from "./frame-fields.generated.js";
+import { FRAME_FIELDS, TCLK1_RAIL_PATTERN } from "./frame-fields.generated.js";
 import { randomU8a, stringToU8a, u8aToHex } from "./hex.js";
 import { isValidPointStatement } from "./points.js";
 import {
-  type CanonicalRailId,
   normalizeRailId,
   normalizeRailIds,
 } from "./rails.js";
@@ -47,7 +46,7 @@ export interface OfferFields {
   asset: string;
   lock: LockKind;
   /** Settlement rails the sender accepts (e.g. "flop-htlc", "x402"). */
-  rails: CanonicalRailId[];
+  rails: string[];
   /** Payee's safe claim deadline (unix ms). */
   claimByMs: number;
   /** Payer may refund from here (unix ms). Strictly after claimByMs. */
@@ -90,7 +89,7 @@ export interface LockFrame {
   from: string;
   contract: string;
   /** Which rail holds the funds — must be one the offer listed. */
-  rail: CanonicalRailId;
+  rail: string;
   /** Rail-specific reference (escrow id, txid, payment id). */
   ref: string;
   /** PTLC: payer's adaptor pre-signature under the statement over the rail's claim message. */
@@ -101,8 +100,8 @@ export interface RevealFrame {
   type: "reveal";
   from: string;
   contract: string;
-  /** Rail-specific reference; must equal the preceding lock's ref. */
-  ref: string;
+  /** Rail-specific reference; new senders include it and it must equal lock.ref. */
+  ref?: string;
   /** The 32-byte preimage (hash lock) or scalar witness (point lock), 0x-hex. */
   secret: string;
 }
@@ -111,8 +110,8 @@ export interface RefundFrame {
   type: "refund";
   from: string;
   contract: string;
-  /** Rail-specific reference; must equal the preceding lock's ref. */
-  ref: string;
+  /** Rail-specific reference; new senders include it and it must equal lock.ref. */
+  ref?: string;
   reason?: string;
 }
 
@@ -128,7 +127,7 @@ export interface ReceiptFrame {
   from: string;
   contract: string;
   outcome: "claimed" | "refunded" | "cancelled";
-  rail?: CanonicalRailId;
+  rail?: string;
   ref?: string;
 }
 
@@ -160,6 +159,9 @@ const HEX33 = /^0x[0-9a-f]{66}$/;
 const DID = /^did:key:z6Mk[1-9A-HJ-NP-Za-km-z]{44}$/;
 const AMOUNT = /^[1-9][0-9]*$/;
 const ASSET = /^[A-Za-z0-9_-]{1,32}$/;
+// The original tclk/1 wire grammar. Decoding keeps accepting it so old contract ids and
+// transcripts remain replayable; encodeFrame separately requires registered canonical ids.
+const LEGACY_RAIL = new RegExp(TCLK1_RAIL_PATTERN);
 const NONCE = /^[0-9a-f]{8,64}$/;
 const SCALAR_HEX = /^0x[0-9a-f]{1,64}$/;
 
@@ -298,12 +300,7 @@ export function validateFrame(value: unknown): TclkFrame {
       requireString(frame.asset, "asset", ASSET);
       if (frame.lock !== "hash" && frame.lock !== "point") fail("lock must be hash|point");
       if (!Array.isArray(frame.rails) || frame.rails.length === 0) fail("rails must be a non-empty array");
-      for (const value of frame.rails) {
-        const rail = requireString(value, "rail");
-        const canonical = normalizeRailId(rail);
-        if (rail !== canonical) fail(`non-canonical rail id: ${rail}; use ${canonical}`);
-      }
-      if (new Set(frame.rails).size !== frame.rails.length) fail("rails must not contain duplicates");
+      for (const rail of frame.rails) requireString(rail, "rail", LEGACY_RAIL);
       const claimBy = requireMs(frame.claimByMs, "claimByMs");
       const refundAfter = requireMs(frame.refundAfterMs, "refundAfterMs");
       requireMs(frame.expiresMs, "expiresMs");
@@ -329,9 +326,7 @@ export function validateFrame(value: unknown): TclkFrame {
     }
     case "lock": {
       requireString(frame.contract, "contract", HEX32);
-      const rail = requireString(frame.rail, "rail");
-      const canonical = normalizeRailId(rail);
-      if (rail !== canonical) fail(`non-canonical rail id: ${rail}; use ${canonical}`);
+      requireString(frame.rail, "rail", LEGACY_RAIL);
       requireString(frame.ref, "ref");
       if (frame.presig !== undefined) {
         const presig = frame.presig as Record<string, unknown>;
@@ -344,13 +339,13 @@ export function validateFrame(value: unknown): TclkFrame {
     }
     case "reveal": {
       requireString(frame.contract, "contract", HEX32);
-      requireString(frame.ref, "ref");
+      if (frame.ref !== undefined) requireString(frame.ref, "ref");
       requireString(frame.secret, "secret", HEX32);
       break;
     }
     case "refund": {
       requireString(frame.contract, "contract", HEX32);
-      requireString(frame.ref, "ref");
+      if (frame.ref !== undefined) requireString(frame.ref, "ref");
       if (frame.reason !== undefined) requireString(frame.reason, "reason");
       break;
     }
@@ -365,9 +360,7 @@ export function validateFrame(value: unknown): TclkFrame {
         fail("outcome must be claimed|refunded|cancelled");
       }
       if (frame.rail !== undefined) {
-        const rail = requireString(frame.rail, "rail");
-        const canonical = normalizeRailId(rail);
-        if (rail !== canonical) fail(`non-canonical rail id: ${rail}; use ${canonical}`);
+        requireString(frame.rail, "rail", LEGACY_RAIL);
       }
       if (frame.ref !== undefined) requireString(frame.ref, "ref");
       break;
@@ -398,6 +391,23 @@ export function makeOffer(
     nonce: fields.nonce ?? u8aToHex(randomU8a(8)).slice(2),
   };
   return validateFrame({ ...body, id: offerId(body) }) as OfferFrame;
+}
+
+function requireCanonicalRail(value: string): void {
+  const canonical = normalizeRailId(value);
+  if (value !== canonical) fail(`non-canonical rail id: ${value}; use ${canonical}`);
+}
+
+/** New tclk/1 emissions use the closed registry; decoding retains the original grammar. */
+function validateEmissionRails(frame: TclkFrame): void {
+  if (frame.type === "offer") {
+    for (const rail of frame.rails) requireCanonicalRail(rail);
+    if (new Set(frame.rails).size !== frame.rails.length) fail("rails must not contain duplicates");
+  } else if (frame.type === "lock") {
+    requireCanonicalRail(frame.rail);
+  } else if (frame.type === "receipt" && frame.rail !== undefined) {
+    requireCanonicalRail(frame.rail);
+  }
 }
 
 /** Build a signed liveness frame; mints a nonce if none is supplied. */
@@ -451,7 +461,9 @@ export function isTclkLine(text: string): boolean {
 
 /** Encode a frame to its room-message line. Validates, and enforces the venue caps. */
 export function encodeFrame(frame: TclkFrame): string {
-  const line = TCLK_PREFIX + toAscii(canonicalJson(validateFrame(frame)));
+  const validated = validateFrame(frame);
+  validateEmissionRails(validated);
+  const line = TCLK_PREFIX + toAscii(canonicalJson(validated));
   if (line.length > MAX_FRAME_CHARS) {
     fail(`frame exceeds the ${MAX_FRAME_CHARS}-char room-message cap (${line.length})`);
   }
