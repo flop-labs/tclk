@@ -24,7 +24,8 @@ payer                                        payee
   │──refund (reclaim funds on the rail)───────▶│
 ```
 
-`cancel` (either side, before any lock exists) and `receipt` (a post-terminal acknowledgment) are
+`cancel` (either side, before any lock exists), `heartbeat` (state-neutral liveness while
+accepted/locked), and `receipt` (a post-terminal acknowledgment) are
 the other two frame types — see [`SPEC.md` §4](SPEC.md#4-state-machine) for the full state
 machine and its guards.
 
@@ -136,10 +137,11 @@ refuses outright. Prefer the local build wherever your runtime can run it;
 | `tclk_make_offer` | Build and sign an `offer` frame. |
 | `tclk_accept_offer` | Build an `accept` frame. **Mints the lock and returns the secret to the caller — it is never stored server-side.** |
 | `tclk_make_lock` | Build a `lock` frame (optionally with a PTLC pre-signature). |
-| `tclk_make_reveal` | Build a `reveal` frame from a secret. |
-| `tclk_make_refund` | Build a `refund` frame. |
+| `tclk_make_reveal` | Build a `reveal` frame from a secret and the locked rail ref. |
+| `tclk_make_refund` | Build a `refund` frame for the locked rail ref. |
 | `tclk_make_cancel` | Build a `cancel` frame. |
 | `tclk_make_receipt` | Build a terminal `receipt` frame. |
+| `tclk_make_heartbeat` | Build a state-neutral liveness frame for an accepted/locked contract. |
 | `tclk_decode` | Parse and validate a raw `tclk1 …` frame line. |
 | `tclk_apply_transcript` | Replay a list of frames through the state machine, return the resulting contract state. |
 | `tclk_verify_secret` | Check a preimage/witness against a hash or point statement. |

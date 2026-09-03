@@ -29,6 +29,7 @@ describe("happy path", () => {
     const reveal = h.tclk_make_reveal({
       from: PAYEE_DID,
       contract: accept.contract,
+      ref: "escrow-42",
       secret: accept.secret,
     });
     const receipt = h.tclk_make_receipt({
@@ -80,6 +81,7 @@ describe("refund path", () => {
     const refund = h.tclk_make_refund({
       from: PAYER_DID,
       contract: accept.contract,
+      ref: "escrow-43",
       reason: "payee never revealed",
     });
 
@@ -108,6 +110,7 @@ describe("fail-closed folding", () => {
     const stolenReveal = h.tclk_make_reveal({
       from: PAYER_DID,
       contract: accept.contract,
+      ref: "escrow-44",
       secret: accept.secret,
     });
 

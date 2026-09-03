@@ -228,7 +228,8 @@ describe("tclk state machine", () => {
     expect(locked.state.status).toBe("locked");
 
     const claimed = applyFrame(locked.state, {
-      type: "reveal", from: PAYEE_DID, contract: state.contract!, secret: lock.preimage,
+      type: "reveal", from: PAYEE_DID, contract: state.contract!, ref: "escrow-42",
+      secret: lock.preimage,
     }, T0 + 2);
     expect(claimed.ok).toBe(true);
     expect(claimed.state.status).toBe("claimed");
@@ -272,7 +273,7 @@ describe("tclk state machine", () => {
     }, T0);
     expect(locked.ok).toBe(true);
     expect(applyFrame(locked.state, {
-      type: "refund", from: PAYER_DID, contract: state.contract!,
+      type: "refund", from: PAYER_DID, contract: state.contract!, ref: "escrow-42",
     }, REFUND_AFTER).ok).toBe(true);
   });
 
@@ -309,15 +310,17 @@ describe("tclk state machine", () => {
 
     const locked = applyFrame(state, { type: "lock", from: PAYER_DID, contract, rail: "x402", ref: "r" }, T0).state;
     // Only the payee reveals, only with the right secret, only before the refund window.
-    expect(applyFrame(locked, { type: "reveal", from: PAYER_DID, contract, secret: lock.preimage }, T0).ok).toBe(false);
-    const wrong = applyFrame(locked, { type: "reveal", from: PAYEE_DID, contract, secret: "0x" + "00".repeat(32) }, T0);
+    expect(applyFrame(locked, { type: "reveal", from: PAYER_DID, contract, ref: "r", secret: lock.preimage }, T0).ok).toBe(false);
+    expect(applyFrame(locked, { type: "reveal", from: PAYEE_DID, contract, ref: "other", secret: lock.preimage }, T0).reason).toMatch(/different rail ref/);
+    const wrong = applyFrame(locked, { type: "reveal", from: PAYEE_DID, contract, ref: "r", secret: "0x" + "00".repeat(32) }, T0);
     expect(wrong.ok).toBe(false);
     expect(wrong.state.status).toBe("locked");
-    expect(applyFrame(locked, { type: "reveal", from: PAYEE_DID, contract, secret: lock.preimage }, REFUND_AFTER).ok).toBe(false);
+    expect(applyFrame(locked, { type: "reveal", from: PAYEE_DID, contract, ref: "r", secret: lock.preimage }, REFUND_AFTER).ok).toBe(false);
     // Refund: payer only, and only once the window opens.
-    expect(applyFrame(locked, { type: "refund", from: PAYER_DID, contract }, REFUND_AFTER - 1).ok).toBe(false);
-    expect(applyFrame(locked, { type: "refund", from: PAYEE_DID, contract }, REFUND_AFTER).ok).toBe(false);
-    const refunded = applyFrame(locked, { type: "refund", from: PAYER_DID, contract }, REFUND_AFTER);
+    expect(applyFrame(locked, { type: "refund", from: PAYER_DID, contract, ref: "other" }, REFUND_AFTER).reason).toMatch(/different rail ref/);
+    expect(applyFrame(locked, { type: "refund", from: PAYER_DID, contract, ref: "r" }, REFUND_AFTER - 1).ok).toBe(false);
+    expect(applyFrame(locked, { type: "refund", from: PAYEE_DID, contract, ref: "r" }, REFUND_AFTER).ok).toBe(false);
+    const refunded = applyFrame(locked, { type: "refund", from: PAYER_DID, contract, ref: "r" }, REFUND_AFTER);
     expect(refunded.ok).toBe(true);
     expect(refunded.state.status).toBe("refunded");
   });
@@ -380,7 +383,8 @@ describe("tclk PTLC path (adaptor cycle)", () => {
 
     // The reveal frame propagates the witness through the room.
     const claimed = applyFrame(state, {
-      type: "reveal", from: PAYEE_DID, contract: state.contract!, secret: extracted,
+      type: "reveal", from: PAYEE_DID, contract: state.contract!, ref: "escrow-7",
+      secret: extracted,
     }, T0 + 1);
     expect(claimed.ok).toBe(true);
     expect(claimed.state.status).toBe("claimed");
@@ -473,7 +477,8 @@ describe("tclk venue binding", () => {
     // cannot contain one and everything after it is a different token entirely.
     expect(parseCapabilityToken("tclk1:flop-htlc x402")).toEqual(["flop-htlc"]);
     expect(() => capabilityToken([])).toThrow(/at least one rail/);
-    expect(() => capabilityToken(["Bad-Rail"])).toThrow(/malformed rail/);
+    expect(() => capabilityToken(["Bad-Rail"])).toThrow(/unknown rail id/);
+    expect(capabilityToken(["x402", "PaperRail"])).toBe("tclk1:paper,x402");
   });
 
   it("state-note values round-trip and parse fail-closed", () => {

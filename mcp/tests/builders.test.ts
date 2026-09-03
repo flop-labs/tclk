@@ -79,14 +79,15 @@ describe("offer and accept", () => {
 describe("thin builders", () => {
   const contract = `0x${"ab".repeat(32)}`;
 
-  it("round-trips lock, reveal, refund, cancel and receipt", () => {
+  it("round-trips lock, reveal, refund, cancel, receipt and heartbeat", () => {
     roundTrip(h.tclk_make_lock({ from: PAYER_DID, contract, rail: "flop-htlc", ref: "escrow-7" }));
-    roundTrip(h.tclk_make_reveal({ from: PAYEE_DID, contract, secret: `0x${"11".repeat(32)}` }));
-    roundTrip(h.tclk_make_refund({ from: PAYER_DID, contract, reason: "deadline passed" }));
+    roundTrip(h.tclk_make_reveal({ from: PAYEE_DID, contract, ref: "escrow-7", secret: `0x${"11".repeat(32)}` }));
+    roundTrip(h.tclk_make_refund({ from: PAYER_DID, contract, ref: "escrow-7", reason: "deadline passed" }));
     roundTrip(h.tclk_make_cancel({ from: PAYER_DID, contract }));
     roundTrip(
       h.tclk_make_receipt({ from: PAYEE_DID, contract, outcome: "claimed", rail: "flop-htlc", ref: "escrow-7" }),
     );
+    roundTrip(h.tclk_make_heartbeat({ from: PAYEE_DID, contract, nonce: "0123456789abcdef" }));
   });
 
   it("fails closed on a malformed field rather than coercing it", () => {

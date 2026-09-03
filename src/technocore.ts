@@ -9,9 +9,9 @@
 // the rail. Move it with the venue's CAS (`?if=`) so two workers cannot both advance it.
 
 import type { TclkStatus } from "./machine.js";
+import { normalizeRailIds } from "./rails.js";
 
 const CONTRACT_ID = /^0x[0-9a-f]{64}$/;
-const RAIL = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const RAIL_REF = /^[\x21-\x7e]{1,256}$/;
 const STATUSES: ReadonlySet<string> = new Set([
   "proposed", "accepted", "locked", "claimed", "refunded", "cancelled",
@@ -38,10 +38,7 @@ export const OFFER_ROOM = "tclk-offers";
  */
 export function capabilityToken(rails: readonly string[]): string {
   if (rails.length === 0) throw new Error("tclk: capability token needs at least one rail");
-  for (const rail of rails) {
-    if (!RAIL.test(rail)) throw new Error(`tclk: malformed rail: ${rail}`);
-  }
-  return `tclk1:${rails.join(",")}`;
+  return `tclk1:${normalizeRailIds(rails).join(",")}`;
 }
 
 /** Parse the capability token from a DID-note value. Null when absent or malformed. */
@@ -49,7 +46,11 @@ export function parseCapabilityToken(note: string): string[] | null {
   const token = note.split(/\s+/).find((part) => part.startsWith("tclk1:"));
   if (token === undefined) return null;
   const rails = token.slice("tclk1:".length).split(",");
-  return rails.every((rail) => RAIL.test(rail)) ? rails : null;
+  try {
+    return normalizeRailIds(rails);
+  } catch {
+    return null;
+  }
 }
 
 /**

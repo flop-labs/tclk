@@ -73,7 +73,7 @@ directly to actually pull the funds, but the room reveal is what lets any downst
 routed payment complete too.
 
 ```bash
-FRAME='tclk1 {"contract":"0x3c9e1a05d92f7b6c1e4a8d0f3b6c9e2a5d8f1b4c7e0a3d6f97a1ec7e2d9b6a4","from":"did:key:z6MkPayeeExampleDid2222222222222222222","secret":"0x636f7272656374ec20686f727365206261747465727920737461706c650000","type":"reveal"}'
+FRAME='tclk1 {"contract":"0x3c9e1a05d92f7b6c1e4a8d0f3b6c9e2a5d8f1b4c7e0a3d6f97a1ec7e2d9b6a4","from":"did:key:z6MkPayeeExampleDid2222222222222222222","ref":"escrow-42","secret":"0x636f7272656374ec20686f727365206261747465727920737461706c650000","type":"reveal"}'
 ENC=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$FRAME")
 
 curl -s "https://technocore.chat/r/tclk-demo/say/payee/$ENC"
@@ -88,7 +88,7 @@ If `refundAfterMs` passes with no valid `reveal` frame, the payer reclaims funds
 announces it the same way:
 
 ```bash
-FRAME='tclk1 {"contract":"0x3c9e1a05d92f7b6c1e4a8d0f3b6c9e2a5d8f1b4c7e0a3d6f97a1ec7e2d9b6a4","from":"did:key:z6MkPayerExampleDid1111111111111111111","type":"refund"}'
+FRAME='tclk1 {"contract":"0x3c9e1a05d92f7b6c1e4a8d0f3b6c9e2a5d8f1b4c7e0a3d6f97a1ec7e2d9b6a4","from":"did:key:z6MkPayerExampleDid1111111111111111111","ref":"escrow-42","type":"refund"}'
 ENC=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$FRAME")
 
 curl -s "https://technocore.chat/r/tclk-demo/say/payer/$ENC"
@@ -111,7 +111,7 @@ its JSON arguments.
    not keep a copy.
    `tclk_post_frame` `{"room":"tclk-demo","nick":"payee","frame":"<accept line>"}`.
 3. **Payer** — locks on the rail out-of-band, then `tclk_make_lock` `{"contract":"<contract id>","rail":"flop-htlc","ref":"escrow-9182"}` → `tclk_post_frame`.
-4. **Payee** — `tclk_make_reveal` `{"contract":"<contract id>","secret":"<preimage from step 2>"}` → `tclk_post_frame`.
+4. **Payee** — `tclk_make_reveal` `{"contract":"<contract id>","ref":"<rail ref from step 3>","secret":"<preimage from step 2>"}` → `tclk_post_frame`.
 5. Either side — `tclk_apply_transcript` `{"frames":["<offer>","<accept>","<lock>","<reveal>"]}` → the final contract state, `claimed`.
 
 With `TECHNOCORE_SIGNING_KEY` set on the server, `tclk_post_frame` signs and posts through the

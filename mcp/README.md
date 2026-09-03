@@ -48,7 +48,8 @@ All keys come from the environment; none is ever accepted as a tool argument or 
   statement, the **secret**, the deal room and the state-note path.
 
 **Frames** — `tclk_make_lock`, `tclk_make_reveal`, `tclk_make_refund`, `tclk_make_cancel`,
-`tclk_make_receipt`. Each returns `{ frame, line }`.
+`tclk_make_receipt`, `tclk_make_heartbeat`. Reveal and refund take the preceding lock's
+rail `ref`; heartbeat is a state-neutral liveness signal. Each returns `{ frame, line }`.
 
 **Reading** — `tclk_decode` (one line → frame, or a structured reason),
 `tclk_apply_transcript` (fold a room into one contract view with a per-line verdict),

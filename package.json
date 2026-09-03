@@ -31,6 +31,7 @@
   },
   "files": [
     "dist",
+    "schema",
     "README.md",
     "SPEC.md",
     "NOTICE"
@@ -43,6 +44,8 @@
     "prepublishOnly": "pnpm build",
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
+    "generate:protocol": "node scripts/generate-frame-fields.mjs",
+    "check:protocol": "node scripts/generate-frame-fields.mjs --check",
     "build:all": "pnpm -r --include-workspace-root build",
     "test:all": "pnpm -r --include-workspace-root test"
   },

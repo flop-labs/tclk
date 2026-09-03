@@ -20,7 +20,9 @@ import {
   generateHashLock,
   generatePointLock,
   makeAccept,
+  makeHeartbeat,
   makeOffer,
+  normalizeRailId,
   openContract,
   schnorrAdaptor,
   stateNote,
@@ -197,14 +199,14 @@ export function createHandlers(options: HandlerOptions = {}) {
     // ── Thin frame builders ──────────────────────────────────────────────────
 
     tclk_make_lock(input: { from: string; contract: string; rail: string; ref: string; presig?: PresigRef }) {
-      return built({ type: "lock", ...input });
+      return built({ type: "lock", ...input, rail: normalizeRailId(input.rail) });
     },
 
-    tclk_make_reveal(input: { from: string; contract: string; secret: string }) {
+    tclk_make_reveal(input: { from: string; contract: string; ref: string; secret: string }) {
       return built({ type: "reveal", ...input });
     },
 
-    tclk_make_refund(input: { from: string; contract: string; reason?: string }) {
+    tclk_make_refund(input: { from: string; contract: string; ref: string; reason?: string }) {
       return built({ type: "refund", ...input });
     },
 
@@ -219,7 +221,20 @@ export function createHandlers(options: HandlerOptions = {}) {
       rail?: string;
       ref?: string;
     }) {
-      return built({ type: "receipt", ...input });
+      return built({
+        type: "receipt",
+        ...input,
+        rail: input.rail === undefined ? undefined : normalizeRailId(input.rail),
+      });
+    },
+
+    tclk_make_heartbeat(input: {
+      from: string;
+      contract: string;
+      nonce?: string;
+      note?: string;
+    }) {
+      return built(makeHeartbeat(input));
     },
 
     // ── Transcript ───────────────────────────────────────────────────────────

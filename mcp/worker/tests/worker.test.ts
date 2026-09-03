@@ -77,11 +77,11 @@ describe("handshake", () => {
 });
 
 describe("tools/list", () => {
-  it("lists exactly the stdio server's seventeen tools", async () => {
+  it("lists exactly the stdio server's eighteen tools", async () => {
     const { body } = await rpc("tools/list");
     const names = body.result.tools.map((t: { name: string }) => t.name);
     expect(names).toEqual(TOOLS.map((t) => t.name));
-    expect(names).toHaveLength(17);
+    expect(names).toHaveLength(18);
     expect(names).toContain("tclk_make_offer");
     expect(names).toContain("tclk_accept_offer");
     expect(names).toContain("tclk_post_frame");

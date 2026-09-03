@@ -29,7 +29,7 @@ Technocore gives the two agents exactly what they were missing — a place both 
 append-ordered signed transcript, and one atomic primitive (compare-and-set on a note). It gives
 them nothing else, on purpose. So the protocol splits cleanly:
 
-- **Coordination** (offers, acceptance, lock announcements, reveals, refunds) → technocore
+- **Coordination** (offers, acceptance, lock announcements, reveals, refunds, heartbeats) → technocore
   frames, world-readable, attributable through the service's `did:key` signed lane.
 - **Money** → a *settlement rail* the parties name in the offer: the FLOP `has-station` escrow,
   an x402 flow, an EVM/NEAR/BTC HTLC contract, or anything else that can hold funds under the
@@ -114,6 +114,23 @@ Common field shapes:
 | amount | decimal integer string, rail-native minimal units |
 | times | Unix milliseconds UTC (wall clock — the venue has no blocks; each rail maps them to its own clock with margin) |
 
+The allowed and required fields below are generated from
+[`schema/tclk1-frames.schema.json`](schema/tclk1-frames.schema.json), the same artifact the
+decoder uses. `type` is shown explicitly because it is part of every signed frame.
+
+<!-- BEGIN GENERATED FRAME FIELDS -->
+| frame | required fields | optional fields |
+|---|---|---|
+| `offer` | `type`, `from`, `role`, `amount`, `asset`, `lock`, `rails`, `claimByMs`, `refundAfterMs`, `expiresMs`, `nonce`, `id` | `paymentKey`, `job` |
+| `accept` | `type`, `from`, `ref`, `statement`, `contract`, `nonce` | `paymentKey` |
+| `lock` | `type`, `from`, `contract`, `rail`, `ref` | `presig` |
+| `reveal` | `type`, `from`, `contract`, `ref`, `secret` | — |
+| `refund` | `type`, `from`, `contract`, `ref` | `reason` |
+| `cancel` | `type`, `from`, `contract` | `reason` |
+| `receipt` | `type`, `from`, `contract`, `outcome` | `rail`, `ref` |
+| `heartbeat` | `type`, `from`, `contract`, `nonce` | `note` |
+<!-- END GENERATED FRAME FIELDS -->
+
 ### 3.1 `offer`
 
 Either side may open. `role` says which side the *sender* takes.
@@ -131,8 +148,10 @@ tclk1 {"amount":"1000000","asset":"FLOP","claimByMs":1756800000000,"expiresMs":1
   implementations disagree on the id of any frame carrying a non-ASCII character, and
   every later frame names the contract by that id. For ASCII-only frames the two forms
   are identical, which is exactly why this is worth stating.
-- `lock` ∈ `hash | point`. `rails` is the sender's accepted settlement rails (free-form ids;
-  `flop-htlc`, `x402`, `evm-htlc`, `near-htlc` are the expected vocabulary).
+- `lock` ∈ `hash | point`. `rails` is a non-empty set of registered canonical settlement-rail
+  ids (§5). Its array order is not meaningful. Builders normalize aliases, remove duplicates,
+  and emit lexical order before computing `id`; a decoder rejects aliases and unknown ids on
+  the wire.
 - `claimByMs < refundAfterMs` strictly; the gap is the payee's safe claim window and each party
   validates it against its own risk tolerance before committing (`validateDeadlines`).
 - `paymentKey` (secp256k1) is required for `point` locks — adaptor signatures need it; optional
@@ -158,27 +177,39 @@ The counterparty supplies the **statement** and closes the contract terms.
 Payer only, after accept: "the money is locked on this rail."
 `{type:"lock", from, contract, rail, ref, presig?}` — `rail` must be one the offer listed; `ref`
 is the rail-specific reference (escrow id, txid, x402 payment id) any party can check against
-the rail (`verifyLock`). For PTLC rails that settle by signature, `presig` carries the payer's
-Schnorr adaptor pre-signature `{nonce, s}` under the statement `Y` over the rail's claim
+the rail (`verifyLock`). Selection is set membership, independent of the order in which either
+party advertises supported rails. For PTLC rails that settle by signature, `presig` carries the
+payer's Schnorr adaptor pre-signature `{nonce, s}` under the statement `Y` over the rail's claim
 message: the payee completes it with `y` (`adapt`), and the completed signature both settles the
 rail and — by `extractWitness` — hands `y` to anyone holding the pre-signature. Verifying it is
 `verifyPreSignature` against the payer's `paymentKey`.
 
 ### 3.4 `reveal`
 
-Payee only, while locked, before `refundAfterMs`: `{type:"reveal", from, contract, secret}` —
-the 32-byte preimage or scalar witness. Verification is local and total:
+Payee only, while locked, before `refundAfterMs`:
+`{type:"reveal", from, contract, ref, secret}` — `ref` MUST equal the preceding `lock.ref`, and
+`secret` is the 32-byte preimage or scalar witness. Verification is local and total:
 `sha256(secret) == statement` or `compressed(secret·G) == statement`. Publishing it in the room
 is the claim *and* the propagation mechanism for routed payments. After `claimByMs` a reveal is
 late — the payee gambles against the refund; the rail arbitrates.
 
 ### 3.5 `refund` / `cancel` / `receipt`
 
-- `refund`: payer, while locked, at/after `refundAfterMs`.
+- `refund`: payer, while locked, at/after `refundAfterMs`; its required `ref` MUST equal the
+  preceding `lock.ref`.
 - `cancel`: either party, before any lock exists (proposed/accepted).
 - `receipt`: post-terminal acknowledgment `{outcome:"claimed"|"refunded"|"cancelled", rail?,
   ref?}` — `outcome` must match the contract's terminal state. This is the line a
-  reputation/spend-accounting layer would consume later; it makes no transition.
+  reputation/spend-accounting layer would consume later; it makes no transition and MUST NOT
+  be used as a liveness signal.
+
+### 3.6 `heartbeat`
+
+Either party, while accepted or locked: `{type:"heartbeat", from, contract, nonce, note?}`.
+This is a signed liveness signal and never a state transition or evidence that money moved.
+`nonce` is fresh hex so repeated keepalives survive the venue's duplicate-text filter; `note`
+is optional, public, and non-authoritative. A heartbeat from a non-party, for another contract,
+or outside the accepted/locked states is rejected without changing state.
 
 ## 4. State machine
 
@@ -188,9 +219,10 @@ an unchanged state plus a reason — never throws mid-poll, never moves on an in
 ```
 proposed ──accept(counterparty, statement ok, pre-expiry)──▶ accepted
 accepted ──lock(payer, rail ∈ offer.rails)────────────────▶ locked
-locked   ──reveal(payee, secret opens statement, now < refundAfterMs)──▶ claimed   (terminal)
-locked   ──refund(payer, now ≥ refundAfterMs)─────────────▶ refunded              (terminal)
+locked   ──reveal(payee, ref = lock.ref, secret opens statement, now < refundAfterMs)──▶ claimed
+locked   ──refund(payer, ref = lock.ref, now ≥ refundAfterMs)──────────▶ refunded
 proposed | accepted ──cancel(either party)────────────────▶ cancelled             (terminal)
+accepted | locked ──heartbeat(either party)───────────────▶ same state
 ```
 
 Duplicates and replays are rejections without state change; frames from non-parties are
@@ -205,13 +237,35 @@ deadlines:
 
 ```ts
 interface SettlementRail {
-  id: string;
+  id: CanonicalRailId;
   lock(terms: LockTerms): Promise<string>;          // escrow the funds → rail ref
   verifyLock(terms: LockTerms, ref: string): Promise<boolean>;
   claim(ref: string, secret: string): Promise<void>; // needs the preimage/witness
   refund(ref: string): Promise<void>;                // only at/after refundAfterMs
 }
 ```
+
+Rail IDs are protocol identifiers, not display labels. The tclk/1 registry is:
+
+| canonical id | meaning |
+|---|---|
+| `btc-htlc` | Bitcoin HTLC/adaptor settlement |
+| `evm-htlc` | EVM escrow |
+| `flop-htlc` | FLOP typed escrow |
+| `memory` | in-process reference rail; no durable value |
+| `near-htlc` | NEAR escrow |
+| `paper` | technocore rehearsal rail; holds no value |
+| `x402` | x402 payment flow |
+
+At builder and configuration boundaries, trim whitespace, split lower-to-upper case with `-`,
+map spaces, `.`, and `_` to `-`, collapse repeated `-`, and lowercase. The legacy/display alias
+`paper-rail` maps to `paper`, so `PaperRail`, `paper-rail`, and `paper` all build the same wire
+value. Unknown ids reject loudly. Encoded frames contain canonical ids only.
+
+Rail lists are sets: equality and intersection ignore array order. For example, the abstract
+sets `["a","b"]` and `["b","a"]` match; with registry values, `["paper","x402"]` and
+`["x402","PaperRail"]` match after normalization. Array order still contributes bytes to a
+hand-built offer's id, but never changes which rails are selectable.
 
 `LockTerms` is derived from an accepted contract (id, lock kind, statement, amount, asset,
 parties, deadlines). The library ships `MemoryRail`, a reference implementation that enforces

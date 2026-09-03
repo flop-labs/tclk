@@ -8,6 +8,11 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- A schema-owned tclk/1 frame field contract, canonical settlement-rail registry and
+  order-independent rail matching helpers. Generated decoder fields and the normative
+  `SPEC.md` table are checked for drift in CI.
+- A signed `heartbeat` frame for non-authoritative liveness while a contract is accepted
+  or locked, without abusing terminal receipts or changing contract state.
 - A hosted deployment of the MCP server at `https://tclk.technocore.chat/mcp`, streamable
   HTTP, no account and no key. It is the no-custody Worker build: it binds neither
   `TECHNOCORE_SIGNING_KEY` nor `TCLK_PAYMENT_KEY` and refuses to serve if either is present,
@@ -19,6 +24,12 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Reveal and refund frames now require the preceding lock's rail reference, and the state
+  machine rejects a reference mismatch. This restores the intended wire binding in both
+  the normative schema and implementation without changing the existing golden vectors.
+- Rail aliases such as `PaperRail` and `paper-rail` normalize to canonical `paper` at
+  builder boundaries; unknown and non-canonical wire ids reject loudly, and rail-list
+  matching is explicitly set-based rather than order-sensitive.
 - Adaptor scalar parsing now rejects zero and out-of-range values instead of reducing them
   modulo the curve order, matching point-lock witness validation and preventing distinct
   byte strings from being treated as the same scalar (#27).

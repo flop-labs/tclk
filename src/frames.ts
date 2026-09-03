@@ -12,8 +12,14 @@
 // Spec: technocore-lock-protocol.md
 
 import { sha256 } from "@noble/hashes/sha2.js";
+import { FRAME_FIELDS } from "./frame-fields.generated.js";
 import { randomU8a, stringToU8a, u8aToHex } from "./hex.js";
 import { isValidPointStatement } from "./points.js";
+import {
+  type CanonicalRailId,
+  normalizeRailId,
+  normalizeRailIds,
+} from "./rails.js";
 
 export const TCLK_VERSION = "tclk/1" as const;
 export const TCLK_PREFIX = "tclk1 " as const;
@@ -41,7 +47,7 @@ export interface OfferFields {
   asset: string;
   lock: LockKind;
   /** Settlement rails the sender accepts (e.g. "flop-htlc", "x402"). */
-  rails: string[];
+  rails: CanonicalRailId[];
   /** Payee's safe claim deadline (unix ms). */
   claimByMs: number;
   /** Payer may refund from here (unix ms). Strictly after claimByMs. */
@@ -84,7 +90,7 @@ export interface LockFrame {
   from: string;
   contract: string;
   /** Which rail holds the funds — must be one the offer listed. */
-  rail: string;
+  rail: CanonicalRailId;
   /** Rail-specific reference (escrow id, txid, payment id). */
   ref: string;
   /** PTLC: payer's adaptor pre-signature under the statement over the rail's claim message. */
@@ -95,6 +101,8 @@ export interface RevealFrame {
   type: "reveal";
   from: string;
   contract: string;
+  /** Rail-specific reference; must equal the preceding lock's ref. */
+  ref: string;
   /** The 32-byte preimage (hash lock) or scalar witness (point lock), 0x-hex. */
   secret: string;
 }
@@ -103,6 +111,8 @@ export interface RefundFrame {
   type: "refund";
   from: string;
   contract: string;
+  /** Rail-specific reference; must equal the preceding lock's ref. */
+  ref: string;
   reason?: string;
 }
 
@@ -118,8 +128,18 @@ export interface ReceiptFrame {
   from: string;
   contract: string;
   outcome: "claimed" | "refunded" | "cancelled";
-  rail?: string;
+  rail?: CanonicalRailId;
   ref?: string;
+}
+
+/** Signed liveness signal. It never changes contract or money state. */
+export interface HeartbeatFrame {
+  type: "heartbeat";
+  from: string;
+  contract: string;
+  /** Defeats the venue's duplicate-text filter without changing protocol state. */
+  nonce: string;
+  note?: string;
 }
 
 export type TclkFrame =
@@ -129,7 +149,8 @@ export type TclkFrame =
   | RevealFrame
   | RefundFrame
   | CancelFrame
-  | ReceiptFrame;
+  | ReceiptFrame
+  | HeartbeatFrame;
 
 // ── Field shapes ─────────────────────────────────────────────────────────────
 
@@ -139,7 +160,6 @@ const HEX33 = /^0x[0-9a-f]{66}$/;
 const DID = /^did:key:z6Mk[1-9A-HJ-NP-Za-km-z]{44}$/;
 const AMOUNT = /^[1-9][0-9]*$/;
 const ASSET = /^[A-Za-z0-9_-]{1,32}$/;
-const RAIL = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const NONCE = /^[0-9a-f]{8,64}$/;
 const SCALAR_HEX = /^0x[0-9a-f]{1,64}$/;
 
@@ -160,7 +180,11 @@ function requireMs(v: unknown, name: string): number {
   return v;
 }
 
-function requireKeys(record: Record<string, unknown>, allowed: Set<string>, required: string[]): void {
+function requireKeys(
+  record: Record<string, unknown>,
+  allowed: ReadonlySet<string>,
+  required: readonly string[],
+): void {
   for (const key of Object.keys(record)) {
     if (!allowed.has(key)) fail(`unknown field on ${String(record.type)}: ${key}`);
   }
@@ -250,39 +274,6 @@ export function contractId(offer: OfferFrame, accept: AcceptCore): string {
 
 // ── Frame validation (fail-closed) ───────────────────────────────────────────
 
-const KEYS: Record<TclkFrame["type"], { allowed: string[]; required: string[] }> = {
-  offer: {
-    allowed: ["type", "from", "role", "amount", "asset", "lock", "rails", "claimByMs",
-      "refundAfterMs", "expiresMs", "paymentKey", "job", "nonce", "id"],
-    required: ["from", "role", "amount", "asset", "lock", "rails", "claimByMs",
-      "refundAfterMs", "expiresMs", "nonce", "id"],
-  },
-  accept: {
-    allowed: ["type", "from", "ref", "statement", "contract", "paymentKey", "nonce"],
-    required: ["from", "ref", "statement", "contract", "nonce"],
-  },
-  lock: {
-    allowed: ["type", "from", "contract", "rail", "ref", "presig"],
-    required: ["from", "contract", "rail", "ref"],
-  },
-  reveal: {
-    allowed: ["type", "from", "contract", "secret"],
-    required: ["from", "contract", "secret"],
-  },
-  refund: {
-    allowed: ["type", "from", "contract", "reason"],
-    required: ["from", "contract"],
-  },
-  cancel: {
-    allowed: ["type", "from", "contract", "reason"],
-    required: ["from", "contract"],
-  },
-  receipt: {
-    allowed: ["type", "from", "contract", "outcome", "rail", "ref"],
-    required: ["from", "contract", "outcome"],
-  },
-};
-
 /** Validate a hash/point statement for the given lock kind (fail-closed boolean). */
 export function isValidStatement(lock: LockKind, statement: string): boolean {
   if (lock === "hash") return HEX32.test(statement);
@@ -295,7 +286,7 @@ export function validateFrame(value: unknown): TclkFrame {
   if (!value || typeof value !== "object" || Array.isArray(value)) fail("frame must be an object");
   const frame = value as Record<string, unknown>;
   const type = frame.type as TclkFrame["type"];
-  const keys = KEYS[type];
+  const keys = FRAME_FIELDS[type];
   if (!keys) fail(`unknown frame type: ${String(frame.type)}`);
   requireKeys(frame, new Set(keys.allowed), keys.required);
   requireString(frame.from, "from", DID);
@@ -307,7 +298,12 @@ export function validateFrame(value: unknown): TclkFrame {
       requireString(frame.asset, "asset", ASSET);
       if (frame.lock !== "hash" && frame.lock !== "point") fail("lock must be hash|point");
       if (!Array.isArray(frame.rails) || frame.rails.length === 0) fail("rails must be a non-empty array");
-      for (const rail of frame.rails) requireString(rail, "rail", RAIL);
+      for (const value of frame.rails) {
+        const rail = requireString(value, "rail");
+        const canonical = normalizeRailId(rail);
+        if (rail !== canonical) fail(`non-canonical rail id: ${rail}; use ${canonical}`);
+      }
+      if (new Set(frame.rails).size !== frame.rails.length) fail("rails must not contain duplicates");
       const claimBy = requireMs(frame.claimByMs, "claimByMs");
       const refundAfter = requireMs(frame.refundAfterMs, "refundAfterMs");
       requireMs(frame.expiresMs, "expiresMs");
@@ -333,7 +329,9 @@ export function validateFrame(value: unknown): TclkFrame {
     }
     case "lock": {
       requireString(frame.contract, "contract", HEX32);
-      requireString(frame.rail, "rail", RAIL);
+      const rail = requireString(frame.rail, "rail");
+      const canonical = normalizeRailId(rail);
+      if (rail !== canonical) fail(`non-canonical rail id: ${rail}; use ${canonical}`);
       requireString(frame.ref, "ref");
       if (frame.presig !== undefined) {
         const presig = frame.presig as Record<string, unknown>;
@@ -346,10 +344,16 @@ export function validateFrame(value: unknown): TclkFrame {
     }
     case "reveal": {
       requireString(frame.contract, "contract", HEX32);
+      requireString(frame.ref, "ref");
       requireString(frame.secret, "secret", HEX32);
       break;
     }
-    case "refund":
+    case "refund": {
+      requireString(frame.contract, "contract", HEX32);
+      requireString(frame.ref, "ref");
+      if (frame.reason !== undefined) requireString(frame.reason, "reason");
+      break;
+    }
     case "cancel": {
       requireString(frame.contract, "contract", HEX32);
       if (frame.reason !== undefined) requireString(frame.reason, "reason");
@@ -360,8 +364,18 @@ export function validateFrame(value: unknown): TclkFrame {
       if (!["claimed", "refunded", "cancelled"].includes(String(frame.outcome))) {
         fail("outcome must be claimed|refunded|cancelled");
       }
-      if (frame.rail !== undefined) requireString(frame.rail, "rail", RAIL);
+      if (frame.rail !== undefined) {
+        const rail = requireString(frame.rail, "rail");
+        const canonical = normalizeRailId(rail);
+        if (rail !== canonical) fail(`non-canonical rail id: ${rail}; use ${canonical}`);
+      }
       if (frame.ref !== undefined) requireString(frame.ref, "ref");
+      break;
+    }
+    case "heartbeat": {
+      requireString(frame.contract, "contract", HEX32);
+      requireString(frame.nonce, "nonce", NONCE);
+      if (frame.note !== undefined) requireString(frame.note, "note");
       break;
     }
   }
@@ -371,13 +385,30 @@ export function validateFrame(value: unknown): TclkFrame {
 // ── Builders ─────────────────────────────────────────────────────────────────
 
 /** Build a validated offer; mints a nonce if none given, computes the id. */
-export function makeOffer(fields: Omit<OfferFields, "type" | "nonce"> & { nonce?: string }): OfferFrame {
+export function makeOffer(
+  fields: Omit<OfferFields, "type" | "nonce" | "rails"> & {
+    rails: readonly string[];
+    nonce?: string;
+  },
+): OfferFrame {
   const body: OfferFields = {
     ...fields,
     type: "offer",
+    rails: normalizeRailIds(fields.rails),
     nonce: fields.nonce ?? u8aToHex(randomU8a(8)).slice(2),
   };
   return validateFrame({ ...body, id: offerId(body) }) as OfferFrame;
+}
+
+/** Build a signed liveness frame; mints a nonce if none is supplied. */
+export function makeHeartbeat(
+  fields: Omit<HeartbeatFrame, "type" | "nonce"> & { nonce?: string },
+): HeartbeatFrame {
+  return validateFrame({
+    ...fields,
+    type: "heartbeat",
+    nonce: fields.nonce ?? u8aToHex(randomU8a(8)).slice(2),
+  }) as HeartbeatFrame;
 }
 
 /**

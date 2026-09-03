@@ -10,6 +10,7 @@ import type { ContractState } from "./machine.js";
 import type { LockKind } from "./frames.js";
 import { canonicalJson } from "./frames.js";
 import { verifySecret } from "./locks.js";
+import type { CanonicalRailId } from "./rails.js";
 
 /** The rail-facing projection of an accepted contract. */
 export interface LockTerms {
@@ -44,7 +45,7 @@ export function lockTerms(state: ContractState): LockTerms {
 
 export interface SettlementRail {
   /** Rail id as advertised in `offer.rails` (e.g. "flop-htlc", "x402"). */
-  readonly id: string;
+  readonly id: CanonicalRailId;
   /** Escrow the funds under the terms; returns the rail-specific reference. */
   lock(terms: LockTerms): Promise<string>;
   /** True iff `ref` holds a live lock matching `terms` exactly. Fail-closed. */
@@ -70,11 +71,11 @@ interface MemoryLock {
  * All violations throw (fail closed).
  */
 export class MemoryRail implements SettlementRail {
-  readonly id: string;
+  readonly id: CanonicalRailId;
   private readonly locks = new Map<string, MemoryLock>();
   private readonly clock: () => number;
 
-  constructor(id = "memory", clock: () => number = Date.now) {
+  constructor(id: CanonicalRailId = "memory", clock: () => number = Date.now) {
     this.id = id;
     this.clock = clock;
   }

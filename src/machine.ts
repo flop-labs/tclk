@@ -7,8 +7,8 @@
 // advances on frames that verify. The machine tracks what the signed transcript
 // establishes; the settlement rail enforces the same predicates independently.
 //
-// proposed ─accept→ accepted ─lock→ locked ─reveal→ claimed | ─refund→ refunded
-// proposed|accepted ─cancel→ cancelled
+// proposed ─accept→ accepted ─lock→ locked ─reveal(ref)→ claimed | ─refund(ref)→ refunded
+// proposed|accepted ─cancel→ cancelled; accepted|locked ─heartbeat→ unchanged
 
 import {
   type AcceptFrame,
@@ -20,6 +20,7 @@ import {
   validateFrame,
 } from "./frames.js";
 import { verifySecret } from "./locks.js";
+import { offerIncludesRail } from "./rails.js";
 
 export type TclkStatus = "proposed" | "accepted" | "locked" | "claimed" | "refunded" | "cancelled";
 
@@ -136,7 +137,7 @@ export function applyFrame(state: ContractState, frame: TclkFrame, nowMs: number
       if (state.status !== "accepted") return reject(state, `lock in status ${state.status}`);
       if (frame.contract !== state.contract) return reject(state, "lock names a different contract");
       if (frame.from !== state.payerDid) return reject(state, "only the payer locks");
-      if (!state.offer.rails.includes(frame.rail)) {
+      if (!offerIncludesRail(state.offer.rails, frame.rail)) {
         return reject(state, `rail ${frame.rail} was not offered`);
       }
       return {
@@ -148,6 +149,7 @@ export function applyFrame(state: ContractState, frame: TclkFrame, nowMs: number
     case "reveal": {
       if (state.status !== "locked") return reject(state, `reveal in status ${state.status}`);
       if (frame.contract !== state.contract) return reject(state, "reveal names a different contract");
+      if (frame.ref !== state.railRef) return reject(state, "reveal names a different rail ref");
       if (frame.from !== state.payeeDid) return reject(state, "only the payee reveals");
       if (nowMs >= state.offer.refundAfterMs) return reject(state, "refund window is open");
       if (!verifySecret(state.offer.lock, state.statement!, frame.secret)) {
@@ -159,6 +161,7 @@ export function applyFrame(state: ContractState, frame: TclkFrame, nowMs: number
     case "refund": {
       if (state.status !== "locked") return reject(state, `refund in status ${state.status}`);
       if (frame.contract !== state.contract) return reject(state, "refund names a different contract");
+      if (frame.ref !== state.railRef) return reject(state, "refund names a different rail ref");
       if (frame.from !== state.payerDid) return reject(state, "only the payer refunds");
       if (nowMs < state.offer.refundAfterMs) return reject(state, "refund window not open yet");
       return { ok: true, state: { ...state, status: "refunded" } };
@@ -185,6 +188,17 @@ export function applyFrame(state: ContractState, frame: TclkFrame, nowMs: number
       if (frame.outcome !== state.status) {
         return reject(state, `receipt outcome ${frame.outcome} does not match ${state.status}`);
       }
+      return { ok: true, state };
+    }
+
+    case "heartbeat": {
+      if (state.status !== "accepted" && state.status !== "locked") {
+        return reject(state, `heartbeat in status ${state.status}`);
+      }
+      if (frame.contract !== state.contract) {
+        return reject(state, "heartbeat names a different contract");
+      }
+      if (!isParty(state, frame.from)) return reject(state, "heartbeat from a non-party");
       return { ok: true, state };
     }
   }
