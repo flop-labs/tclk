@@ -19,7 +19,7 @@
 // so this is not a weaker escrow — it is not escrow. A rail that holds value needs an
 // arbiter, which is what the on-chain rails in SPEC.md §5 are for.
 
-import type { LockKind } from "./frames.js";
+import { isValidStatement, type LockKind } from "./frames.js";
 import { verifySecret } from "./locks.js";
 import type { LockTerms, SettlementRail } from "./rail.js";
 
@@ -77,7 +77,7 @@ export function decodePaperRecord(value: string): PaperRecord | null {
   if (prefix !== PAPER_RECORD_PREFIX) return null;
   if (status !== "locked" && status !== "claimed" && status !== "refunded") return null;
   if (lock !== "hash" && lock !== "point") return null;
-  if (!/^0x[0-9a-f]{64,66}$/.test(statement)) return null;
+  if (!isValidStatement(lock, statement)) return null;
   const refundAfterMs = Number(refundAfter);
   if (!Number.isSafeInteger(refundAfterMs) || refundAfterMs <= 0) return null;
   if (secret !== undefined && !/^0x[0-9a-f]{64}$/.test(secret)) return null;
