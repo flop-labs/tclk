@@ -183,7 +183,7 @@ The counterparty supplies the **statement** and closes the contract terms.
 
 ### 3.3 `lock`
 
-Payer only, after accept: "the money is locked on this rail."
+Payer only, after accept and before `refundAfterMs`: "the money is locked on this rail."
 `{type:"lock", from, contract, rail, ref, presig?}` — `rail` must be one the offer listed; `ref`
 is the rail-specific reference (escrow id, txid, x402 payment id) any party can check against
 the rail (`verifyLock`). Selection is set membership, independent of the order in which either
@@ -230,7 +230,7 @@ an unchanged state plus a reason — never throws mid-poll, never moves on an in
 
 ```
 proposed ──accept(counterparty, statement ok, pre-expiry)──▶ accepted
-accepted ──lock(payer, rail ∈ offer.rails)────────────────▶ locked
+accepted ──lock(payer, rail ∈ offer.rails, now < refundAfterMs)──▶ locked
 locked   ──reveal(payee, ref absent or = lock.ref, secret opens statement, now < refundAfterMs)──▶ claimed
 locked   ──refund(payer, ref absent or = lock.ref, now ≥ refundAfterMs)──────────▶ refunded
 proposed | accepted ──cancel(either party)────────────────▶ cancelled             (terminal)

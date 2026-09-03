@@ -36,6 +36,9 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `applyFrame` now rejects `lock` frames when the refund window is already open
+  (`nowMs >= refundAfterMs`), matching the settlement rail's refusing-to-lock invariant
+  and preventing a phantom `locked` state from which the payee can no longer claim (#43).
 - New reveal/refund builders include the preceding lock's rail reference, and the state
   machine rejects a supplied mismatch. The field remains optional when decoding tclk/1 so
   contracts emitted before it existed remain replayable; making it mandatory is reserved

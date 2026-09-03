@@ -279,6 +279,13 @@ describe("tclk state machine", () => {
     const { offer, accept, state } = accepted();
     expect(applyFrame(openContract(offer), accept, EXPIRES).ok).toBe(false);
 
+    const lateLock = applyFrame(state, {
+      type: "lock", from: PAYER_DID, contract: state.contract!, rail: "flop-htlc", ref: "escrow-42",
+    }, REFUND_AFTER);
+    expect(lateLock.ok).toBe(false);
+    expect(lateLock.reason).toBe("refund window is already open");
+    expect(lateLock.state).toBe(state);
+
     const locked = applyFrame(state, {
       type: "lock", from: PAYER_DID, contract: state.contract!, rail: "flop-htlc", ref: "escrow-42",
     }, T0);
