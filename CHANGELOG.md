@@ -8,6 +8,19 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- An `evm-htlc` settlement rail (`contracts/EvmHashRail.sol`, `src/evm-hash-rail.ts`, exported
+  from `@flop-labs/tclk/evm-hash-rail`) — the first rail here that holds real value rather than
+  rehearsing (`PaperRail`) or recording in-process (`MemoryRail`). Hash-lock only
+  (`Predicate::Hash`, verified on-chain with the `sha256` precompile to match the statement
+  encoding byte-for-byte); point-lock is a separate rail, later. `viem` is an optional peer
+  dependency kept off the main entry point, so nothing that never touches EVM pays for it. tclk
+  DIDs are Ed25519 and carry no EVM address; the caller supplies the DID → address and
+  asset → token mappings at construction, the same way `PaperRail` takes a `NoteStore` — the
+  protocol layer stays out of it. `claim` is permissionless on-chain: funds move only to the
+  `payee` address recorded at lock time, so relaying a revealed secret gives a stranger
+  nothing to take. `examples/live-deal-evm.mjs` runs the full choreography — offer, accept,
+  lock, reveal — against a throwaway anvil chain it starts itself, and checks the ERC20
+  balance actually moved.
 - A hosted deployment of the MCP server at `https://tclk.technocore.chat/mcp`, streamable
   HTTP, no account and no key. It is the no-custody Worker build: it binds neither
   `TECHNOCORE_SIGNING_KEY` nor `TCLK_PAYMENT_KEY` and refuses to serve if either is present,

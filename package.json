@@ -27,6 +27,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./evm-hash-rail": {
+      "types": "./dist/evm-hash-rail.d.ts",
+      "default": "./dist/evm-hash-rail.js"
     }
   },
   "files": [
@@ -50,9 +54,18 @@
     "@noble/curves": "^2.4.0",
     "@noble/hashes": "^2.4.0"
   },
+  "peerDependencies": {
+    "viem": "^2.56.1"
+  },
+  "peerDependenciesMeta": {
+    "viem": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "typescript": "^7.0.2",
+    "viem": "^2.56.1",
     "vitest": "^4.1.11"
   }
 }
