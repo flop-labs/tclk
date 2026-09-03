@@ -115,6 +115,28 @@ describe("tclk_post_frame — tier 2, server-signed", () => {
     expect(body.nonce).not.toBe(String(Number(nonce19)));
   });
 
+  it("rejects an unsafe numeric nonce or malformed string in the shared handler", async () => {
+    const { fetchLike } = fakeFetch([{ body: "ok 14" }]);
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+    const line = offerLine();
+
+    await expect(h.tclk_post_frame({
+      room: ROOM,
+      line,
+      did: signer.did,
+      sig: "x".repeat(86),
+      nonce: 9007199254740992,
+    })).rejects.toThrow(/must be a non-negative safe integer or a 1-19 decimal digit string/);
+
+    await expect(h.tclk_post_frame({
+      room: ROOM,
+      line,
+      did: signer.did,
+      sig: "x".repeat(86),
+      nonce: "123bad",
+    })).rejects.toThrow(/must be a non-negative safe integer or a 1-19 decimal digit string/);
+  });
+
   it("surfaces the venue's refusal instead of swallowing it", async () => {
     const { fetchLike } = fakeFetch([{ status: 403, body: "403 bad sig\n" }]);
     const h = createHandlers({ env: { TECHNOCORE_SIGNING_KEY: PAYER_SEED }, fetch: fetchLike });
