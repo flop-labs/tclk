@@ -48,6 +48,18 @@ All notable changes to this project are documented here. Format follows
   the file rather than hand back a transcript with a hole in it. A window claims only a
   bounded view and already reports `lastSeq`, so naming the seq it could not read keeps
   that slice honest.
+- `applyFrame` now rejects `receipt` frames whose `rail` or `ref` contradicts the contract's
+  locked settlement terms, or that assert a settlement rail on a `cancelled` contract where
+  no lock was ever established.
+- `extractWitness` in the Schnorr adaptor module now returns `null` if the scalar difference
+  is zero, matching scalar range validation and preventing emission of an invalid zero witness.
+- `hexToU8a` is fail-closed again for every input `isHex` rejects. It silently returned an
+  empty array for `""`, the one non-hex input it accepted, so a caller that length-checked
+  the result could not tell zero bytes from a malformed argument; `0x` remains the spelling
+  for zero bytes. Its refusal now reports the input's length instead of quoting it, matching
+  the no-echo rule `mcp/src/signing.ts` already states — `hashLockFromPreimage` and
+  `pointLockFromWitness` decode secret preimages and witnesses through this function, and the
+  old message put a rejected secret into whatever log caught the throw.
 - `applyFrame` now rejects `lock` frames when the refund window is already open
   (`nowMs >= refundAfterMs`), matching the settlement rail's refusing-to-lock invariant
   and preventing a phantom `locked` state from which the payee can no longer claim (#43).
@@ -66,6 +78,19 @@ All notable changes to this project are documented here. Format follows
   append order.
 - Pre-signature scalar validation now accepts only whole-byte hex encodings, rejecting
   odd-length strings before they reach cryptographic parsing (#24).
+- The published `schema/tclk1-frames.schema.json` no longer admits frames the decoder
+  rejects. `presig.s` was still the pre-byte-pair `^0x[0-9a-f]{1,64}$`, so the schema kept
+  accepting exactly the odd-length scalars the decoder stopped taking in #24. `job.proto`,
+  `job.id` and `job.context` carried no constraint at all, where the decoder requires a
+  lowercase protocol id plus non-empty strings. SPEC §3 calls this file the artifact the
+  decoder uses and the package ships it, so an independent implementation validating
+  against the schema was being told to emit frames the reference refuses. Only the schema
+  moved. No decoder behaviour, wire byte or golden vector changed.
+- `decodeFrame` now enforces the same `MAX_FRAME_CHARS` room-message cap `encodeFrame` does.
+  SPEC §2 states the cap as a property of a frame, and technocore refuses a longer text, so a
+  longer line was never a stored room message. The check runs before `JSON.parse`, which bounds
+  what one row of an untrusted `/export` can cost a `foldTranscript` call. No wire bytes move
+  and no golden vector changes.
 - Adaptor scalar parsing now rejects zero and out-of-range values instead of reducing them
   modulo the curve order, matching point-lock witness validation and preventing distinct
   byte strings from being treated as the same scalar (#27).

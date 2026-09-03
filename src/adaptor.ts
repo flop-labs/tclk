@@ -128,7 +128,9 @@ export function adapt(pre: PreSignature, witness: string): Signature | null {
  */
 export function extractWitness(pre: PreSignature, sig: Signature): string | null {
   try {
-    return scalarHex(toScalar(sig.s) - toScalar(pre.s));
+    const diff = mod(toScalar(sig.s) - toScalar(pre.s));
+    if (diff === 0n) return null;
+    return scalarHex(diff);
   } catch {
     return null;
   }
