@@ -89,6 +89,10 @@ describe("canonical string and signature", () => {
     const canonical = canonicalMessage("lobby", 1730000000000, "tclk1 {}");
     expect(canonical).toBe("lobby|1730000000000|tclk1 {}");
 
+    const nonce19 = "1730000000000000001";
+    const canonical19 = canonicalMessage("lobby", nonce19, "tclk1 {}");
+    expect(canonical19).toBe("lobby|1730000000000000001|tclk1 {}");
+
     const sig = signer.sign(canonical);
     // 86 characters, unpadded, and canonical: sixteen strings decode to the same 64
     // bytes, so the final character must be the one the encoder produces.

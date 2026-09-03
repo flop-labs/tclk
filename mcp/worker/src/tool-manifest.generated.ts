@@ -730,7 +730,18 @@ export const TOOLS: readonly ManifestTool[] = [
           "description": "86 unpadded base64url characters."
         },
         "nonce": {
-          "type": "integer"
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "string",
+              "pattern": "^[0-9]{1,19}$"
+            }
+          ],
+          "description": "Signed-lane nonce; safe integer or 1-19 decimal digit string."
         }
       },
       "required": [
