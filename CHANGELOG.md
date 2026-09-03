@@ -31,6 +31,15 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `examples/live-deal.mjs` bounds each attempt at the venue to 25 s. `fetch` inherited
+  undici's 300 s `headersTimeout`, so an attempt the venue accepted and never answered held the
+  run for five minutes and then surfaced as a thrown error rather than a response — through
+  `reportAndExit`'s catch-all, printed as "a bug in this script or the library" with a stack,
+  during a venue incident. A hung attempt is now a `VenueSilent`, reported as the venue's
+  silence, and it says the one thing that matters: the write may still have landed, so read
+  the venue back before repeating it. The bound lives in `examples/attempt.mjs` with unit
+  cover in `tests/attempt.test.ts` ([#2]).
+
 - Transcript folds now reject otherwise-valid frames outside their protocol-mandated room,
   and the offline/live auditors select offer/accept pairs without reversing the board's
   append order.
@@ -125,3 +134,5 @@ module is unaudited reference cryptography. Published as
   restated, so the two deployments cannot drift.
 - Both packages ship `NOTICE` alongside `LICENSE`, as Apache-2.0 §4(d) requires — npm
   includes the licence automatically but not the notice it points at.
+
+[#2]: https://github.com/flop-labs/tclk/issues/2

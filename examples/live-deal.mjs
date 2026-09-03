@@ -29,6 +29,7 @@ import {
   parseTranscriptExport, stateNote, stateNoteValue, transcriptRecord,
 } from "../dist/index.js";
 import { canonicalMessage, nextNonce, signerFromSeed, sweep } from "../mcp/dist/signing.js";
+import { ATTEMPT_MS, VenueSilent, attempt } from "./attempt.mjs";
 
 const DEFAULT_VENUE = "https://technocore.chat";
 const BASE = process.env.TECHNOCORE_URL ?? DEFAULT_VENUE;
@@ -62,6 +63,12 @@ async function refusal(what, res) {
 // purpose: a rejected top-level await surfaces as an uncaught exception (module evaluation
 // failed), not as an unhandled rejection, so listening for only the latter catches nothing.
 function reportAndExit(error) {
+  if (error instanceof VenueSilent) {
+    // Not a refusal and not a bug: the venue took the request and never answered. Say
+    // that, and say the one thing that matters about it — the write may still have landed.
+    console.error(`\nThe venue did not answer. ${error.message}`);
+    process.exit(1);
+  }
   if (!(error instanceof VenueError)) {
     console.error(error);
     process.exit(1);
@@ -98,10 +105,12 @@ process.on("unhandledRejection", reportAndExit);
  * spends about nine of it.
  */
 async function req(url, init, what) {
-  for (let attempt = 0; ; attempt += 1) {
-    const res = await fetch(url, init);
+  for (let tries = 0; ; tries += 1) {
+    // Bounded: an attempt the venue accepts and never answers ends in ATTEMPT_MS as a
+    // VenueSilent, not in undici's 300 s default as a stack trace — see attempt.mjs.
+    const res = await attempt(fetch, url, init, ATTEMPT_MS, what);
     if (res.status !== 429) return res;
-    if (attempt >= 3) throw new Error(`${what}: still rate limited after ${attempt} waits`);
+    if (tries >= 3) throw new Error(`${what}: still rate limited after ${tries} waits`);
     const stated = Number(res.headers.get("retry-after"));
     const waitMs = (Number.isFinite(stated) && stated > 0 ? stated : 5) * 1000;
     log("", `rate limited — waiting ${waitMs / 1000}s, as the venue asked`);
