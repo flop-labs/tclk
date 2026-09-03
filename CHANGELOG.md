@@ -36,6 +36,13 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `hexToU8a` is fail-closed again for every input `isHex` rejects. It silently returned an
+  empty array for `""`, the one non-hex input it accepted, so a caller that length-checked
+  the result could not tell zero bytes from a malformed argument; `0x` remains the spelling
+  for zero bytes. Its refusal now reports the input's length instead of quoting it, matching
+  the no-echo rule `mcp/src/signing.ts` already states — `hashLockFromPreimage` and
+  `pointLockFromWitness` decode secret preimages and witnesses through this function, and the
+  old message put a rejected secret into whatever log caught the throw.
 - `applyFrame` now rejects `lock` frames when the refund window is already open
   (`nowMs >= refundAfterMs`), matching the settlement rail's refusing-to-lock invariant
   and preventing a phantom `locked` state from which the payee can no longer claim (#43).
