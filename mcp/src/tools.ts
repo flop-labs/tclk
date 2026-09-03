@@ -113,7 +113,7 @@ export interface PostFrameInput {
   line: string;
   did?: string;
   sig?: string;
-  nonce?: number;
+  nonce?: number | string;
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────

@@ -248,6 +248,22 @@ describe("no custody", () => {
     expect(calls[0].url).toBe(`https://technocore.chat/r/${ROOM}`);
   });
 
+  it("tclk_post_frame passes a caller's 19-digit string nonce through to the wire", async () => {
+    const { calls, fetchLike } = fakeFetch([{ body: "ok 14" }]);
+    const line = (await callTool("tclk_make_offer", HASH_OFFER)).value.line;
+    const nonce19 = "1730000000000000001";
+
+    const posted = await callTool(
+      "tclk_post_frame",
+      { room: ROOM, line, did: PAYER_DID, sig: "x".repeat(86), nonce: nonce19 },
+      fetchLike,
+    );
+    expect(posted.value.posted).toBe(true);
+    expect(posted.value.tier).toBe("caller-signed");
+    expect(posted.value.nonce).toBe(nonce19);
+    expect(JSON.parse(String(calls[0].init?.body)).nonce).toBe(nonce19);
+  });
+
   it("tclk_adaptor_presign refuses structurally, naming where pre-signing belongs", async () => {
     const refused = await callTool("tclk_adaptor_presign", {
       msg: `0x${"11".repeat(32)}`,

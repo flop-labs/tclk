@@ -91,6 +91,30 @@ describe("tclk_post_frame — tier 2, server-signed", () => {
     expect(JSON.parse(String(calls[0].init?.body))).toMatchObject({ did: signer.did, nonce: "7", text: line });
   });
 
+  it("passes a caller's legal 19-digit string nonce straight through without precision loss", async () => {
+    const { calls, fetchLike } = fakeFetch([{ body: "ok 14" }]);
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+    const line = offerLine();
+    const nonce19 = "1730000000000000001";
+
+    const result = await h.tclk_post_frame({
+      room: ROOM,
+      line,
+      did: signer.did,
+      sig: signer.sign(canonicalMessage(ROOM, nonce19, line)),
+      nonce: nonce19,
+    });
+    expect(result.posted && result.tier).toBe("caller-signed");
+    if (result.posted && result.tier === "caller-signed") {
+      expect(result.nonce).toBe(nonce19);
+    }
+    const body = JSON.parse(String(calls[0].init?.body));
+    expect(body.nonce).toBe(nonce19);
+    // Prove no numeric precision loss occurred
+    expect(String(Number(nonce19))).not.toBe(nonce19);
+    expect(body.nonce).not.toBe(String(Number(nonce19)));
+  });
+
   it("surfaces the venue's refusal instead of swallowing it", async () => {
     const { fetchLike } = fakeFetch([{ status: 403, body: "403 bad sig\n" }]);
     const h = createHandlers({ env: { TECHNOCORE_SIGNING_KEY: PAYER_SEED }, fetch: fetchLike });
