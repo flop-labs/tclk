@@ -28,6 +28,14 @@ All notable changes to this project are documented here. Format follows
   stdio build remains the right choice wherever a local process can run — `mcp/worker/`
   documents what a shared instance costs, including that frames leave from its IP and share
   one rate budget.
+- `@flop-labs/tclk/schema/tclk1-frames.schema.json` as an exported subpath, so an installed
+  consumer can load the schema the package ships. `exports` named only `"."`, and an
+  `exports` map denies every subpath it does not name, so the file SPEC §3 calls "the same
+  artifact the decoder uses" — in `files` since #42 — answered
+  `ERR_PACKAGE_PATH_NOT_EXPORTED` under both the ESM and CJS resolvers, and the only route
+  left was a relative URL off the resolved entry point, which hardcodes the internal
+  `dist/` layout. Only that one shipped file is named, not the `schema/` directory. Only
+  the manifest moved: no decoder behaviour, wire byte or golden vector changed.
 
 ### Changed
 
