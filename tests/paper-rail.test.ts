@@ -9,6 +9,7 @@
 
 import { describe, it, expect } from "vitest";
 
+import { hexToU8a } from "../src/hex.js";
 import {
   MemoryNoteStore,
   PaperRail,
@@ -119,6 +120,52 @@ describe("paper rail — the predicates a real rail must enforce", () => {
     await rail.claim(ref, deal.secret);
     expect((await rail.read(ref))?.status).toBe("claimed");
   });
+
+  it("refuses a claim it cannot record, and the lock stays claimable", async () => {
+    const { rail, notes } = railAt();
+    const deal = terms();
+    const ref = await rail.lock(deal.terms);
+    const { ns, key } = paperNote(ref);
+    const locked = notes.raw(ns, key);
+
+    // Both spellings open the statement — `verifySecret` decodes the secret through `isHex`,
+    // which takes either hex case, and takes raw bytes from an untyped caller — but SPEC §3
+    // spells a secret as 64 lowercase hex, which is the grammar decodePaperRecord enforces,
+    // so neither can be written down.
+    for (const [spelling, secret] of [
+      ["uppercase hex", "0x" + deal.secret.slice(2).toUpperCase()],
+      ["raw 32 bytes", hexToU8a(deal.secret)],
+    ] as const) {
+      const refused = await rail.claim(ref, secret as string).then(
+        () => "resolved",
+        (err: Error) => err.message,
+      );
+      expect(refused, spelling).toMatch(/refusing to write an unreadable paper record/);
+      // Whatever catches this refusal logs it, so it names the status, not the secret.
+      expect(refused.toLowerCase()).not.toContain(deal.secret.slice(2, 18));
+      expect(notes.raw(ns, key)).toBe(locked);
+    }
+
+    await rail.claim(ref, deal.secret);
+    expect((await rail.read(ref))?.status).toBe("claimed");
+  });
+
+  it("refuses to lock terms it cannot record, leaving the slot unspent", async () => {
+    const { rail, notes } = railAt();
+    const deal = terms();
+    const { ns, key } = paperNote(deal.terms.contract);
+    const shouted: LockTerms = {
+      ...deal.terms,
+      statement: "0x" + deal.terms.statement.slice(2).toUpperCase(),
+    };
+
+    // The first write spends the ifAbsent slot, so a line no reader can decode is terminal
+    // for this rail: no later lock replaces it — only an unconditional note write can.
+    await expect(rail.lock(shouted)).rejects.toThrow(/refusing to write an unreadable/);
+    expect(notes.raw(ns, key)).toBeUndefined();
+    expect(await rail.lock(deal.terms)).toBe(deal.terms.contract);
+    expect(await rail.verifyLock(deal.terms, deal.terms.contract)).toBe(true);
+  });
 });
 
 describe("paper rail — reads are anonymous input", () => {
@@ -182,6 +229,28 @@ describe("paper rail — reads are anonymous input", () => {
       },
     ] as const) {
       expect(decodePaperRecord(encodePaperRecord(record))).toEqual(record);
+    }
+  });
+
+  it("refuses to emit a line its own decoder would reject", () => {
+    const statement = "0x" + "ab".repeat(32);
+    const shouted = "0x" + "AB".repeat(32);
+    // One check per field the emitter can spell in a way the grammar refuses: the
+    // statement's hex case, a deadline that stringifies as `1e+21`, the secret's hex case.
+    for (const record of [
+      { status: "locked", lock: "hash", statement: shouted, refundAfterMs: REFUND_AFTER },
+      { status: "locked", lock: "hash", statement, refundAfterMs: 1e21 },
+      {
+        status: "claimed",
+        lock: "hash",
+        statement,
+        refundAfterMs: REFUND_AFTER,
+        secret: "0x" + "CD".repeat(32),
+      },
+    ] as const) {
+      expect(() => encodePaperRecord(record), JSON.stringify(record)).toThrow(
+        /unreadable paper record/,
+      );
     }
   });
 

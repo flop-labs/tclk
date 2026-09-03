@@ -117,6 +117,16 @@ All notable changes to this project are documented here. Format follows
 - `applyFrame` now rejects non-finite or negative wall-clock inputs without changing contract state.
 - `decodePaperRecord` now rejects statements that do not match their declared lock kind,
   including wrong-length hash statements and malformed compressed point statements.
+- `encodePaperRecord` now refuses a record its own decoder would reject, so `PaperRail` can
+  no longer write a note line it will never read back. `verifySecret` takes either hex case
+  and raw witness bytes by design, while SPEC §3 spells a statement and a secret as
+  lowercase hex, so a claim with an uppercase preimage passed that guard and then wrote a
+  line `decodePaperRecord` returns null for: `read` went null, `verifyLock` false, `refund`
+  and a retry `claim` threw on the unreadable line, and a fresh `lock` threw on the spent
+  `ifAbsent` slot, so nothing the rail exposes could repair it. The check runs before both
+  `notes.set` calls, so a refused claim leaves the record `locked` and claimable with the
+  canonical spelling, and the refusal names the status rather than the secret. Records that
+  already round-tripped encode to the same bytes and no golden vector changes.
 - `SPEC.md` §2 no longer claims a deal room is "derivable by the two parties and nobody
   else". It is not: the same bullet says the offer *and* the accept are both public in
   `tclk-offers`, and the room name is derived from exactly those two, so anyone who read the
