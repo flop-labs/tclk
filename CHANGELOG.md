@@ -55,6 +55,19 @@ All notable changes to this project are documented here. Format follows
   the file rather than hand back a transcript with a hole in it. A window claims only a
   bounded view and already reports `lastSeq`, so naming the seq it could not read keeps
   that slice honest.
+- `tclk_post_frame` now checks `room` against the room grammar `/^[a-z0-9][a-z0-9_-]{0,47}$/`
+  before it builds a canonical string, instead of leaving that check to `postSigned` a round
+  trip later. The Ed25519 signature covers `<room>|<nonce>|<text>`, which parses one way only
+  because a room name cannot hold `|` — nothing enforced that on the write path. A `room` of
+  `tclk-offers|1` therefore produced a signing challenge, handed to the caller under "Sign
+  `canonical` exactly", byte-identical to a legal post in `tclk-offers` whose nonce is the
+  digits hidden in that `room` and whose text is the challenge nonce ahead of the caller's own
+  line. That post is the signed string's only valid reading, since `verifyTranscriptRecord`
+  refuses a record whose room is not a room name, while the post actually asked for was refused
+  only on the following call, after that signature had been spent; with
+  `TECHNOCORE_SIGNING_KEY` set, the server key signed the same string before the transport
+  rejected the room. Every name the venue accepts behaves as before: no wire byte and no golden
+  vector moves.
 - `applyFrame` now rejects `receipt` frames whose `rail` or `ref` contradicts the contract's
   locked settlement terms, or that assert a settlement rail on a `cancelled` contract where
   no lock was ever established.
