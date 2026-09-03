@@ -28,9 +28,14 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "NOTICE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
+    "prepublishOnly": "pnpm build",
     "build": "tsc -p tsconfig.json",
     "build:worker": "tsc -p worker/tsconfig.json && wrangler deploy --dry-run --outdir worker/dist --config worker/wrangler.jsonc",
     "gen:worker-manifest": "node worker/scripts/generate.mjs",

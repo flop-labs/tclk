@@ -32,10 +32,15 @@
   "files": [
     "dist",
     "README.md",
-    "SPEC.md"
+    "SPEC.md",
+    "NOTICE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "packageManager": "pnpm@10.33.0",
   "scripts": {
+    "prepublishOnly": "pnpm build",
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "build:all": "pnpm -r --include-workspace-root build",
