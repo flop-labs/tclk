@@ -24,10 +24,9 @@
 import { randomBytes } from "node:crypto";
 
 import {
-  OFFER_ROOM, PaperRail, applyFrame, dealRoom, encodeFrame, foldTranscript,
+  OFFER_ROOM, PaperRail, applyFrame, dealRoom, encodeFrame, findContractHandshake, foldTranscript,
   generateHashLock, lockTerms, makeAccept, makeOffer, openContract, paperNote,
-  parseTranscriptExport, stateNote, stateNoteValue, transcriptRecord, tryDecodeFrame,
-  verifyTranscriptRecord,
+  parseTranscriptExport, stateNote, stateNoteValue, transcriptRecord,
 } from "../dist/index.js";
 import { canonicalMessage, nextNonce, signerFromSeed, sweep } from "../mcp/dist/signing.js";
 
@@ -327,24 +326,12 @@ log(5, "third-party verification, from the rooms only:");
 const board = await exportRoom(OFFER_ROOM);
 const dealLog = await readRoom(room);
 
-const authenticatedFrame = (record) => {
-  if (!verifyTranscriptRecord(record).ok) return null;
-  const frame = tryDecodeFrame(record.line);
-  return frame !== null && frame.from === record.sender ? frame : null;
-};
-const offerRecord = board.find((record) => {
-  const frame = authenticatedFrame(record);
-  return frame?.type === "offer" && frame.id === offer.id;
-});
-const acceptRecord = board.find((record) => {
-  const frame = authenticatedFrame(record);
-  return frame?.type === "accept" && frame.contract === accept.contract;
-});
-if (!offerRecord || !acceptRecord) throw new Error("could not find the deal on the full board export");
+const handshake = findContractHandshake(board, accept.contract);
+if (handshake === null) throw new Error("could not find the deal on the full board export");
 
 // Fold complete records, not parallel lines/timestamps/senders. Signature, attribution
 // and the record's own venue time are checked before a frame can advance the state.
-const folded = foldTranscript([offerRecord, acceptRecord, ...dealLog]);
+const folded = foldTranscript([handshake.offer, handshake.accept, ...dealLog]);
 if (folded.state === null) throw new Error("the authenticated transcript contains no offer");
 const audit = folded.state;
 const applied = folded.steps.filter((step) => step.ok).length;

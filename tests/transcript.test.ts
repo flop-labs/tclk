@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   encodeFrame,
+  dealRoom,
+  findContractHandshake,
   foldTranscript,
   generateHashLock,
   makeAccept,
@@ -16,7 +18,6 @@ import {
 
 const NOW = 1_735_000_000_000;
 const BOARD = "tclk-offers";
-const DEAL = "mb-p-tclk-deadbeefdeadbeef";
 
 function bytes(hex: string): Uint8Array {
   return Uint8Array.from(hex.match(/../g)!.map((part) => Number.parseInt(part, 16)));
@@ -98,8 +99,8 @@ describe("trusted transcript records", () => {
     const folded = foldTranscript([
       record(BOARD, 1, NOW - 1, payer, encodeFrame(offer)),
       record(BOARD, 2, NOW, payee, encodeFrame(accept)),
-      record(DEAL, 1, NOW + 1, payer, encodeFrame(lockFrame)),
-      record(DEAL, 2, NOW + 2, payee, encodeFrame(reveal)),
+      record(dealRoom(accept.contract), 1, NOW + 1, payer, encodeFrame(lockFrame)),
+      record(dealRoom(accept.contract), 2, NOW + 2, payee, encodeFrame(reveal)),
     ]);
 
     expect(folded.steps.map((step) => step.ok)).toEqual([true, true, true, true]);
@@ -118,13 +119,35 @@ describe("trusted transcript records", () => {
     const folded = foldTranscript([
       record(BOARD, 1, NOW - 1, payer, encodeFrame(offer)),
       record(BOARD, 2, NOW, payee, encodeFrame(accept)),
-      record(DEAL, 1, NOW + 1, stranger, encodeFrame(forgedLock)),
+      record(dealRoom(accept.contract), 1, NOW + 1, stranger, encodeFrame(forgedLock)),
     ]);
 
     expect(folded.state?.status).toBe("accepted");
     expect(folded.steps[2]).toMatchObject({
       ok: false,
       reason: "lock.from does not match the record sender",
+    });
+  });
+
+  it("rejects a valid post-accept frame outside the contract's derived deal room", () => {
+    const { offer, accept } = deal();
+    const lockFrame = {
+      type: "lock" as const,
+      from: payer.did,
+      contract: accept.contract,
+      rail: "flop-htlc",
+      ref: "escrow-wrong-room",
+    };
+    const folded = foldTranscript([
+      record(BOARD, 1, NOW - 1, payer, encodeFrame(offer)),
+      record(BOARD, 2, NOW, payee, encodeFrame(accept)),
+      record("lobby", 3, NOW + 1, payer, encodeFrame(lockFrame)),
+    ]);
+
+    expect(folded.state?.status).toBe("accepted");
+    expect(folded.steps[2]).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/derived deal room/),
     });
   });
 
@@ -158,8 +181,8 @@ describe("trusted transcript records", () => {
     const folded = foldTranscript([
       record(BOARD, 1, NOW - 1, payer, encodeFrame(offer)),
       record(BOARD, 2, NOW, payee, encodeFrame(accept)),
-      record(DEAL, 1, NOW + 1, payer, encodeFrame(lockFrame)),
-      record(DEAL, 2, offer.refundAfterMs, payer, encodeFrame(refund)),
+      record(dealRoom(accept.contract), 1, NOW + 1, payer, encodeFrame(lockFrame)),
+      record(dealRoom(accept.contract), 2, offer.refundAfterMs, payer, encodeFrame(refund)),
     ]);
 
     expect(folded.state?.status).toBe("refunded");
@@ -181,5 +204,23 @@ describe("trusted transcript records", () => {
 
     expect(parseTranscriptExport(BOARD, `${raw}\n`)).toEqual([signed]);
     expect(() => parseTranscriptExport(BOARD, `${raw}\nnot json\n`)).toThrow(/line 2/);
+  });
+
+  it("never synthesizes offer-before-accept order while selecting a board handshake", () => {
+    const { offer, accept } = deal();
+    const earlyAccept = record(BOARD, 1, NOW - 1, payee, encodeFrame(accept));
+    const laterOffer = record(BOARD, 2, NOW, payer, encodeFrame(offer));
+
+    expect(() => findContractHandshake(
+      [earlyAccept, laterOffer],
+      accept.contract,
+    )).toThrow(/no preceding authenticated offer/);
+
+    const offerRecord = record(BOARD, 1, NOW - 1, payer, encodeFrame(offer));
+    const acceptRecord = record(BOARD, 2, NOW, payee, encodeFrame(accept));
+    expect(findContractHandshake(
+      [offerRecord, acceptRecord],
+      accept.contract,
+    )).toEqual({ offer: offerRecord, accept: acceptRecord });
   });
 });

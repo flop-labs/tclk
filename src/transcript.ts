@@ -10,6 +10,7 @@ import { base58, base64urlnopad } from "@scure/base";
 
 import { decodeFrame, tryDecodeFrame } from "./frames.js";
 import { applyFrame, openContract, type ContractState } from "./machine.js";
+import { dealRoom, OFFER_ROOM } from "./technocore.js";
 
 const ROOM_NAME = /^[a-z0-9][a-z0-9_-]{0,47}$/;
 const NONCE = /^(?:0|[1-9][0-9]*)$/;
@@ -50,6 +51,11 @@ export interface TranscriptStep {
 export interface TranscriptFoldResult {
   state: ContractState | null;
   steps: TranscriptStep[];
+}
+
+export interface ContractHandshake {
+  offer: TranscriptRecord;
+  accept: TranscriptRecord;
 }
 
 function invalid(reason: string): TranscriptRecordVerification {
@@ -180,10 +186,48 @@ function decodeReason(line: string): string {
   return "frame did not decode";
 }
 
+function authenticatedFrame(record: TranscriptRecord) {
+  if (record.room !== OFFER_ROOM || !verifyTranscriptRecord(record).ok) return null;
+  const frame = tryDecodeFrame(record.line);
+  return frame !== null && frame.from === record.sender ? frame : null;
+}
+
+/**
+ * Find one contract's authenticated offer/accept pair without rewriting board history.
+ * Only an accept that follows its referenced offer in the supplied append order counts.
+ */
+export function findContractHandshake(
+  records: readonly TranscriptRecord[],
+  contract: string,
+): ContractHandshake | null {
+  // Reuse the public derivation's strict contract-id validation.
+  dealRoom(contract);
+  const offers = new Map<string, TranscriptRecord>();
+  let acceptPrecededOffer = false;
+
+  for (const record of records) {
+    const frame = authenticatedFrame(record);
+    if (frame?.type === "offer") {
+      if (!offers.has(frame.id)) offers.set(frame.id, record);
+      continue;
+    }
+    if (frame?.type !== "accept" || frame.contract !== contract) continue;
+    const offer = offers.get(frame.ref);
+    if (offer !== undefined) return { offer, accept: record };
+    acceptPrecededOffer = true;
+  }
+
+  if (acceptPrecededOffer) {
+    throw new Error(`tclk: accept for ${contract} has no preceding authenticated offer`);
+  }
+  return null;
+}
+
 /**
  * Authenticate and fold records in the supplied order. Every record gets a verdict;
- * invalid signatures, forged `from` fields, malformed lines and bad transitions are
- * rejected without changing state. Deadline guards use that record's venue timestamp.
+ * invalid signatures, forged `from` fields, wrong rooms, malformed lines and bad
+ * transitions are rejected without changing state. Deadline guards use that record's
+ * venue timestamp.
  */
 export function foldTranscript(records: readonly TranscriptRecord[]): TranscriptFoldResult {
   const steps: TranscriptStep[] = [];
@@ -217,6 +261,15 @@ export function foldTranscript(records: readonly TranscriptRecord[]): Transcript
         steps.push({ ...base, type: frame.type, ok: false, reason: "no contract open yet" });
         return;
       }
+      if (record.room !== OFFER_ROOM) {
+        steps.push({
+          ...base,
+          type: frame.type,
+          ok: false,
+          reason: `offer must be posted in ${OFFER_ROOM}`,
+        });
+        return;
+      }
       try {
         state = openContract(frame);
         steps.push({ ...base, type: frame.type, ok: true });
@@ -228,6 +281,23 @@ export function foldTranscript(records: readonly TranscriptRecord[]): Transcript
           reason: error instanceof Error ? error.message : "invalid offer",
         });
       }
+      return;
+    }
+
+    const expectedRoom =
+      frame.type === "offer" || frame.type === "accept" || state.contract === undefined
+        ? OFFER_ROOM
+        : dealRoom(state.contract);
+    if (record.room !== expectedRoom) {
+      const where = expectedRoom === OFFER_ROOM
+        ? OFFER_ROOM
+        : `the derived deal room ${expectedRoom}`;
+      steps.push({
+        ...base,
+        type: frame.type,
+        ok: false,
+        reason: `${frame.type} must be posted in ${where}`,
+      });
       return;
     }
 

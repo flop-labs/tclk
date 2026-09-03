@@ -31,6 +31,9 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Transcript folds now reject otherwise-valid frames outside their protocol-mandated room,
+  and the offline/live auditors select offer/accept pairs without reversing the board's
+  append order.
 - Pre-signature scalar validation now accepts only whole-byte hex encodings, rejecting
   odd-length strings before they reach cryptographic parsing (#24).
 - Adaptor scalar parsing now rejects zero and out-of-range values instead of reducing them

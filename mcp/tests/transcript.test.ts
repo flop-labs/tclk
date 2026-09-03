@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { decodeFrame, type TranscriptRecord } from "@flop-labs/tclk";
+import { dealRoom, decodeFrame, type TranscriptRecord } from "@flop-labs/tclk";
 
 import { canonicalMessage, signerFromSeed } from "../src/signing.js";
 import { createHandlers } from "../src/tools.js";
@@ -26,6 +26,7 @@ function records(lines: string[], timestampMs: number): TranscriptRecord[] {
       const frame = decodeFrame(line);
       from = frame.from;
       if (frame.type === "offer" || frame.type === "accept") room = "tclk-offers";
+      else room = dealRoom(frame.contract);
     } catch {
       // Signed non-frame room traffic still gets a fold verdict.
     }

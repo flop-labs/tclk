@@ -29,10 +29,12 @@ export { TCLK_TERMINAL_STATUSES, openContract, applyFrame } from "./machine.js";
 export type { TclkStatus, ContractState, StepResult } from "./machine.js";
 
 export {
-  verifyTranscriptRecord, transcriptRecord, parseTranscriptExport, foldTranscript,
+  verifyTranscriptRecord, transcriptRecord, parseTranscriptExport,
+  findContractHandshake, foldTranscript,
 } from "./transcript.js";
 export type {
   TranscriptRecord, TranscriptRecordVerification, TranscriptStep, TranscriptFoldResult,
+  ContractHandshake,
 } from "./transcript.js";
 
 export { lockTerms, MemoryRail } from "./rail.js";

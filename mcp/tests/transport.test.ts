@@ -144,9 +144,9 @@ describe("tclk_read_room", () => {
     });
     expect(result.records[0]).toMatchObject({ signature: null, nonce: null, line: "gm" });
 
-    const folded = h.tclk_apply_transcript({ records: result.records });
-    expect(folded.status).toBe("proposed");
-    expect(folded.steps.map((step) => step.ok)).toEqual([false, true, false, false]);
+    expect(() => h.tclk_apply_transcript({ records: result.records })).toThrow(
+      /offer must be posted in tclk-offers/,
+    );
   });
 
   it("reads and strictly parses the full JSONL export", async () => {

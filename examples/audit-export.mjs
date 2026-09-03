@@ -10,10 +10,9 @@ import { readFileSync } from "node:fs";
 import {
   OFFER_ROOM,
   dealRoom,
+  findContractHandshake,
   foldTranscript,
   parseTranscriptExport,
-  tryDecodeFrame,
-  verifyTranscriptRecord,
 } from "../dist/index.js";
 
 const [offersFile, dealFile, contract] = process.argv.slice(2);
@@ -26,31 +25,19 @@ const room = dealRoom(contract);
 const board = parseTranscriptExport(OFFER_ROOM, readFileSync(offersFile, "utf8"));
 const deal = parseTranscriptExport(room, readFileSync(dealFile, "utf8"));
 
-const authenticatedFrame = (record) => {
-  const verification = verifyTranscriptRecord(record);
-  if (!verification.ok) return null;
-  const frame = tryDecodeFrame(record.line);
-  return frame !== null && frame.from === record.sender ? frame : null;
-};
-
-const acceptRecord = board.find((record) => {
-  const frame = authenticatedFrame(record);
-  return frame?.type === "accept" && frame.contract === contract;
-});
-const accept = acceptRecord && authenticatedFrame(acceptRecord);
-const offerRecord = accept?.type === "accept"
-  ? board.find((record) => {
-      const frame = authenticatedFrame(record);
-      return frame?.type === "offer" && frame.id === accept.ref;
-    })
-  : undefined;
-
-if (!offerRecord || !acceptRecord) {
+let handshake;
+try {
+  handshake = findContractHandshake(board, contract);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : "invalid offer/accept ordering");
+  process.exit(1);
+}
+if (handshake === null) {
   console.error(`no authenticated offer/accept pair for ${contract}`);
   process.exit(1);
 }
 
-const folded = foldTranscript([offerRecord, acceptRecord, ...deal]);
+const folded = foldTranscript([handshake.offer, handshake.accept, ...deal]);
 for (const step of folded.steps) {
   const verdict = step.ok ? "ok " : "BAD";
   console.log(`${verdict} ${step.room}#${step.seq} ${step.type ?? "record"}${step.reason ? ` — ${step.reason}` : ""}`);
