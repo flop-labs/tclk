@@ -76,10 +76,14 @@ function isParty(state: ContractState, did: string): boolean {
 }
 
 /**
- * Apply one frame at wall-clock `nowMs`. Structural validation runs first (a frame
- * that fails it is rejected, not thrown on); then the transition guards.
+ * Apply one frame at wall-clock `nowMs`. Clock and structural validation run first
+ * (bad input is rejected, not thrown on); then the transition guards.
  */
 export function applyFrame(state: ContractState, frame: TclkFrame, nowMs: number): StepResult {
+  if (!Number.isFinite(nowMs) || nowMs < 0) {
+    return reject(state, "tclk: nowMs must be a finite non-negative number");
+  }
+
   try {
     validateFrame(frame);
   } catch (error) {

@@ -21,6 +21,7 @@ import {
   generateHashLock,
   generatePointLock,
   hashLockFromPreimage,
+  isValidStatement,
   lockTerms,
   makeAccept,
   makeOffer,
@@ -118,6 +119,17 @@ describe("tclk frames — wire codec", () => {
     expect(() => baseOffer({ rails: [] })).toThrow(/rails/);
   });
 
+  it("rejects odd-length pre-signature scalar encodings", () => {
+    expect(() => encodeFrame({
+      type: "lock",
+      from: PAYER_DID,
+      contract: "0x" + "11".repeat(32),
+      rail: "flop-htlc",
+      ref: "escrow-42",
+      presig: { nonce: "0x02" + "22".repeat(32), s: "0xabc" },
+    })).toThrow(/presig\.s/);
+  });
+
   it("tryDecodeFrame skips foreign and hostile lines instead of throwing", () => {
     expect(tryDecodeFrame("hello from ~alice")).toBeNull();
     expect(tryDecodeFrame('tclk1 {"type":"offer"}')).toBeNull();
@@ -181,6 +193,18 @@ describe("tclk locks", () => {
     expect(verifySecret("point", p.statement, p.witness)).toBe(true);
     expect(verifySecret("hash", h.hash, p.witness)).toBe(false);
     expect(verifySecret("point", p.statement, h.preimage)).toBe(false);
+    expect(verifySecret("banana" as never, p.statement, p.witness)).toBe(false);
+  });
+
+  it("rejects unknown lock kinds in statement checks", () => {
+    const h = generateHashLock();
+    const p = generatePointLock();
+
+    expect(isValidStatement("hash", h.hash)).toBe(true);
+    expect(isValidStatement("point", p.statement)).toBe(true);
+    expect(isValidStatement("hash", p.statement)).toBe(false);
+    expect(isValidStatement("point", h.hash)).toBe(false);
+    expect(isValidStatement("banana" as never, p.statement)).toBe(false);
   });
 
   it("validateDeadlines enforces both margins, fail-closed", () => {
@@ -189,6 +213,15 @@ describe("tclk locks", () => {
     expect(validateDeadlines(offer, T0, 3_600_001, 3_600_000)).toBe(false); // claim window too short
     expect(validateDeadlines(offer, T0, 3_600_000, 3_600_001)).toBe(false); // refund gap too short
     expect(validateDeadlines(offer, T0, 0, 1)).toBe(false); // degenerate margins refused
+  });
+
+  it("validateDeadlines rejects malformed clocks and unvalidated offer times", () => {
+    const offer = { claimByMs: CLAIM_BY, refundAfterMs: REFUND_AFTER };
+    expect(validateDeadlines(offer, -Infinity, 1, 1)).toBe(false);
+    expect(validateDeadlines(offer, -1, 1, 1)).toBe(false);
+    expect(validateDeadlines({ ...offer, refundAfterMs: Infinity }, T0, 1, 1)).toBe(false);
+    expect(validateDeadlines({ ...offer, claimByMs: 1.5 }, 0, 1, 1)).toBe(false);
+    expect(validateDeadlines(offer, T0, Infinity, 1)).toBe(false);
   });
 });
 
@@ -224,6 +257,34 @@ describe("tclk state machine", () => {
     expect(contradictoryReceipt.ok).toBe(false);
     expect(contradictoryReceipt.reason).toMatch(/does not match claimed/);
     expect(contradictoryReceipt.state).toBe(claimed.state);
+  });
+
+  it.each([
+    ["NaN", Number.NaN],
+    ["Infinity", Number.POSITIVE_INFINITY],
+    ["negative", -1],
+  ])("rejects %s nowMs without changing state", (_label, nowMs) => {
+    const { state } = accepted();
+    const step = applyFrame(state, {
+      type: "lock", from: PAYER_DID, contract: state.contract!, rail: "flop-htlc", ref: "escrow-42",
+    }, nowMs);
+
+    expect(step.ok).toBe(false);
+    expect(step.reason).toBe("tclk: nowMs must be a finite non-negative number");
+    expect(step.state).toBe(state);
+  });
+
+  it("keeps exact expiry and refund deadline boundaries", () => {
+    const { offer, accept, state } = accepted();
+    expect(applyFrame(openContract(offer), accept, EXPIRES).ok).toBe(false);
+
+    const locked = applyFrame(state, {
+      type: "lock", from: PAYER_DID, contract: state.contract!, rail: "flop-htlc", ref: "escrow-42",
+    }, T0);
+    expect(locked.ok).toBe(true);
+    expect(applyFrame(locked.state, {
+      type: "refund", from: PAYER_DID, contract: state.contract!,
+    }, REFUND_AFTER).ok).toBe(true);
   });
 
   it("payee-initiated offers assign roles correctly at accept", () => {
@@ -416,6 +477,9 @@ describe("tclk venue binding", () => {
     expect(parseCapabilityToken(`did:key:z6Mk${"f".repeat(44)} mailbox:mb-p-abc123`)).toBeNull();
     expect(parseCapabilityToken("tclk1:")).toBeNull();
     expect(parseCapabilityToken("tclk1:BAD RAIL")).toBeNull();
+    expect(parseCapabilityToken("tclk1:,flop-htlc")).toBeNull();
+    expect(parseCapabilityToken("tclk1:flop-htlc,,x402")).toBeNull();
+    expect(parseCapabilityToken("tclk1:flop-htlc,")).toBeNull();
     // A space ends the token: the DID note is whitespace-delimited, so a rail list
     // cannot contain one and everything after it is a different token entirely.
     expect(parseCapabilityToken("tclk1:flop-htlc x402")).toEqual(["flop-htlc"]);
@@ -424,10 +488,16 @@ describe("tclk venue binding", () => {
   });
 
   it("state-note values round-trip and parse fail-closed", () => {
+    const maxRailRef = "x".repeat(256);
     expect(parseStateNoteValue(stateNoteValue("locked", "escrow-42"))).toEqual({ status: "locked", railRef: "escrow-42" });
+    expect(parseStateNoteValue(stateNoteValue("locked", maxRailRef))).toEqual({ status: "locked", railRef: maxRailRef });
     expect(parseStateNoteValue(stateNoteValue("claimed"))).toEqual({ status: "claimed" });
     expect(parseStateNoteValue("owned by nobody at all")).toBeNull();
     expect(parseStateNoteValue("exploded")).toBeNull();
+    expect(parseStateNoteValue("locked ")).toBeNull();
+    expect(parseStateNoteValue("locked \n")).toBeNull();
+    expect(parseStateNoteValue("locked \u2603")).toBeNull();
+    expect(parseStateNoteValue(`locked ${"x".repeat(257)}`)).toBeNull();
     expect(() => stateNoteValue("locked", "has space")).toThrow(/printable ASCII/);
   });
 });

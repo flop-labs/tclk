@@ -141,7 +141,7 @@ const AMOUNT = /^[1-9][0-9]*$/;
 const ASSET = /^[A-Za-z0-9_-]{1,32}$/;
 const RAIL = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const NONCE = /^[0-9a-f]{8,64}$/;
-const SCALAR_HEX = /^0x[0-9a-f]{1,64}$/;
+const SCALAR_HEX = /^0x(?:[0-9a-f]{2}){1,32}$/;
 
 function fail(msg: string): never {
   throw new Error(`tclk: ${msg}`);
@@ -286,7 +286,8 @@ const KEYS: Record<TclkFrame["type"], { allowed: string[]; required: string[] }>
 /** Validate a hash/point statement for the given lock kind (fail-closed boolean). */
 export function isValidStatement(lock: LockKind, statement: string): boolean {
   if (lock === "hash") return HEX32.test(statement);
-  return HEX33.test(statement) && isValidPointStatement(statement);
+  if (lock === "point") return HEX33.test(statement) && isValidPointStatement(statement);
+  return false;
 }
 
 /** Validate one frame structurally. Throws with a reason on the first violation. */

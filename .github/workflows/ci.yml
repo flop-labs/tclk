@@ -20,9 +20,8 @@ permissions:
   contents: read
 
 jobs:
-  # Separate job so it can be made a required check on its own once branch protection is
-  # available: a session link is a history problem, and history is the one thing a green
-  # build does not let you fix later.
+  # Keep this as a separate required check: a session link is a history problem, and history
+  # is the one thing a green build does not let you fix later.
   commit-messages:
     name: "commit messages carry no session links"
     runs-on: ubuntu-latest
