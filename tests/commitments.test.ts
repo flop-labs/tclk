@@ -125,3 +125,33 @@ describe("unanimous panels — splitting the secret", () => {
     }
   });
 });
+
+describe("hex case", () => {
+  const upper = (hex: string) => "0x" + hex.slice(2).toUpperCase();
+
+  it("a reveal whose salt arrives uppercase still verifies", () => {
+    // `isHex` accepts either case and `verifyPointWitness` compares case-insensitively, so
+    // a peer emitting uppercase hex has sent the same salt, not a malformed one. Treating
+    // it as a mismatch discards a juror's vote.
+    const salt = generateSalt();
+    const commitment = voteCommitment(CONTRACT, "yes", salt);
+    expect(verifyVoteCommitment(commitment, CONTRACT, "yes", upper(salt))).toBe(true);
+  });
+
+  it("an uppercase contract id commits to the same value", () => {
+    const salt = generateSalt();
+    expect(voteCommitment(upper(CONTRACT), "yes", salt)).toBe(
+      voteCommitment(CONTRACT, "yes", salt),
+    );
+  });
+
+  it("an uppercase preimage splits and recombines", () => {
+    const { preimage } = generateHashLock();
+    expect(combineSecret(splitSecret(upper(preimage), 3))).toBe(preimage);
+  });
+
+  it("an uppercase witness splits and recombines", () => {
+    const { witness } = generatePointLock();
+    expect(combineWitness(splitWitness(upper(witness), 3))).toBe(witness);
+  });
+});

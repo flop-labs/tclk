@@ -17,11 +17,21 @@ import { TCLK_DOMAIN } from "./frames.js";
 import { hexToU8a, randomU8a, stringToU8a, u8aToHex } from "./hex.js";
 import { SECP256K1_N } from "./points.js";
 
-const HEX32 = /^0x[0-9a-f]{64}$/;
+const HEX32 = /^0x[0-9a-fA-F]{64}$/;
+
+/** Validate 32 bytes of 0x-hex and return it lowercased.
+ *
+ * `isHex` accepts either case and `verifyPointWitness` compares case-insensitively, so a
+ * peer's uppercase hex is the same value, not a malformed one. Normalising here keeps the
+ * digest stable whichever case arrives.
+ */
+function requireHex32(value: string, name: string): string {
+  if (!HEX32.test(value)) throw new Error(`tclk: ${name} must be 32 bytes of 0x-hex`);
+  return value.toLowerCase();
+}
 
 function requireSecret(value: string, name: string): Uint8Array {
-  if (!HEX32.test(value)) throw new Error(`tclk: ${name} must be 32 bytes of 0x-hex`);
-  return hexToU8a(value);
+  return hexToU8a(requireHex32(value, name));
 }
 
 /** A fresh 32-byte salt. A commitment without one is a dictionary lookup, not a secret. */
@@ -44,9 +54,10 @@ export function voteCommitment(contract: string, verdict: string, salt: string):
   if (!HEX32.test(contract)) throw new Error("tclk: contract must be a 0x-hex contract id");
   if (verdict.length === 0) throw new Error("tclk: verdict must not be empty");
   if (verdict.includes("|")) throw new Error("tclk: verdict must not contain '|'");
-  requireSecret(salt, "salt");
+  const contractId = contract.toLowerCase();
+  const saltHex = requireHex32(salt, "salt");
   return u8aToHex(
-    sha256(stringToU8a(`${TCLK_DOMAIN}|commit|${contract}|${verdict}|${salt}`)),
+    sha256(stringToU8a(`${TCLK_DOMAIN}|commit|${contractId}|${verdict}|${saltHex}`)),
   );
 }
 
@@ -109,8 +120,7 @@ export function combineSecret(shares: readonly string[]): string {
 }
 
 function scalar(value: string, name: string): bigint {
-  requireSecret(value, name);
-  const v = BigInt(value);
+  const v = BigInt(requireHex32(value, name));
   if (v <= 0n || v >= SECP256K1_N) throw new Error(`tclk: ${name} is not a scalar in [1, n)`);
   return v;
 }
