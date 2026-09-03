@@ -12,7 +12,7 @@
 // has no business bridging that. The caller supplies the mapping at construction time, the
 // same way PaperRail takes a NoteStore — a rail's external dependencies are its own concern.
 
-import type { Address, Hex, PublicClient, WalletClient, Account, Chain, Transport } from "viem";
+import { isAddressEqual, type Address, type Hex, type PublicClient, type WalletClient, type Account, type Chain, type Transport } from "viem";
 import type { LockTerms, SettlementRail } from "./rail.js";
 
 export const EVM_HASH_RAIL_ABI = [
@@ -159,9 +159,9 @@ export class EvmHashRail implements SettlementRail {
         });
       return (
         status === OnChainStatus.Locked &&
-        payer === this.addressBook.resolve(terms.payer) &&
-        payee === this.addressBook.resolve(terms.payee) &&
-        token === this.assetBook.resolve(terms.asset) &&
+        isAddressEqual(payer, this.addressBook.resolve(terms.payer)) &&
+        isAddressEqual(payee, this.addressBook.resolve(terms.payee)) &&
+        isAddressEqual(token, this.assetBook.resolve(terms.asset)) &&
         amount === BigInt(terms.amount) &&
         claimByMs === BigInt(terms.claimByMs) &&
         refundAfterMs === BigInt(terms.refundAfterMs)
