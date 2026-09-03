@@ -87,7 +87,7 @@ export class MemoryRail implements SettlementRail {
     if (this.clock() >= terms.refundAfterMs) {
       throw new Error("tclk: refusing to lock into an already-open refund window");
     }
-    this.locks.set(terms.contract, { terms, status: "locked" });
+    this.locks.set(terms.contract, { terms: { ...terms }, status: "locked" });
     return terms.contract;
   }
 
