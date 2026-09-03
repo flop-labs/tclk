@@ -36,6 +36,11 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `applyFrame` now rejects `receipt` frames whose `rail` or `ref` contradicts the contract's
+  locked settlement terms, or that assert a settlement rail on a `cancelled` contract where
+  no lock was ever established.
+- `extractWitness` in the Schnorr adaptor module now returns `null` if the scalar difference
+  is zero, matching scalar range validation and preventing emission of an invalid zero witness.
 - `hexToU8a` is fail-closed again for every input `isHex` rejects. It silently returned an
   empty array for `""`, the one non-hex input it accepted, so a caller that length-checked
   the result could not tell zero bytes from a malformed argument; `0x` remains the spelling

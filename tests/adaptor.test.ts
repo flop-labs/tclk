@@ -93,8 +93,9 @@ describe("Schnorr adaptor signature", () => {
     const pre = preSign(SK, MSG, T)!;
     expect(adapt(pre, "0x" + "00".repeat(32))).toBeNull(); // zero witness
     expect(adapt({ nonce: "0xbad", s: pre.s }, t)).toBeNull();
-    // extractWitness: malformed scalars.
+    // extractWitness: malformed scalars and zero witness.
     expect(extractWitness({ nonce: pre.nonce, s: "0xzz" }, { nonce: pre.nonce, s: pre.s })).toBeNull();
+    expect(extractWitness(pre, { nonce: pre.nonce, s: pre.s })).toBeNull();
   });
 });
 
