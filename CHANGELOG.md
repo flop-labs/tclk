@@ -27,6 +27,9 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Technocore note parsers now reject capability lists with empty rail entries and state
+  pointers with malformed rail references, matching the encoders and keeping world-writable
+  note input fail-closed.
 - Unknown lock kinds now fail closed in statement validation and secret verification.
 - `validateDeadlines` now rejects malformed clocks, non-finite safety margins, and
   unvalidated offer timestamps before doing arithmetic. A negative-infinite clock or an

@@ -11,6 +11,8 @@
 import type { TclkStatus } from "./machine.js";
 
 const CONTRACT_ID = /^0x[0-9a-f]{64}$/;
+const RAIL = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+const RAIL_REF = /^[\x21-\x7e]{1,256}$/;
 const STATUSES: ReadonlySet<string> = new Set([
   "proposed", "accepted", "locked", "claimed", "refunded", "cancelled",
 ]);
@@ -37,7 +39,7 @@ export const OFFER_ROOM = "tclk-offers";
 export function capabilityToken(rails: readonly string[]): string {
   if (rails.length === 0) throw new Error("tclk: capability token needs at least one rail");
   for (const rail of rails) {
-    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(rail)) throw new Error(`tclk: malformed rail: ${rail}`);
+    if (!RAIL.test(rail)) throw new Error(`tclk: malformed rail: ${rail}`);
   }
   return `tclk1:${rails.join(",")}`;
 }
@@ -46,9 +48,8 @@ export function capabilityToken(rails: readonly string[]): string {
 export function parseCapabilityToken(note: string): string[] | null {
   const token = note.split(/\s+/).find((part) => part.startsWith("tclk1:"));
   if (token === undefined) return null;
-  const rails = token.slice("tclk1:".length).split(",").filter(Boolean);
-  if (rails.length === 0) return null;
-  return rails.every((rail) => /^[a-z0-9][a-z0-9._-]{0,63}$/.test(rail)) ? rails : null;
+  const rails = token.slice("tclk1:".length).split(",");
+  return rails.every((rail) => RAIL.test(rail)) ? rails : null;
 }
 
 /**
@@ -72,7 +73,7 @@ export function stateNote(contract: string): { ns: string; key: string } {
 /** Serialize a status (plus optional rail ref) as the state-note value. Single line. */
 export function stateNoteValue(status: TclkStatus, railRef?: string): string {
   if (railRef !== undefined) {
-    if (!/^[\x21-\x7e]{1,256}$/.test(railRef)) {
+    if (!RAIL_REF.test(railRef)) {
       throw new Error("tclk: rail ref must be printable ASCII without spaces (max 256 chars)");
     }
     return `${status} ${railRef}`;
@@ -84,5 +85,6 @@ export function stateNoteValue(status: TclkStatus, railRef?: string): string {
 export function parseStateNoteValue(value: string): { status: TclkStatus; railRef?: string } | null {
   const [status, railRef, ...rest] = value.split(" ");
   if (rest.length > 0 || !STATUSES.has(status)) return null;
-  return railRef === undefined ? { status: status as TclkStatus } : { status: status as TclkStatus, railRef };
+  if (railRef === undefined) return { status: status as TclkStatus };
+  return RAIL_REF.test(railRef) ? { status: status as TclkStatus, railRef } : null;
 }

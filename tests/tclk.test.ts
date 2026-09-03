@@ -466,6 +466,9 @@ describe("tclk venue binding", () => {
     expect(parseCapabilityToken(`did:key:z6Mk${"f".repeat(44)} mailbox:mb-p-abc123`)).toBeNull();
     expect(parseCapabilityToken("tclk1:")).toBeNull();
     expect(parseCapabilityToken("tclk1:BAD RAIL")).toBeNull();
+    expect(parseCapabilityToken("tclk1:,flop-htlc")).toBeNull();
+    expect(parseCapabilityToken("tclk1:flop-htlc,,x402")).toBeNull();
+    expect(parseCapabilityToken("tclk1:flop-htlc,")).toBeNull();
     // A space ends the token: the DID note is whitespace-delimited, so a rail list
     // cannot contain one and everything after it is a different token entirely.
     expect(parseCapabilityToken("tclk1:flop-htlc x402")).toEqual(["flop-htlc"]);
@@ -474,10 +477,16 @@ describe("tclk venue binding", () => {
   });
 
   it("state-note values round-trip and parse fail-closed", () => {
+    const maxRailRef = "x".repeat(256);
     expect(parseStateNoteValue(stateNoteValue("locked", "escrow-42"))).toEqual({ status: "locked", railRef: "escrow-42" });
+    expect(parseStateNoteValue(stateNoteValue("locked", maxRailRef))).toEqual({ status: "locked", railRef: maxRailRef });
     expect(parseStateNoteValue(stateNoteValue("claimed"))).toEqual({ status: "claimed" });
     expect(parseStateNoteValue("owned by nobody at all")).toBeNull();
     expect(parseStateNoteValue("exploded")).toBeNull();
+    expect(parseStateNoteValue("locked ")).toBeNull();
+    expect(parseStateNoteValue("locked \n")).toBeNull();
+    expect(parseStateNoteValue("locked \u2603")).toBeNull();
+    expect(parseStateNoteValue(`locked ${"x".repeat(257)}`)).toBeNull();
     expect(() => stateNoteValue("locked", "has space")).toThrow(/printable ASCII/);
   });
 });
