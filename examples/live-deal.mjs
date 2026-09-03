@@ -91,20 +91,45 @@ process.on("uncaughtException", reportAndExit);
 process.on("unhandledRejection", reportAndExit);
 
 /**
- * Every request goes through here so a 429 is honoured rather than thrown. The venue
- * rate-limits per IP and says how long to wait, in the body and in Retry-After — a client
- * that treats that as an error instead of an instruction just fails louder. Anything
- * running deals in a loop WILL meet this: the write budget is per minute, and one deal
- * spends about nine of it.
+ * Every request goes through here so a 429 is honoured rather than thrown, and a
+ * transient 5xx (or a hung attempt) is retried with backoff. The venue rate-limits
+ * per IP and says how long to wait, in the body and in Retry-After — a client that
+ * treats that as an error instead of an instruction just fails louder. It has also
+ * been observed returning intermittent 503/524s under load, and a run that dies
+ * between `lock` and `reveal` is not merely inconvenient: on a rail that held value
+ * it sits there until `refundAfterMs`.
+ *
+ * Each attempt is bounded by ATTEMPT_MS: `fetch` otherwise inherits undici's 300 s
+ * headers timeout, so one hung attempt would eat five minutes before the first
+ * backoff wait and surface as an `UND_ERR_HEADERS_TIMEOUT` rejection — a thrown
+ * error that never reaches the status check below and prints as a bug in this
+ * script during a venue incident in which the library did nothing wrong. A timed-out
+ * attempt comes back as `null` and takes the same "did it land?" path as a 5xx.
+ *
+ * Only genuinely transient statuses are retried: 429 (with Retry-After) and the
+ * 500/502/503/504/522-524 band. A 501 or 505 cannot change on retry, and a 4xx other
+ * than 429 is an answer, not an outage — looping on either just burns the venue's
+ * per-minute write budget.
  */
+const ATTEMPT_MS = 25_000; // successful venue round-trips ran 1.6–19.4 s before the 524 onset
+const RETRIABLE_5XX = new Set([500, 502, 503, 504, 522, 523, 524]);
+
 async function req(url, init, what) {
   for (let attempt = 0; ; attempt += 1) {
-    const res = await fetch(url, init);
-    if (res.status !== 429) return res;
-    if (attempt >= 3) throw new Error(`${what}: still rate limited after ${attempt} waits`);
-    const stated = Number(res.headers.get("retry-after"));
-    const waitMs = (Number.isFinite(stated) && stated > 0 ? stated : 5) * 1000;
-    log("", `rate limited — waiting ${waitMs / 1000}s, as the venue asked`);
+    const res = await fetch(url, { ...init, signal: AbortSignal.timeout(ATTEMPT_MS) })
+      .catch((e) => (e?.name === "TimeoutError" ? null : Promise.reject(e)));
+    const status = res?.status;
+    const retriable = res === null || status === 429 || (status !== undefined && RETRIABLE_5XX.has(status));
+    if (!retriable) return res;
+    if (attempt >= 3) {
+      if (res === null) throw new Error(`${what}: still unreachable after ${attempt} retries (timeout)`);
+      throw new Error(`${what}: gave up after ${attempt} retries (${status})`);
+    }
+    const stated = Number(res?.headers?.get("retry-after"));
+    const waitMs = status === 429
+      ? (Number.isFinite(stated) && stated > 0 ? stated : 5) * 1000
+      : Math.min(2 ** attempt, 10) * 1000; // exponential backoff; Retry-After is a 429 contract
+    log("", `${res === null ? "timeout" : status} — waiting ${waitMs / 1000}s, as the venue asked`);
     await new Promise((resolve) => setTimeout(resolve, waitMs));
   }
 }
@@ -134,17 +159,57 @@ async function post(signer, room, frame) {
   const text = sweep(encodeFrame(frame));
   const nonce = nextNonce();
   const sig = signer.sign(canonicalMessage(room, nonce, text));
-  const res = await req(
-    `${BASE}/r/${room}`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ did: signer.did, sig, nonce: String(nonce), text }),
-    },
-    `post to ${room}`,
-  );
-  if (!res.ok) throw await refusal(`post to ${room}`, res);
-  return text;
+  const body = { did: signer.did, sig, nonce: String(nonce), text };
+  const tuple = `${signer.did}|${nonce}|${text}`;
+
+  /**
+   * Reconciliation read: the whole retained history via /export, not the bounded tail
+   * window. `?format=json` answers with the newest 50 records by default, and the
+   * offer board carries every deal on the venue — on a busy board this run's own
+   * frame can already be outside that window by the time the read-back looks for
+   * it, and a missed match would resend the identical signed POST straight into
+   * `400 nonce N is not greater than N`. The export endpoint takes no `limit`, so
+   * the reconciliation sees what the venue actually retains. A hung attempt (null)
+   * is exactly the "did it land?" case, so it reconciles like a 5xx.
+   */
+  const stored = async () => {
+    const records = await exportRoom(room);
+    return new Set(records.map((m) => `${m.from}|${m.nonce}|${m.text}`));
+  };
+
+  for (let attempt = 0; ; attempt += 1) {
+    const res = await req(
+      `${BASE}/r/${room}`,
+      { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) },
+      `post to ${room}`,
+    );
+    if (res && res.ok) return text;
+    if (res === null || res.status >= 500) {
+      const tuples = await stored();
+      if (tuples.has(tuple)) {
+        log("", `${res === null ? "timeout" : res.status} on post — reconciled: frame already stored, continuing`);
+        return text;
+      }
+      if (attempt >= 3) {
+        if (res === null) throw new Error(`post to ${room}: still unreachable after ${attempt} retries (timeout)`);
+        throw await refusal(`post to ${room}`, res);
+      }
+      const waitMs = Math.min(2 ** attempt, 10) * 1000;
+      log("", `${res === null ? "timeout" : res.status} on post — no stored match, retrying in ${waitMs / 1000}s`);
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      continue;
+    }
+    // A non-429 4xx (400, 403, 404, 409, 422…) is an answer, not an outage — but a
+    // 400 nonce complaint can still mean the ORIGINAL attempt landed and the
+    // response was lost before this loop saw it. One last reconciliation read
+    // decides between "already stored" (success) and "genuinely refused" (throw).
+    const tuples = await stored();
+    if (tuples.has(tuple)) {
+      log("", `${res.status} on post — reconciled on the last read: frame already stored, continuing`);
+      return text;
+    }
+    throw await refusal(`post to ${room}`, res);
+  }
 }
 
 /** The note surface the paper rail records onto, wired to the venue's /kv routes. */
@@ -173,9 +238,29 @@ const notes = {
       : `?if=${encodeURIComponent(condition.if)}`;
     const url = `${BASE}/kv/${ns}/${key}/set/${encodeURIComponent(value)}${query}`;
     const res = await req(url, undefined, `kv set ${ns}/${key}`);
-    if (res.status === 409) return false; // lost the race; body carries the real value
-    if (!res.ok) throw await refusal(`kv set ${ns}/${key}`, res);
-    return true;
+    if (res && res.ok) return true;
+    // A 5xx (or a hung attempt coming back as null) does not prove the write failed,
+    // and a 409 does not prove this run lost: a committed-then-unacknowledged CAS
+    // leaves the note holding exactly the value this call wrote. Read back and
+    // decide on the venue's state, not the transport's.
+    if (res === null || res.status === 409 || res.status >= 500) {
+      const present = await this.get(ns, key);
+      if (present === value) return true;
+      if (res && res.status === 409) return false; // genuine lost race; body carries the real value
+      // For a retriable status with no stored value, the write can be retried when
+      // the pre-state still allows it: ?if_absent=1 requires the note to be absent;
+      // ?if=<old> requires it to still hold the old value. get() already reflects both.
+      if (condition === undefined || ("ifAbsent" in condition && present === null) || ("if" in condition && present === condition.if)) {
+        const retry = await req(url, undefined, `kv set ${ns}/${key}`);
+        if (retry && retry.ok) return true;
+        if (retry === null) throw new Error(`kv set ${ns}/${key}: still unreachable after retries (timeout)`);
+        if (retry.status === 409) return false;
+        throw await refusal(`kv set ${ns}/${key}`, retry);
+      }
+      if (res === null) throw new Error(`kv set ${ns}/${key}: still unreachable (timeout)`);
+      throw await refusal(`kv set ${ns}/${key}`, res);
+    }
+    throw await refusal(`kv set ${ns}/${key}`, res);
   },
 };
 
