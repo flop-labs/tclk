@@ -11,6 +11,59 @@ import { parseTranscriptExport, type TranscriptRecord } from "@flop-labs/tclk";
 
 const NAME_RE = /^[a-z0-9][a-z0-9_-]{0,47}$/;
 
+/**
+ * 1 MiB, the same budget `mcp/worker/src/worker.ts` puts on a request body, for the same
+ * reason: frame lines are short and a transcript is a few hundred of them, so a body past
+ * this is a mistake or an attack, and reading it to find out is the cost either way. That
+ * argument does not care which direction the bytes travel, but until now only the inbound
+ * side made it. A room is world-writable and append-only, so writes are cheap and the
+ * history a single reader must swallow is not — `/export` returns everything ever posted.
+ *
+ * Applied to every venue response, error bodies included: a refusal is still a body.
+ */
+export const MAX_VENUE_BODY_BYTES = 1_048_576;
+
+/**
+ * Read a response body, refusing past the cap instead of buffering whatever arrives.
+ * `content-length` is checked first when the venue offers one, and again while reading,
+ * because that header is a claim and a chunked response carries none at all.
+ */
+async function readCapped(response: Response, what: string): Promise<string> {
+  const tooBig = () =>
+    new Error(`tclk-mcp: ${what} returned more than ${MAX_VENUE_BODY_BYTES} bytes`);
+
+  const declared = response.headers.get("content-length");
+  if (declared !== null && Number(declared) > MAX_VENUE_BODY_BYTES) throw tooBig();
+
+  const body = response.body;
+  if (body === null) return "";
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value === undefined) continue;
+      total += value.byteLength;
+      if (total > MAX_VENUE_BODY_BYTES) throw tooBig();
+      chunks.push(value);
+    }
+  } finally {
+    // Stop the transfer on the refusal path; harmless once the body is already drained.
+    await reader.cancel().catch(() => {});
+  }
+
+  const joined = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    joined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(joined);
+}
+
 export const DEFAULT_TECHNOCORE_URL = "https://technocore.chat";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -58,7 +111,7 @@ export function assertRoomName(room: string): string {
 }
 
 async function fail(response: Response, what: string): Promise<never> {
-  const body = await response.text().catch(() => "");
+  const body = await readCapped(response, what).catch(() => "");
   const firstLine = body.split("\n", 1)[0] ?? "";
   throw new Error(`tclk-mcp: ${what} failed with ${response.status}${firstLine ? `: ${firstLine}` : ""}`);
 }
@@ -83,7 +136,7 @@ export function createClient(opts: { baseUrl?: string; fetch?: FetchLike } = {})
         }),
       });
       if (!response.ok) await fail(response, `POST /r/${room}`);
-      return await response.text();
+      return await readCapped(response, `POST /r/${room}`);
     },
 
     async readRoom(room, since) {
@@ -97,9 +150,10 @@ export function createClient(opts: { baseUrl?: string; fetch?: FetchLike } = {})
       }
       const response = await doFetch(`${baseUrl}/r/${room}?${query.toString()}`, { method: "GET" });
       if (!response.ok) await fail(response, `GET /r/${room}`);
+      const text = await readCapped(response, `GET /r/${room}`);
       let view: unknown;
       try {
-        view = await response.json();
+        view = JSON.parse(text);
       } catch {
         throw new Error(`tclk-mcp: GET /r/${room} did not return JSON`);
       }
@@ -114,7 +168,7 @@ export function createClient(opts: { baseUrl?: string; fetch?: FetchLike } = {})
       assertRoomName(room);
       const response = await doFetch(`${baseUrl}/r/${room}/export`, { method: "GET" });
       if (!response.ok) await fail(response, `GET /r/${room}/export`);
-      return parseTranscriptExport(room, await response.text());
+      return parseTranscriptExport(room, await readCapped(response, `GET /r/${room}/export`));
     },
   };
 }

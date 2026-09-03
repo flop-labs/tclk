@@ -43,6 +43,7 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+<<<<<<< HEAD
 - `tclk_read_room`'s bounded window read no longer fails the whole call when the venue
   returns one message with a malformed envelope. A room is world-writable, so a single
   hostile line — a `nonce` that is not decimal text, a non-string `from` — used to throw
@@ -67,6 +68,17 @@ All notable changes to this project are documented here. Format follows
   the no-echo rule `mcp/src/signing.ts` already states — `hashLockFromPreimage` and
   `pointLockFromWitness` decode secret preimages and witnesses through this function, and the
   old message put a rejected secret into whatever log caught the throw.
+=======
+- Every venue response is now read against a 1 MiB cap, the same budget the Worker already
+  puts on a request body. The argument for that cap does not depend on which way the bytes
+  travel, but only the inbound side was making it: `readRoom` buffered the whole JSON view
+  and `exportRoom` the whole JSONL history with no ceiling at all. A room is world-writable
+  and append-only, so posting is cheap while `/export` hands every line ever posted to
+  whoever reads next, and a shared Worker read that arbitrary volume into one isolate.
+  `content-length` is checked first when offered and again while reading, because the
+  header is a claim and a chunked response carries none. Error bodies go through the same
+  cap: a refusal is still a body.
+>>>>>>> fb8d37f (fix(mcp): cap the venue response body, as the Worker already caps the request)
 - `applyFrame` now rejects `lock` frames when the refund window is already open
   (`nowMs >= refundAfterMs`), matching the settlement rail's refusing-to-lock invariant
   and preventing a phantom `locked` state from which the payee can no longer claim (#43).

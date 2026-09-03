@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { ed25519 } from "@noble/curves/ed25519.js";
 
 import { canonicalMessage, signerFromSeed } from "../src/signing.js";
+import { MAX_VENUE_BODY_BYTES } from "../src/technocore.js";
 import { createHandlers } from "../src/tools.js";
 import { HASH_OFFER, PAYER_SEED, fakeFetch, hexToBytes } from "./fixtures.js";
 
@@ -323,5 +324,65 @@ describe("tclk_whoami", () => {
       expect.stringContaining("TECHNOCORE_SIGNING_KEY"),
       expect.stringContaining("TCLK_PAYMENT_KEY"),
     ]);
+  });
+});
+
+describe("venue response size", () => {
+  // A room is world-writable and append-only: posting is cheap, and /export hands the
+  // whole accumulated history to whoever reads next. The inbound cap in worker.ts made
+  // this argument already; these check it now holds in the other direction too.
+  const OVER = MAX_VENUE_BODY_BYTES + 1;
+
+  it("refuses an oversized export before buffering it", async () => {
+    const { fetchLike } = fakeFetch([{ body: "x".repeat(OVER) }]);
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+    await expect(h.tclk_read_room({ room: "lobby", full: true })).rejects.toThrow(
+      /export returned more than 1048576 bytes/,
+    );
+  });
+
+  it("refuses an oversized window read", async () => {
+    const { fetchLike } = fakeFetch([{ body: "x".repeat(OVER) }]);
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+    await expect(h.tclk_read_room({ room: "lobby" })).rejects.toThrow(
+      /GET \/r\/lobby returned more than 1048576 bytes/,
+    );
+  });
+
+  it("refuses on a declared content-length past the cap, whatever the body turns out to be", async () => {
+    // The header is the venue's claim, so it is checked first and on its own: a short body
+    // behind an oversized content-length is still refused, and an honest one still gets
+    // caught while reading. Both directions matter, since a chunked response has no header.
+    const fetchLike = async () =>
+      new Response("x", {
+        status: 200,
+        headers: { "content-type": "text/plain", "content-length": String(OVER) },
+      });
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+    await expect(h.tclk_read_room({ room: "lobby", full: true })).rejects.toThrow(
+      /more than 1048576 bytes/,
+    );
+  });
+
+  it("still reads a body that fits, right up to the cap", async () => {
+    // One JSONL record, padded with a long note, well under the cap.
+    const line = JSON.stringify({
+      seq: 1,
+      ts: "2026-01-01T00:00:00Z",
+      from: "~stranger",
+      text: "gm",
+    });
+    const { fetchLike } = fakeFetch([{ body: `${line}\n` }]);
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+    const result = await h.tclk_read_room({ room: "lobby", full: true });
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({ seq: 1, line: "gm" });
+  });
+
+  it("caps an error body too, so a refusal cannot be the payload", async () => {
+    const { fetchLike } = fakeFetch([{ status: 500, body: "y".repeat(OVER) }]);
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+    // The oversized error body is discarded rather than buffered into the message.
+    await expect(h.tclk_read_room({ room: "lobby" })).rejects.toThrow(/failed with 500/);
   });
 });
