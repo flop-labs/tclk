@@ -6,6 +6,13 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-01
+
+First release. Alpha, testnet only: no rail here holds value, and the adaptor-signature
+module is unaudited reference cryptography. Published as
+[`@flop-labs/tclk`](https://www.npmjs.com/package/@flop-labs/tclk) and
+[`@flop-labs/tclk-mcp`](https://www.npmjs.com/package/@flop-labs/tclk-mcp).
+
 ### Added
 
 - `@flop-labs/tclk` — the core library: frames, contract ids, hash/point locks, the fail-closed
@@ -51,3 +58,5 @@ All notable changes to this project are documented here. Format follows
   challenge, and `tclk_adaptor_presign` returns a structured refusal naming where pre-signing
   can be done instead. Its tool catalogue is generated from the stdio server rather than
   restated, so the two deployments cannot drift.
+- Both packages ship `NOTICE` alongside `LICENSE`, as Apache-2.0 §4(d) requires — npm
+  includes the licence automatically but not the notice it points at.
