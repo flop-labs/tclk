@@ -189,6 +189,17 @@ describe("tclk_read_room", () => {
     expect(result.records[1]).toMatchObject({ seq: 32, sender: signer.did, signature: good });
   });
 
+  it("keeps the export's opposite rule: one bad row refuses the whole file", async () => {
+    // Pins the asymmetry rather than leaving it to a comment. An export claims to be the
+    // complete history, so it may not answer with a hole; a window may, because it says
+    // which seq it could not read. If either side is ever changed, this fails.
+    const good = JSON.stringify({ seq: 1, ts: "2026-01-01T00:00:00Z", from: "~a", text: "gm" });
+    const bad = JSON.stringify({ seq: 2, ts: "2026-01-01T00:00:01Z", from: "~b", nonce: true, text: "gm" });
+    const { fetchLike } = fakeFetch([{ body: `${good}\n${bad}\n` }]);
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+    await expect(h.tclk_read_room({ room: "lobby", full: true })).rejects.toThrow(/line 2/);
+  });
+
   it("records a malformed envelope with no usable seq as null", async () => {
     const { fetchLike } = fakeFetch([
       {

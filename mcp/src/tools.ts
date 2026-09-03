@@ -432,6 +432,15 @@ export function createHandlers(options: HandlerOptions = {}) {
       // the rest of the room. A record that will not normalize becomes a `malformed` entry
       // carrying its seq and the reason, exactly as a fold reports a bad line, so the seq
       // stays visible and auditable instead of vanishing.
+      //
+      // The `full` export above deliberately keeps the opposite rule, and the difference is
+      // what the two things claim rather than which is stricter. An export claims to be the
+      // complete history: a partial one is indistinguishable from a whole one, so a reader
+      // who audits from it would conclude something about a deal from a transcript with a
+      // hole in it, and `parseTranscriptExport` refuses the file instead. A window claims
+      // only a bounded view and already reports `lastSeq`, so a caller knows it is holding
+      // a slice; naming the seq it could not read leaves that slice honest. Handing back
+      // silently fewer records than the venue served is the one thing neither may do.
       const records: TranscriptRecord[] = [];
       const malformed: { seq: number | null; reason: string }[] = [];
       for (const message of view.messages) {

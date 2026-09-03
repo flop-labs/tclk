@@ -42,8 +42,12 @@ All notable changes to this project are documented here. Format follows
   out of the `messages.map`, denying every reader the rest of the room. Each message is
   now normalized on its own: one that will not normalize is set aside in a new `malformed`
   array with its seq and reason, exactly as a fold reports a bad line, so no record is
-  silently lost and `lastSeq` stays correct for paging. The `full` export path already
-  fails closed on the whole file by design and is unchanged.
+  silently lost and `lastSeq` stays correct for paging. The `full` export path keeps the
+  opposite rule and is unchanged: an export claims to be the complete history, where a
+  partial answer is indistinguishable from a whole one, so `parseTranscriptExport` refuses
+  the file rather than hand back a transcript with a hole in it. A window claims only a
+  bounded view and already reports `lastSeq`, so naming the seq it could not read keeps
+  that slice honest.
 - `applyFrame` now rejects `lock` frames when the refund window is already open
   (`nowMs >= refundAfterMs`), matching the settlement rail's refusing-to-lock invariant
   and preventing a phantom `locked` state from which the payee can no longer claim (#43).
