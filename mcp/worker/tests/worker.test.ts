@@ -435,6 +435,32 @@ describe("HTTP and JSON-RPC framing", () => {
     );
     expect(response.status).toBe(413);
   });
+
+  it("413s a body over the cap in bytes whose UTF-16 code units are under it", async () => {
+    // `MAX_BODY_BYTES` is named in bytes and the 413 reports bytes, so the alphabet the
+    // padding is written in must not change where the cap falls. '한' is one UTF-16 code
+    // unit and three UTF-8 bytes.
+    const padded = (count: number) =>
+      JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping", params: { pad: "한".repeat(count) } });
+    const post = (body: string) =>
+      handleRequest(
+        new Request(url, { method: "POST", headers: { "content-type": "application/json" }, body }),
+        ENV,
+      );
+
+    const over = padded(400_000);
+    expect(over.length).toBe(400_060);
+    expect(new TextEncoder().encode(over).byteLength).toBe(1_200_060);
+    const refused = await post(over);
+    expect(refused.status).toBe(413);
+    expect(((await refused.json()) as { error: string }).error).toBe("body exceeds 1048576 bytes");
+
+    // The other direction, so this is a cap and not a ban on multi-byte text: the same
+    // padding under the byte cap is still served.
+    const under = padded(300_000);
+    expect(new TextEncoder().encode(under).byteLength).toBe(900_060);
+    expect((await post(under)).status).toBe(200);
+  });
 });
 
 describe("no environment variable this build refuses is ever recommended", () => {

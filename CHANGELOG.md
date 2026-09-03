@@ -109,6 +109,14 @@ All notable changes to this project are documented here. Format follows
 - Technocore note parsers now reject capability lists with empty rail entries and state
   pointers with malformed rail references, matching the encoders and keeping world-writable
   note input fail-closed.
+- The hosted Worker now measures its 1 MiB request-body cap in UTF-8 bytes, the unit
+  `MAX_BODY_BYTES` and the 413 it returns are both named in. The post-read re-check compared
+  `body.length`, a UTF-16 code-unit count, so 1,048,500 three-byte code points were read,
+  parsed and served as a 3,145,560-byte body — just under three times the cap the same reply
+  reports, out of the same constant the `content-length` check above it already measured in
+  bytes. That re-check is the only size check that fires for a chunked body, which carries no
+  `content-length` to check first. Worker HTTP framing only: no wire bytes move and no golden
+  vector changes.
 - Unknown lock kinds now fail closed in statement validation and secret verification.
 - `validateDeadlines` now rejects malformed clocks, non-finite safety margins, and
   unvalidated offer timestamps before doing arithmetic. A negative-infinite clock or an
