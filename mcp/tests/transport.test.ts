@@ -149,6 +149,64 @@ describe("tclk_read_room", () => {
     );
   });
 
+  it("isolates a malformed envelope instead of failing the whole window read", async () => {
+    const line = offerLine();
+    const nonce = 11;
+    const good = signer.sign(canonicalMessage("lobby", nonce, line));
+    const { fetchLike } = fakeFetch([
+      {
+        body: "",
+        json: {
+          room: "lobby",
+          count: 4,
+          last_seq: 33,
+          messages: [
+            { seq: 30, ts: "2026-01-01T00:00:00Z", from: "~stranger", text: "gm" },
+            // Hostile envelope: `nonce` is a JSON boolean, which transcriptRecord refuses.
+            // Before the fix this one message threw and took the entire read down with it.
+            { seq: 31, ts: "2026-01-01T00:00:01Z", from: "~attacker", nonce: true, text: "tclk1 x" },
+            { seq: 32, ts: "2026-01-01T00:00:02Z", from: signer.did, nonce: String(nonce), sig: good, text: line },
+            // A second bad shape: `from` is not a string.
+            { seq: 33, ts: "2026-01-01T00:00:03Z", from: 12345, text: "gm" },
+          ],
+        },
+      },
+    ]);
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+
+    const result = await h.tclk_read_room({ room: "lobby" });
+    // The two well-formed envelopes survive; the two hostile ones are set aside, not dropped.
+    expect(result.records).toHaveLength(2);
+    expect(result.records.map((r) => r.seq)).toEqual([30, 32]);
+    expect(result.malformed).toHaveLength(2);
+    expect(result.malformed.map((m) => m.seq)).toEqual([31, 33]);
+    expect(result.malformed[0].reason).toMatch(/nonce/);
+    // lastSeq still reflects the venue's own count, so `since` paging is unbroken.
+    expect(result.lastSeq).toBe(33);
+
+    // The surviving signed record is intact: it carries the sender and signature the
+    // venue verified, ready to hand to a fold.
+    expect(result.records[1]).toMatchObject({ seq: 32, sender: signer.did, signature: good });
+  });
+
+  it("records a malformed envelope with no usable seq as null", async () => {
+    const { fetchLike } = fakeFetch([
+      {
+        body: "",
+        json: {
+          room: "lobby",
+          count: 1,
+          last_seq: 40,
+          messages: [{ seq: "not-a-number", ts: "2026-01-01T00:00:00Z", from: "~x", text: "gm" }],
+        },
+      },
+    ]);
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+    const result = await h.tclk_read_room({ room: "lobby" });
+    expect(result.records).toHaveLength(0);
+    expect(result.malformed).toEqual([{ seq: null, reason: expect.stringMatching(/seq/) }]);
+  });
+
   it("reads and strictly parses the full JSONL export", async () => {
     const line = offerLine();
     const nonce = 17;

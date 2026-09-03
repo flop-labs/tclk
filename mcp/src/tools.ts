@@ -426,11 +426,30 @@ export function createHandlers(options: HandlerOptions = {}) {
       }
 
       const view = await client.readRoom(input.room, input.since);
-      const records = view.messages.map((message) => transcriptRecord(input.room, message));
+      // Normalize each message on its own. A room is world-writable, so one message with a
+      // malformed envelope (a `nonce` that is not decimal text, a non-string `from`) must
+      // not throw the whole read: that would let a single hostile line deny every reader
+      // the rest of the room. A record that will not normalize becomes a `malformed` entry
+      // carrying its seq and the reason, exactly as a fold reports a bad line, so the seq
+      // stays visible and auditable instead of vanishing.
+      const records: TranscriptRecord[] = [];
+      const malformed: { seq: number | null; reason: string }[] = [];
+      for (const message of view.messages) {
+        try {
+          records.push(transcriptRecord(input.room, message));
+        } catch (error) {
+          const seq =
+            message !== null && typeof message === "object" && Number.isSafeInteger((message as { seq?: unknown }).seq)
+              ? ((message as { seq: number }).seq)
+              : null;
+          malformed.push({ seq, reason: errorMessage(error).replace(/^tclk: /, "") });
+        }
+      }
       return {
         room: input.room,
         source: "window" as const,
         records,
+        malformed,
         count: records.length,
         lastSeq: view.last_seq,
       };

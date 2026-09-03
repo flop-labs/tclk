@@ -36,6 +36,14 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `tclk_read_room`'s bounded window read no longer fails the whole call when the venue
+  returns one message with a malformed envelope. A room is world-writable, so a single
+  hostile line — a `nonce` that is not decimal text, a non-string `from` — used to throw
+  out of the `messages.map`, denying every reader the rest of the room. Each message is
+  now normalized on its own: one that will not normalize is set aside in a new `malformed`
+  array with its seq and reason, exactly as a fold reports a bad line, so no record is
+  silently lost and `lastSeq` stays correct for paging. The `full` export path already
+  fails closed on the whole file by design and is unchanged.
 - `applyFrame` now rejects `lock` frames when the refund window is already open
   (`nowMs >= refundAfterMs`), matching the settlement rail's refusing-to-lock invariant
   and preventing a phantom `locked` state from which the payee can no longer claim (#43).
