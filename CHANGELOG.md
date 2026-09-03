@@ -19,6 +19,14 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `SCALAR_HEX` in `src/frames.ts` now requires even-length hex (`{1,32}` byte pairs)
+  instead of `{1,64}` hex digits. Odd-length values like `0xabc` passed the old
+  pattern and were stored on a lock frame; the failure only surfaced later inside
+  `verifyPreSignature` → `toScalar` → `hexToU8a`, which threw and surfaced as a
+  silent `false`. A hostile payer could exploit that gap to stall a PTLC deal
+  after locking funds. The wire boundary now rejects odd-length scalars at
+  `decodeFrame`, with a regression test pinning that the malformed lock frame is
+  skipped by `tryDecodeFrame` and never enters a transcript. (#22)
 - `SPEC.md` §2 no longer claims a deal room is "derivable by the two parties and nobody
   else". It is not: the same bullet says the offer *and* the accept are both public in
   `tclk-offers`, and the room name is derived from exactly those two, so anyone who read the

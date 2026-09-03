@@ -295,6 +295,28 @@ describe("tclk state machine", () => {
     expect(step.ok).toBe(false);
     expect(step.state).toBe(state);
   });
+
+  it("rejects an odd-length scalar hex in a lock's presig at decode, not only at verify (#22)", () => {
+    // The odd-length form "0xabc" passes the old /^[0-9a-f]{1,64}$/ pattern and would
+    // be stored on a lock frame; the failure only surfaced later inside
+    // verifyPreSignature → toScalar → hexToU8a, where it turned into a silent
+    // `false`. A hostile payer could use that gap to stall a PTLC deal after
+    // locking funds. SCALAR_HEX must reject it at the wire boundary, so the frame
+    // never enters a room-looking transcript and no state is half-applied.
+    const { accept, state } = accepted();
+    const ptlc = generatePointLock();
+    const payerKey = schnorrAdaptor.getPublicKey("0x" + "11".repeat(32))!;
+    const forgedLine = TCLK_PREFIX + JSON.stringify({
+      type: "lock", from: PAYER_DID, contract: accept.contract,
+      rail: "flop-htlc", ref: "escrow-x",
+      presig: { nonce: ptlc.statement, s: "0xabc" },
+    });
+    expect(() => decodeFrame(forgedLine)).toThrow(/presig\.s is malformed/);
+    expect(tryDecodeFrame(forgedLine)).toBeNull();
+    // The state machine is untouched: without a valid frame, nothing to apply.
+    const step = applyFrame(state, { type: "lock", from: PAYER_DID } as never, T0);
+    expect(step.ok).toBe(false);
+  });
 });
 
 describe("tclk PTLC path (adaptor cycle)", () => {
