@@ -114,6 +114,15 @@ All notable changes to this project are documented here. Format follows
   unvalidated offer timestamps before doing arithmetic. A negative-infinite clock or an
   infinite refund deadline could previously manufacture a safe-looking window even though
   the helper promises to fail closed.
+- `MemoryRail` and `PaperRail` now validate the clock reading before every deadline guard.
+  An injected `clock` was compared straight against `refundAfterMs`, and a NaN reading
+  (`Date.parse` of a string that is not a date, `Number()` of an unset variable) loses that
+  comparison in both directions — so `lock` escrowed into an already-open refund window,
+  `refund` ran before the window opened and `claim` ran after it closed, voiding all three
+  predicates SPEC §5 says a rail enforces. A negative or infinite reading is not a time at
+  all; those comparisons resolve, so the rail believed them instead — escrowing at a nonsense
+  time, or refunding two hours before the window. Both now throw, under the rule `applyFrame`
+  already applies to its `nowMs`. Finite clocks, wire bytes and golden vectors are unchanged.
 - `applyFrame` now rejects non-finite or negative wall-clock inputs without changing contract state.
 - `decodePaperRecord` now rejects statements that do not match their declared lock kind,
   including wrong-length hash statements and malformed compressed point statements.

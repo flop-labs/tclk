@@ -112,6 +112,27 @@ describe("paper rail — the predicates a real rail must enforce", () => {
     await expect(rail.lock(terms().terms)).rejects.toThrow(/already-open refund window/);
   });
 
+  // A rail clock is injected, so a bad reading is ordinary input: Date.parse of a server
+  // date header that is not a date returns NaN, and NaN loses every comparison.
+  it("refuses to lock, claim or refund on a clock reading that is not finite", async () => {
+    const badClock = /rail clock must read a finite non-negative number/;
+    const { rail, setNow } = railAt();
+    const deal = terms();
+    const ref = await rail.lock(deal.terms);
+
+    setNow(Date.parse("not-a-date"));
+    await expect(rail.claim(ref, deal.secret)).rejects.toThrow(badClock);
+    await expect(rail.refund(ref)).rejects.toThrow(badClock);
+    expect((await rail.read(ref))?.status).toBe("locked");
+
+    // The lock guard runs before the write, so a bad reading must not spend the note slot.
+    const { rail: railNaN, notes } = railAt(Number.NaN);
+    const fresh = terms();
+    await expect(railNaN.lock(fresh.terms)).rejects.toThrow(badClock);
+    const { ns, key } = paperNote(fresh.terms.contract);
+    expect(notes.raw(ns, key)).toBeUndefined();
+  });
+
   it("carries the point-lock path too — the witness opens it", async () => {
     const { rail } = railAt();
     const deal = terms("point");
