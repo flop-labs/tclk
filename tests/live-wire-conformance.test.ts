@@ -260,4 +260,41 @@ describe("live-wire conformance gaps", () => {
     const megabyte = `${TCLK_PREFIX}${canonicalJson(beat("x".repeat(1_000_000)))}`;
     expect(tryDecodeFrame(megabyte)).toBeNull();
   });
+
+  it("refuses a line that is not single-line ASCII, on decode as well as encode", () => {
+    const beat = (note: string) => ({
+      type: "heartbeat" as const,
+      from: PAYER,
+      contract: "0x" + "11".repeat(32),
+      nonce: "0123456789abcdef",
+      note,
+    });
+
+    // Escaping is what makes a non-ASCII note emittable: the wire line stays printable ASCII
+    // and round-trips, which is the case the guard must not touch.
+    const accented = beat("café");
+    const escaped = encodeFrame(accented);
+    expect(escaped).toContain("\\u00e9");
+    expect(/^[\x20-\x7e]*$/.test(escaped)).toBe(true);
+    expect(decodeFrame(escaped)).toEqual(accented);
+
+    // The same frame with the character raw instead of escaped is a different line. The
+    // encoder refuses to emit it; decode must refuse it too, because the id hashes the
+    // escaped form (§3), so this line's own bytes are not the bytes its id commits to.
+    const raw = `${TCLK_PREFIX}${canonicalJson(accented)}`;
+    expect(raw).not.toBe(escaped);
+    expect(() => decodeFrame(raw)).toThrow(/non-printable-ASCII/);
+    expect(tryDecodeFrame(raw)).toBeNull();
+
+    // DEL is ASCII, so escaping leaves it alone: both halves have to catch it by the guard.
+    const del = beat("a\x7fb");
+    expect(() => encodeFrame(del)).toThrow(/non-printable-ASCII/);
+    expect(() => decodeFrame(`${TCLK_PREFIX}${canonicalJson(del)}`)).toThrow(/non-printable-ASCII/);
+
+    // "Single line" is the third clause of the same §2 sentence, and JSON.parse would other-
+    // wise take a newline as insignificant whitespace between tokens.
+    const multiline = `${TCLK_PREFIX}${canonicalJson(beat("ok")).replace(/,/, ",\n")}`;
+    expect(() => decodeFrame(multiline)).toThrow(/non-printable-ASCII/);
+    expect(tryDecodeFrame(multiline)).toBeNull();
+  });
 });

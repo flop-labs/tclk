@@ -98,6 +98,17 @@ All notable changes to this project are documented here. Format follows
   longer line was never a stored room message. The check runs before `JSON.parse`, which bounds
   what one row of an untrusted `/export` can cost a `foldTranscript` call. No wire bytes move
   and no golden vector changes.
+- `decodeFrame` now also enforces the other two clauses of that same SPEC §2 sentence, single
+  line and ASCII-only, which `encodeFrame` has always enforced and the decoder took on faith.
+  A line carrying a control or format character is not the line its sender signed — technocore
+  sweeps those to a space before storing — and a line carrying a raw non-ASCII character has an
+  `id` that commits to different bytes than the line itself, because §3 hashes the ASCII-escaped
+  form. Both used to decode, and re-encoding either produced a line that no longer matched the
+  signature a reader had just verified. Emission is unchanged, the guard is now one definition
+  used by both halves of the codec, and no frame the reference has ever emitted is affected:
+  none of the 10,063 `tclk1 ` lines stored in the live `/r/tclk-offers` room carries a byte
+  outside printable ASCII. Decode still deliberately accepts non-canonical key order, which
+  real stored frames do carry.
 - Adaptor scalar parsing now rejects zero and out-of-range values instead of reducing them
   modulo the curve order, matching point-lock witness validation and preventing distinct
   byte strings from being treated as the same scalar (#27).

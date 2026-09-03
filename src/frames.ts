@@ -25,6 +25,12 @@ export const TCLK_PREFIX = "tclk1 " as const;
 export const TCLK_DOMAIN = "FLOP::tclk::v1" as const;
 /** Technocore's message cap: a frame must fit one single-line room message. */
 export const MAX_FRAME_CHARS = 4096;
+/**
+ * The other half of SPEC §2's frame sentence: single line, ASCII-only. One definition, used
+ * by both halves of the codec — the encoder must not emit a line the venue would sweep, and
+ * the decoder must not accept one, because such a line was never the line a sender signed.
+ */
+const PRINTABLE_ASCII = /^[\x20-\x7e]*$/;
 
 export type LockKind = "hash" | "point";
 
@@ -469,7 +475,7 @@ export function encodeFrame(frame: TclkFrame): string {
   }
   // Sweep guard: technocore replaces controls/format chars with spaces before storing,
   // which would silently change the bytes a reader re-verifies. Refuse to emit them.
-  if (!/^[\x20-\x7e]*$/.test(line)) fail("frame line contains non-printable-ASCII characters");
+  if (!PRINTABLE_ASCII.test(line)) fail("frame line contains non-printable-ASCII characters");
   return line;
 }
 
@@ -482,6 +488,12 @@ export function decodeFrame(text: string): TclkFrame {
   if (text.length > MAX_FRAME_CHARS) {
     fail(`frame exceeds the ${MAX_FRAME_CHARS}-char room-message cap (${text.length})`);
   }
+  // Single-line and ASCII-only are properties of a frame too, from the same §2 sentence as
+  // the cap. A line carrying a control or format char is not the line its sender signed —
+  // the venue swept it to a space before storing — and a raw non-ASCII char makes the id
+  // commit to bytes the line does not carry, since the id hashes the escaped form (§3).
+  // Before the parse, for the same reason the cap is.
+  if (!PRINTABLE_ASCII.test(text)) fail("frame line contains non-printable-ASCII characters");
   let parsed: unknown;
   try {
     parsed = JSON.parse(text.slice(TCLK_PREFIX.length));
