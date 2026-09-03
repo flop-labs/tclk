@@ -22,6 +22,18 @@ All notable changes to this project are documented here. Format follows
   documents what a shared instance costs, including that frames leave from its IP and share
   one rate budget.
 
+### Changed
+
+- Transcript folding now consumes complete signed records instead of bare `lines` plus
+  optional positional metadata. A record keeps its exact line, room, sequence, venue
+  timestamp, sender, nonce and signature together; `foldTranscript` verifies the signature
+  and sender binding and applies each frame at that record's timestamp. The MCP
+  `tclk_read_room` tool returns this shape directly and supports `full: true` for strict,
+  byte-exact `/export` history, while `tclk_apply_transcript` accepts only `records` and has
+  no fallback clock. `examples/audit-export.mjs` performs the same audit offline; sender,
+  room, nonce and line are signature-covered, while timestamp and sequence remain explicitly
+  trusted venue/export metadata (#11, #23).
+
 ### Fixed
 
 - New reveal/refund builders include the preceding lock's rail reference, and the state
@@ -34,6 +46,11 @@ All notable changes to this project are documented here. Format follows
   (#31). New emissions reject unregistered ids, while tclk/1 decoding retains its historical
   lowercase free-form grammar and exact membership so existing custom-rail contracts keep
   replaying. No golden wire constants changed.
+- Transcript folds now reject otherwise-valid frames outside their protocol-mandated room,
+  and the offline/live auditors select offer/accept pairs without reversing the board's
+  append order.
+- Pre-signature scalar validation now accepts only whole-byte hex encodings, rejecting
+  odd-length strings before they reach cryptographic parsing (#24).
 - Adaptor scalar parsing now rejects zero and out-of-range values instead of reducing them
   modulo the curve order, matching point-lock witness validation and preventing distinct
   byte strings from being treated as the same scalar (#27).

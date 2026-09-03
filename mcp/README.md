@@ -52,13 +52,18 @@ All keys come from the environment; none is ever accepted as a tool argument or 
 rail `ref`; heartbeat is a state-neutral liveness signal. Each returns `{ frame, line }`.
 
 **Reading** — `tclk_decode` (one line → frame, or a structured reason),
-`tclk_apply_transcript` (fold a room into one contract view with a per-line verdict),
+`tclk_apply_transcript` (authenticate and fold complete records with a per-record verdict),
 `tclk_verify_secret`.
 
 **PTLC** — `tclk_adaptor_presign`, `tclk_adaptor_adapt`, `tclk_adaptor_extract`,
 `tclk_adaptor_verify`. ⚠️ Unaudited reference cryptography; not for mainnet value flows.
 
 **Transport** — `tclk_post_frame`, `tclk_read_room`, `tclk_whoami`.
+
+`tclk_read_room` returns `records` ready to pass directly to `tclk_apply_transcript`.
+Set `full: true` to read the retained byte-exact `/export` history instead of the bounded
+live window. Each record keeps its line, sender, signature, nonce, sequence and venue time
+together; the fold has no parallel arrays and no fallback clock.
 
 ### `tclk_post_frame` has three tiers
 

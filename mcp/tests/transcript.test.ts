@@ -6,10 +6,43 @@
 
 import { describe, expect, it } from "vitest";
 
+import { dealRoom, decodeFrame, type TranscriptRecord } from "@flop-labs/tclk";
+
+import { canonicalMessage, signerFromSeed } from "../src/signing.js";
 import { createHandlers } from "../src/tools.js";
-import { HASH_OFFER, NOW, PAYEE_DID, PAYER_DID } from "./fixtures.js";
+import {
+  HASH_OFFER, NOW, PAYEE_DID, PAYEE_SEED, PAYER_DID, PAYER_SEED, hexToBytes,
+} from "./fixtures.js";
 
 const h = createHandlers({ env: {} });
+const payer = signerFromSeed(hexToBytes(PAYER_SEED));
+const payee = signerFromSeed(hexToBytes(PAYEE_SEED));
+
+function records(lines: string[], timestampMs: number): TranscriptRecord[] {
+  return lines.map((line, index) => {
+    let from = PAYER_DID;
+    let room = "mb-p-tclk-deadbeefdeadbeef";
+    try {
+      const frame = decodeFrame(line);
+      from = frame.from;
+      if (frame.type === "offer" || frame.type === "accept") room = "tclk-offers";
+      else room = dealRoom(frame.contract);
+    } catch {
+      // Signed non-frame room traffic still gets a fold verdict.
+    }
+    const signer = from === PAYEE_DID ? payee : payer;
+    const nonce = String(1000 + index);
+    return {
+      room,
+      seq: index,
+      timestampMs,
+      sender: signer.did,
+      nonce,
+      signature: signer.sign(canonicalMessage(room, Number(nonce), line)),
+      line,
+    };
+  });
+}
 
 function openDeal(offerFields = HASH_OFFER) {
   const offer = h.tclk_make_offer(offerFields);
@@ -41,8 +74,7 @@ describe("happy path", () => {
     });
 
     const result = h.tclk_apply_transcript({
-      lines: [offer.line, accept.line, lock.line, reveal.line, receipt.line],
-      nowMs: NOW,
+      records: records([offer.line, accept.line, lock.line, reveal.line, receipt.line], NOW),
     });
 
     expect(result.steps.map((s) => s.ok)).toEqual([true, true, true, true, true]);
@@ -86,8 +118,10 @@ describe("refund path", () => {
     });
 
     const open = h.tclk_apply_transcript({
-      lines: [offer.line, accept.line, lock.line, refund.line],
-      nowMs: lateExpiry.refundAfterMs + 1,
+      records: records(
+        [offer.line, accept.line, lock.line, refund.line],
+        lateExpiry.refundAfterMs + 1,
+      ),
     });
     expect(open.steps.map((s) => s.ok)).toEqual([true, true, true, true]);
     expect(open.status).toBe("refunded");
@@ -96,8 +130,10 @@ describe("refund path", () => {
     // Same transcript, one millisecond before the window: the refund is refused and the
     // contract stays locked.
     const early = h.tclk_apply_transcript({
-      lines: [offer.line, accept.line, lock.line, refund.line],
-      nowMs: lateExpiry.refundAfterMs - 1,
+      records: records(
+        [offer.line, accept.line, lock.line, refund.line],
+        lateExpiry.refundAfterMs - 1,
+      ),
     });
     expect(early.status).toBe("locked");
     expect(early.steps[3]).toMatchObject({ ok: false, reason: "refund window not open yet" });
@@ -115,14 +151,16 @@ describe("fail-closed folding", () => {
     });
 
     const result = h.tclk_apply_transcript({
-      lines: [
-        "gm everyone",
-        offer.line,
-        "tclk1 {\"type\":\"lock\"}",
-        accept.line,
-        stolenReveal.line,
-      ],
-      nowMs: NOW,
+      records: records(
+        [
+          "gm everyone",
+          offer.line,
+          "tclk1 {\"type\":\"lock\"}",
+          accept.line,
+          stolenReveal.line,
+        ],
+        NOW,
+      ),
     });
 
     expect(result.steps[0]).toMatchObject({ ok: false });
@@ -136,8 +174,8 @@ describe("fail-closed folding", () => {
   });
 
   it("refuses a transcript with no offer to open from", () => {
-    expect(() => h.tclk_apply_transcript({ lines: ["gm", "still not a frame"] })).toThrow(
-      /no offer frame/,
-    );
+    expect(() => h.tclk_apply_transcript({
+      records: records(["gm", "still not a frame"], NOW),
+    })).toThrow(/no authenticated offer frame/);
   });
 });

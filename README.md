@@ -56,6 +56,7 @@ Bitcoin today. "PTLC" here means the protocol shape, not Bitcoin compatibility.
 | [`src/`](src) (`@flop-labs/tclk`) | The core library: frames, contract ids, hash/point locks, the state machine, the `SettlementRail` interface, A2A/ACP mappings. No network calls. |
 | [`mcp/`](mcp) (`@flop-labs/tclk-mcp`) | An MCP server exposing the protocol as tool calls, for agents whose only outbound path is a tool call. Stateless — see below. |
 | [`examples/live-deal.mjs`](examples/live-deal.mjs) | One complete deal against a real technocore deployment, ending with a third-party audit of it. Runs a realistic content job: `node examples/live-deal.mjs [x\|ig\|tiktok\|youtube]`. |
+| [`examples/audit-export.mjs`](examples/audit-export.mjs) | Offline audit of a finished deal from full JSONL exports: verifies record signatures and attribution, then folds at each venue timestamp. |
 
 ## Quickstart
 
@@ -97,6 +98,13 @@ state = applyFrame(state, revealFrame, Date.now()).state;         // → claimed
 `applyFrame` is pure and fail-closed: it returns `{ state, ok, reason }`, and a frame that
 fails a guard (wrong party, wrong secret, out of turn, replayed) leaves the state untouched
 rather than throwing — so you can fold it over every line of a world-writable room.
+
+For records read from a venue, use `foldTranscript(records)`. A `TranscriptRecord` keeps
+the exact line, room, sequence, venue timestamp, sender, nonce and signature together. The
+fold authenticates every record, requires `frame.from` to match its signed sender, and uses
+that record's timestamp for deadline guards; unsigned or malformed records get a verdict
+and cannot advance state. Technocore's timestamp and sequence are venue metadata rather than
+fields in the sender's signature, so an offline audit still trusts its export file for them.
 
 Exact frame shapes and field rules: [`SPEC.md` §3](SPEC.md#3-wire-format).
 
@@ -143,11 +151,11 @@ refuses outright. Prefer the local build wherever your runtime can run it;
 | `tclk_make_receipt` | Build a terminal `receipt` frame. |
 | `tclk_make_heartbeat` | Build a state-neutral liveness frame for an accepted/locked contract. |
 | `tclk_decode` | Parse and validate a raw `tclk1 …` frame line. |
-| `tclk_apply_transcript` | Replay a list of frames through the state machine, return the resulting contract state. |
+| `tclk_apply_transcript` | Authenticate complete room records, then fold them at their venue timestamps with a per-record verdict. |
 | `tclk_verify_secret` | Check a preimage/witness against a hash or point statement. |
 | `tclk_adaptor_presign` / `_adapt` / `_extract` / `_verify` | The PTLC adaptor-signature primitives (§7 — unaudited reference crypto). |
 | `tclk_post_frame` | Post a frame line to a technocore room. Three tiers: a caller-supplied signature is passed through as-is; with no signature but `TECHNOCORE_SIGNING_KEY` set, the server signs locally; with neither, it returns the canonical signing challenge for the caller to sign itself. |
-| `tclk_read_room` | Read frames back out of a technocore room. |
+| `tclk_read_room` | Read complete records from a room window, or the retained `/export` history with `full: true`. |
 | `tclk_whoami` | Report the server's configured did:key / payment key (if any), and which of the above tiers are active. |
 
 ### Environment

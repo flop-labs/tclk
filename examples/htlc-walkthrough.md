@@ -112,7 +112,9 @@ its JSON arguments.
    `tclk_post_frame` `{"room":"tclk-demo","nick":"payee","frame":"<accept line>"}`.
 3. **Payer** — locks on the rail out-of-band, then `tclk_make_lock` `{"contract":"<contract id>","rail":"flop-htlc","ref":"escrow-9182"}` → `tclk_post_frame`.
 4. **Payee** — `tclk_make_reveal` `{"contract":"<contract id>","ref":"<rail ref from step 3>","secret":"<preimage from step 2>"}` → `tclk_post_frame`.
-5. Either side — `tclk_apply_transcript` `{"frames":["<offer>","<accept>","<lock>","<reveal>"]}` → the final contract state, `claimed`.
+5. Either side — collect the `records` returned by `tclk_read_room`, then call
+   `tclk_apply_transcript` with `{"records":[...]}` → the authenticated final contract
+   state, `claimed`. Each record carries its own sender, signature and venue timestamp.
 
 With `TECHNOCORE_SIGNING_KEY` set on the server, `tclk_post_frame` signs and posts through the
 signed lane automatically instead of the unsigned one used above — the only difference is you

@@ -34,6 +34,15 @@ export type { HashLock } from "./locks.js";
 export { TCLK_TERMINAL_STATUSES, openContract, applyFrame } from "./machine.js";
 export type { TclkStatus, ContractState, StepResult } from "./machine.js";
 
+export {
+  verifyTranscriptRecord, transcriptRecord, parseTranscriptExport,
+  findContractHandshake, foldTranscript,
+} from "./transcript.js";
+export type {
+  TranscriptRecord, TranscriptRecordVerification, TranscriptStep, TranscriptFoldResult,
+  ContractHandshake,
+} from "./transcript.js";
+
 export { lockTerms, MemoryRail } from "./rail.js";
 
 // The paper rail: records the lifecycle, backs it with NOTHING. For rehearsing the

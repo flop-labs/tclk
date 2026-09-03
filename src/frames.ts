@@ -163,7 +163,7 @@ const ASSET = /^[A-Za-z0-9_-]{1,32}$/;
 // transcripts remain replayable; encodeFrame separately requires registered canonical ids.
 const LEGACY_RAIL = new RegExp(TCLK1_RAIL_PATTERN);
 const NONCE = /^[0-9a-f]{8,64}$/;
-const SCALAR_HEX = /^0x[0-9a-f]{1,64}$/;
+const SCALAR_HEX = /^0x(?:[0-9a-f]{2}){1,32}$/;
 
 function fail(msg: string): never {
   throw new Error(`tclk: ${msg}`);

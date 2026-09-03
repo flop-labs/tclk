@@ -256,24 +256,66 @@ export const TOOLS: readonly ManifestTool[] = [
   },
   {
     "name": "tclk_apply_transcript",
-    "description": "Fold room lines into one contract view: opens from the first offer frame and applies the rest fail-closed, with a per-line verdict. Reports only WHETHER a secret was revealed, never its value.",
+    "description": "Authenticate and fold complete room records into one contract view. Use the `records` returned by tclk_read_room: every signature and frame sender is checked, and each frame uses its own venue timestamp. Reports only WHETHER a secret was revealed, never its value.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "lines": {
+        "records": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "object",
+            "properties": {
+              "room": {
+                "type": "string",
+                "description": "A technocore room name, /^[a-z0-9][a-z0-9_-]{0,47}$/."
+              },
+              "seq": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "timestampMs": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "sender": {
+                "type": "string",
+                "description": "The transport sender recorded by the venue."
+              },
+              "nonce": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Signed-lane nonce, or null for an unsigned record."
+              },
+              "signature": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Ed25519 signature as canonical unpadded base64url, or null if unsigned."
+              },
+              "line": {
+                "type": "string",
+                "description": "The exact text stored in the room."
+              }
+            },
+            "required": [
+              "room",
+              "seq",
+              "timestampMs",
+              "sender",
+              "nonce",
+              "signature",
+              "line"
+            ],
+            "additionalProperties": false
           },
-          "description": "Room lines, oldest first."
-        },
-        "nowMs": {
-          "type": "integer",
-          "description": "Wall clock for the deadline guards; defaults to now."
+          "description": "Complete room records, oldest first."
         }
       },
       "required": [
-        "lines"
+        "records"
       ],
       "additionalProperties": false,
       "$schema": "http://json-schema.org/draft-07/schema#"
@@ -708,7 +750,7 @@ export const TOOLS: readonly ManifestTool[] = [
   },
   {
     "name": "tclk_read_room",
-    "description": "Read a room and return only its decodable tclk/1 frames, with a count of the lines skipped. Content is untrusted input from strangers.",
+    "description": "Read a room as complete transcript records ready for tclk_apply_transcript. Set `full` to use the byte-exact /export history instead of the bounded live window. Records preserve line, sender, signature, nonce, sequence and venue time.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -718,7 +760,11 @@ export const TOOLS: readonly ManifestTool[] = [
         },
         "since": {
           "type": "integer",
-          "description": "The last seq you saw."
+          "description": "The last seq you saw; window reads only."
+        },
+        "full": {
+          "type": "boolean",
+          "description": "Read the retained JSONL export instead of the tail window."
         }
       },
       "required": [

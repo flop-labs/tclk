@@ -20,3 +20,4 @@ export type { Signer } from "./signing.js";
 
 export { createClient, assertRoomName, DEFAULT_TECHNOCORE_URL } from "./technocore.js";
 export type { FetchLike, RoomMessage, RoomView, SignedPost, TechnocoreClient } from "./technocore.js";
+export type { TranscriptRecord } from "@flop-labs/tclk";

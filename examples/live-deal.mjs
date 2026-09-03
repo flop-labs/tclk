@@ -24,9 +24,9 @@
 import { randomBytes } from "node:crypto";
 
 import {
-  OFFER_ROOM, PaperRail, applyFrame, dealRoom, decodeFrame, encodeFrame,
+  OFFER_ROOM, PaperRail, applyFrame, dealRoom, encodeFrame, findContractHandshake, foldTranscript,
   generateHashLock, lockTerms, makeAccept, makeOffer, openContract, paperNote,
-  stateNote, stateNoteValue, tryDecodeFrame,
+  parseTranscriptExport, stateNote, stateNoteValue, transcriptRecord,
 } from "../dist/index.js";
 import { canonicalMessage, nextNonce, signerFromSeed, sweep } from "../mcp/dist/signing.js";
 
@@ -109,11 +109,20 @@ async function req(url, init, what) {
   }
 }
 
-/** Read a room the way any stranger would. */
+/** Read the venue's bounded tail window as complete transcript records. */
 async function readRoom(room) {
   const res = await req(`${BASE}/r/${room}?format=json`, undefined, `read ${room}`);
   if (!res.ok) throw await refusal(`read ${room}`, res);
-  return res.json();
+  const view = await res.json();
+  if (!view || !Array.isArray(view.messages)) throw new Error(`read ${room}: no messages array`);
+  return view.messages.map((message) => transcriptRecord(room, message));
+}
+
+/** Read the retained room history. The strict parser never skips a malformed export row. */
+async function exportRoom(room) {
+  const res = await req(`${BASE}/r/${room}/export`, undefined, `export ${room}`);
+  if (!res.ok) throw await refusal(`export ${room}`, res);
+  return parseTranscriptExport(room, await res.text());
 }
 
 /** Post one frame through the signed lane, as the given identity. */
@@ -314,24 +323,19 @@ await notes.set(note.ns, note.key, stateNoteValue("claimed", ref), {
 // 5 — a third party, holding no secrets, reconstructs the deal from the venue alone.
 console.log();
 log(5, "third-party verification, from the rooms only:");
-const board = await readRoom(OFFER_ROOM);
+const board = await exportRoom(OFFER_ROOM);
 const dealLog = await readRoom(room);
 
-const offerLine = board.messages.map((m) => tryDecodeFrame(m.text)).find((f) => f?.id === offer.id);
-const acceptLine = board.messages
-  .map((m) => tryDecodeFrame(m.text))
-  .find((f) => f?.type === "accept" && f.contract === accept.contract);
-if (!offerLine || !acceptLine) throw new Error("could not find the deal on the board");
+const handshake = findContractHandshake(board, accept.contract);
+if (handshake === null) throw new Error("could not find the deal on the full board export");
 
-// Fold every frame the venue actually stored — including anything a stranger posted.
-let audit = openContract(offerLine);
-let applied = 0;
-let skipped = 0;
-for (const message of [acceptLine, ...dealLog.messages.map((m) => tryDecodeFrame(m.text))]) {
-  if (message === null) { skipped += 1; continue; }
-  const step = applyFrame(audit, message, Date.now());
-  if (step.ok) { applied += 1; audit = step.state; } else { skipped += 1; }
-}
+// Fold complete records, not parallel lines/timestamps/senders. Signature, attribution
+// and the record's own venue time are checked before a frame can advance the state.
+const folded = foldTranscript([handshake.offer, handshake.accept, ...dealLog]);
+if (folded.state === null) throw new Error("the authenticated transcript contains no offer");
+const audit = folded.state;
+const applied = folded.steps.filter((step) => step.ok).length;
+const skipped = folded.steps.length - applied;
 
 log("", `replayed ${applied} frames, ignored ${skipped}, final status: ${audit.status}`);
 log("", `secret in the transcript opens the statement: ${audit.secret === lock.preimage}`);
