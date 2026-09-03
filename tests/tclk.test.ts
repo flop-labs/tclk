@@ -252,6 +252,26 @@ describe("tclk state machine", () => {
     expect(receipt.ok).toBe(true);
     expect(receipt.state.status).toBe("claimed");
 
+    const validReceiptWithRail = applyFrame(claimed.state, {
+      type: "receipt", from: PAYER_DID, contract: state.contract!, outcome: "claimed",
+      rail: "flop-htlc", ref: "escrow-42",
+    }, T0 + 3);
+    expect(validReceiptWithRail.ok).toBe(true);
+
+    const wrongRail = applyFrame(claimed.state, {
+      type: "receipt", from: PAYER_DID, contract: state.contract!, outcome: "claimed",
+      rail: "x402",
+    }, T0 + 3);
+    expect(wrongRail.ok).toBe(false);
+    expect(wrongRail.reason).toMatch(/receipt rail x402 does not match contract rail flop-htlc/);
+
+    const wrongRef = applyFrame(claimed.state, {
+      type: "receipt", from: PAYER_DID, contract: state.contract!, outcome: "claimed",
+      ref: "different-ref",
+    }, T0 + 3);
+    expect(wrongRef.ok).toBe(false);
+    expect(wrongRef.reason).toMatch(/receipt ref does not match contract railRef/);
+
     const contradictoryReceipt = applyFrame(claimed.state, {
       type: "receipt", from: PAYER_DID, contract: state.contract!, outcome: "refunded",
     }, T0 + 3);
