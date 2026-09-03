@@ -19,6 +19,9 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Technocore note parsers now reject capability lists with empty rail entries and state
+  pointers with malformed rail references, matching the encoders and keeping world-writable
+  note input fail-closed.
 - `SPEC.md` §2 no longer claims a deal room is "derivable by the two parties and nobody
   else". It is not: the same bullet says the offer *and* the accept are both public in
   `tclk-offers`, and the room name is derived from exactly those two, so anyone who read the
