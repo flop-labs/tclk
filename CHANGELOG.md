@@ -93,6 +93,16 @@ All notable changes to this project are documented here. Format follows
   decoder uses and the package ships it, so an independent implementation validating
   against the schema was being told to emit frames the reference refuses. Only the schema
   moved. No decoder behaviour, wire byte or golden vector changed.
+- `schema/tclk1-frames.schema.json` also admitted two `offer` shapes the decoder rejects, in
+  the leaves #59's string sweep could not reach. A `point` lock with no `paymentKey`
+  validated, where SPEC §3.1 makes the key required for point locks and `validateFrame`
+  refuses the frame; and `claimByMs`, `refundAfterMs` and `expiresMs` were `minimum: 1` with
+  no ceiling, so every integer above 2^53 - 1 — the largest `requireMs` accepts, and the
+  point where a JSON number stops round-tripping to a distinct integer — was schema-valid
+  and decoder-invalid. The three leaves now carry `maximum: 9007199254740991` and the offer
+  definition carries the point-lock rule as `if`/`then`. Only the schema moved: the generated
+  field contract and the SPEC table are byte-identical, and no wire byte or golden vector
+  changed.
 - `decodeFrame` now enforces the same `MAX_FRAME_CHARS` room-message cap `encodeFrame` does.
   SPEC §2 states the cap as a property of a frame, and technocore refuses a longer text, so a
   longer line was never a stored room message. The check runs before `JSON.parse`, which bounds
