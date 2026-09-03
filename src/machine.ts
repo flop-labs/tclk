@@ -118,6 +118,7 @@ export function applyFrame(state: ContractState, frame: TclkFrame, nowMs: number
       if (accept.ref !== state.offer.id) return reject(state, "accept.ref names a different offer");
       if (accept.from === state.offer.from) return reject(state, "cannot accept own offer");
       if (nowMs >= state.offer.expiresMs) return reject(state, "offer has expired");
+      if (nowMs >= state.offer.refundAfterMs) return reject(state, "refund window is already open");
       const expected = contractId(state.offer, {
         from: accept.from,
         ref: accept.ref,
