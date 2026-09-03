@@ -1,0 +1,84 @@
+name: Release
+
+# A tag is the trigger, and deliberately the only one that publishes. A fork cannot
+# push a tag to this repository, so there is no path from an untrusted pull request to
+# a publish — which is the property that makes running this with a registry credential
+# safe at all. `workflow_dispatch` is here so the whole path can be rehearsed, and it
+# is wired to `--dry-run` below: it packs, it authenticates, it reports what it would
+# send, and it publishes nothing.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    # Human gate. Configure `npm` in Settings → Environments with a required reviewer;
+    # npm's trusted-publisher config can name this environment too, in which case a
+    # workflow that skipped it cannot mint a token at all.
+    environment: npm
+
+    # Scoped to this job, not the workflow: `id-token: write` is the whole credential
+    # here — it is what npm exchanges for a publish token — so no other job should be
+    # able to ask for one. Everything else stays read-only.
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # No registry-url and no NODE_AUTH_TOKEN on purpose. pnpm 11 performs the OIDC
+      # exchange itself — id-token in, short-lived registry token out — and decides on
+      # provenance by probing the package's visibility. A `.npmrc` written by
+      # setup-node would only put an empty token placeholder in its way.
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm -r --include-workspace-root build
+      - run: pnpm -r --include-workspace-root test
+
+      # The tag is the release's claim about what version this is; the manifests are
+      # the fact. A mismatch means one of them is wrong, and finding out after the
+      # version is on the registry is too late — npm versions are immutable.
+      - name: Tag matches both manifests
+        if: github.event_name == 'push'
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          for manifest in package.json mcp/package.json; do
+            version=$(node -p "require('./$manifest').version")
+            if [ "$tag" != "$version" ]; then
+              echo "tag $GITHUB_REF_NAME says $tag, but $manifest says $version" >&2
+              exit 1
+            fi
+          done
+          echo "both manifests agree: $tag"
+
+      # `-r --include-workspace-root` publishes in dependency order, so the library
+      # lands before the MCP server that depends on it — the order matters, because
+      # anyone installing the server in the gap between the two gets an unresolvable
+      # dependency. Already-published versions are skipped, so a re-run after a partial
+      # failure completes the release rather than erroring on what already went out.
+      #
+      # No `--access`: `publishConfig` states it in both manifests. No `--provenance`:
+      # passing it explicitly *skips* the visibility probe, and letting OIDC decide is
+      # what attaches the attestation correctly.
+      #
+      # `--no-git-checks` because a tag build is a detached HEAD, and pnpm's default
+      # check wants to see a branch. The tag/manifest check above is the real guard.
+      - name: Publish
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            pnpm -r --include-workspace-root publish --no-git-checks
+          else
+            echo "workflow_dispatch: dry run, nothing will be published"
+            pnpm -r --include-workspace-root publish --no-git-checks --dry-run
+          fi

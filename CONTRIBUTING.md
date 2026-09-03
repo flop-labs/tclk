@@ -71,3 +71,32 @@ same reason means you must build before running `examples/live-deal.mjs` — it 
 Explain what changes for a caller and why, link related issues, and confirm the three CI commands
 pass locally. Keep the branch current with `main`; address review with additional commits or a
 clean rebase. All required checks must pass before merge.
+
+## Releasing (maintainers)
+
+Publishing runs from `.github/workflows/release.yml` on a `v*` tag, and holds no registry
+token: pnpm exchanges the workflow's OIDC id-token for a short-lived one and attaches
+provenance, so there is no long-lived secret in this repository to leak. A fork cannot push
+a tag, so there is no route from an untrusted pull request to the registry.
+
+One release:
+
+1. Fold `[Unreleased]` in `CHANGELOG.md` into a dated section and set the version in both
+   `package.json` and `mcp/package.json` — the workflow refuses to publish if the tag and
+   the two manifests disagree.
+2. Tag it `vX.Y.Z` and push the tag.
+3. Approve the `npm` environment when it asks.
+
+`pnpm -r --include-workspace-root publish` runs in dependency order, so `@flop-labs/tclk`
+lands before the MCP server that depends on it, and already-published versions are skipped —
+a re-run after a partial failure finishes the release rather than failing on what already
+went out.
+
+To rehearse without publishing, run the workflow manually: `workflow_dispatch` takes the
+same path and ends in `--dry-run`.
+
+**Bootstrapping.** npm can only attach a trusted publisher to a package that already exists,
+so the very first version of each package goes out by hand (`pnpm publish`, authenticated
+locally). After that, configure each package's trusted publisher on npmjs.com — this
+repository, workflow `release.yml`, environment `npm` — and every later release comes from
+the tag.
