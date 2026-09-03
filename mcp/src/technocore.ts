@@ -12,12 +12,20 @@ import { parseTranscriptExport, type TranscriptRecord } from "@flop-labs/tclk";
 const NAME_RE = /^[a-z0-9][a-z0-9_-]{0,47}$/;
 
 /**
- * 1 MiB, the same budget `mcp/worker/src/worker.ts` puts on a request body, for the same
- * reason: frame lines are short and a transcript is a few hundred of them, so a body past
- * this is a mistake or an attack, and reading it to find out is the cost either way. That
- * argument does not care which direction the bytes travel, but until now only the inbound
- * side made it. A room is world-writable and append-only, so writes are cheap and the
- * history a single reader must swallow is not — `/export` returns everything ever posted.
+ * 1 MiB, the budget `mcp/worker/src/worker.ts` already puts on a request body, for the
+ * reason it gives there: frame lines are short and a transcript is a few hundred of them,
+ * so a body past this is a mistake or an attack. That argument does not care which
+ * direction the bytes travel, but until now only the inbound side made it. A room is
+ * world-writable and append-only, so writes are cheap and the history one reader must
+ * swallow is not: `/export` returns everything ever posted.
+ *
+ * Same number and same reason as the inbound cap, not the same mechanism. The inbound
+ * check reads the body first and rejects on its length afterwards; this one refuses while
+ * reading and never holds more than the cap. Deliberately stricter, because a request
+ * arrives once from a caller the Worker can answer with a 413, while a venue response is
+ * fetched on that caller's behalf and there is nobody left to bill for it. The two
+ * constants stay separate here; folding them into one definition means touching the
+ * inbound path, which is a different change.
  *
  * Applied to every venue response, error bodies included: a refusal is still a body.
  */
@@ -33,7 +41,13 @@ async function readCapped(response: Response, what: string): Promise<string> {
     new Error(`tclk-mcp: ${what} returned more than ${MAX_VENUE_BODY_BYTES} bytes`);
 
   const declared = response.headers.get("content-length");
-  if (declared !== null && Number(declared) > MAX_VENUE_BODY_BYTES) throw tooBig();
+  if (declared !== null && Number(declared) > MAX_VENUE_BODY_BYTES) {
+    // Refusing before the first read still leaves a body attached; drop it rather than
+    // return with the transfer open. A malformed or absent header falls through on
+    // purpose — this is an early exit, and the running total below is what enforces.
+    await response.body?.cancel().catch(() => {});
+    throw tooBig();
+  }
 
   const body = response.body;
   if (body === null) return "";

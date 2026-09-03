@@ -379,6 +379,54 @@ describe("venue response size", () => {
     expect(result.records[0]).toMatchObject({ seq: 1, line: "gm" });
   });
 
+  it("caps the venue's acknowledgement of a post, not just what it serves on a read", async () => {
+    const { fetchLike } = fakeFetch([{ body: "z".repeat(OVER) }]);
+    const h = createHandlers({ env: { TECHNOCORE_SIGNING_KEY: PAYER_SEED }, fetch: fetchLike });
+    await expect(h.tclk_post_frame({ room: ROOM, line: offerLine() })).rejects.toThrow(
+      /more than 1048576 bytes/,
+    );
+  });
+
+  it("drops the body when it refuses on the declared length, leaving no open transfer", async () => {
+    let cancelled = false;
+    const fetchLike = async () => {
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.enqueue(new TextEncoder().encode("x"));
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: { "content-type": "text/plain", "content-length": String(OVER) },
+      });
+    };
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+    await expect(h.tclk_read_room({ room: "lobby", full: true })).rejects.toThrow(
+      /more than 1048576 bytes/,
+    );
+    expect(cancelled).toBe(true);
+  });
+
+  it("does not treat an unusable content-length as permission", async () => {
+    // NaN, negative and multi-value headers all fail the early comparison. That is fine:
+    // the early check is an optimization, and the running total is what enforces. This
+    // pins that, so a later "improvement" to the header parse cannot open a hole.
+    for (const declared of ["abc", "-1", "1, 99999999", ""]) {
+      const fetchLike = async () =>
+        new Response("x".repeat(OVER), {
+          status: 200,
+          headers: { "content-type": "text/plain", "content-length": declared },
+        });
+      const h = createHandlers({ env: {}, fetch: fetchLike });
+      await expect(h.tclk_read_room({ room: "lobby", full: true })).rejects.toThrow(
+        /more than 1048576 bytes/,
+      );
+    }
+  });
+
   it("caps an error body too, so a refusal cannot be the payload", async () => {
     const { fetchLike } = fakeFetch([{ status: 500, body: "y".repeat(OVER) }]);
     const h = createHandlers({ env: {}, fetch: fetchLike });
