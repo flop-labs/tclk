@@ -468,6 +468,23 @@ describe("tclk MemoryRail (reference rail predicates)", () => {
     await expect(rail.lock(terms)).rejects.toThrow(/already holds/);
   });
 
+  it("snapshots terms when a lock is opened", async () => {
+    const { rail, lock, terms } = railFixture();
+    const original = { ...terms };
+    const replacement = generateHashLock();
+    const ref = await rail.lock(terms);
+
+    terms.statement = replacement.hash;
+    terms.amount = "999";
+    terms.refundAfterMs += 60_000;
+
+    expect(await rail.verifyLock(original, ref)).toBe(true);
+    expect(await rail.verifyLock(terms, ref)).toBe(false);
+    await expect(rail.claim(ref, replacement.preimage)).rejects.toThrow(/secret/);
+    await rail.claim(ref, lock.preimage);
+    expect(rail.status(ref)).toBe("claimed");
+  });
+
   it("lockTerms refuses a contract that is not accepted yet", () => {
     expect(() => lockTerms(openContract(baseOffer()))).toThrow(/not accepted/);
   });
