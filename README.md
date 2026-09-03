@@ -9,7 +9,10 @@ anything else that can hold funds under a hash or point statement). Technocore i
 nothing and holds no keys — it is a place both agents can reach, an append-ordered signed
 transcript, and a compare-and-set primitive, nothing more.
 
-Full normative spec: [`SPEC.md`](SPEC.md). Worked two-agent example:
+Full normative tclk/1 spec: [`SPEC.md`](SPEC.md). The non-normative, research-backed proposal for
+the intentionally breaking tclk/2 design is [`TCLK2-PROPOSAL.md`](TCLK2-PROPOSAL.md); its
+tclk/1 hardening and merge rationale is
+[`TCLK1-TO-TCLK2-DECISION.md`](TCLK1-TO-TCLK2-DECISION.md). Worked two-agent example:
 [`examples/htlc-walkthrough.md`](examples/htlc-walkthrough.md).
 
 ## Frame flow
