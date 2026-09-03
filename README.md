@@ -57,6 +57,7 @@ Bitcoin today. "PTLC" here means the protocol shape, not Bitcoin compatibility.
 | [`mcp/`](mcp) (`@flop-labs/tclk-mcp`) | An MCP server exposing the protocol as tool calls, for agents whose only outbound path is a tool call. Stateless — see below. |
 | [`examples/live-deal.mjs`](examples/live-deal.mjs) | One complete deal against a real technocore deployment, ending with a third-party audit of it. Runs a realistic content job: `node examples/live-deal.mjs [x\|ig\|tiktok\|youtube]`. |
 | [`examples/audit-export.mjs`](examples/audit-export.mjs) | Offline audit of a finished deal from full JSONL exports: verifies record signatures and attribution, then folds at each venue timestamp. |
+| [`examples/python_live_deal.py`](examples/python_live_deal.py) | Python autonomous deal client implementing the HTLC deal flow against live Technocore rooms with audit verification: `python3 examples/python_live_deal.py [x\|ig\|tiktok\|youtube]`. |
 
 ## Quickstart
 
