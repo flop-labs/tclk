@@ -19,12 +19,14 @@ the three CI commands on `main` (all green: 93 library, 34 MCP, 31 worker tests)
    rail-native expiry, pinned point/adaptor suites, an offer that carries its own condition, a
    signed abandonment, and multi-rail reconciliation. Those cannot be added to tclk/1 without
    new keys, which every existing decoder rejects. That is a version bump in practice.
-4. **Recommendation:** merge #58 as design direction, but amend decision items 5 and 6. The
-   first flop-core HTLC adapter should be built against the restricted tclk/1 path, behind a
-   verified settlement view, and the facts it produces about flop-core's clock, finality, and
-   evidence should feed the normative tclk/2 spec. Every open decision listed at the end of the
-   proposal is a flop-core fact that only a working rail can supply. Building the rail second
-   means guessing those facts first.
+4. **Recommendation:** keep #58 open as a discussion draft for now. Nothing in the merge queue
+   depends on it: every hardening PR is byte-preserving and stands on `SPEC.md` alone. When #58
+   is revisited, amend decision items 5 and 6 as set out below. The first flop-core HTLC adapter
+   should be built against the restricted tclk/1 path, behind a verified settlement view, and
+   the facts it produces about flop-core's clock, finality, and evidence should feed the
+   normative tclk/2 spec. Every open decision listed at the end of the proposal is a flop-core
+   fact that only a working rail can supply. Building the rail second means guessing those
+   facts first.
 5. **The merge queue is sound with the corrections listed below.** The most important: no
    fork PR except #53 has actually run CI (every other head is `action_required`), PR #56 has a
    bug that defeats its own purpose, and PR #16 is neither superseded nor free of a conflict
@@ -147,22 +149,65 @@ throwaway checkouts. Findings that change a disposition or a stated reason:
 Dispositions that were checked and stand unchanged: #60, #59, #52, #55, #53, #21, #28, #13,
 and the issue table.
 
-## Part 3: amended merge order
+## Part 3: action list
 
-1. Merge #58 with the amendments above applied to the decision note.
-2. Approve CI on, then merge in this order: #60, #59, #63, #51. All four are on current `main`
-   and pass locally.
-3. Rebase #16 with the presig strictness split out and the `presig.s` pattern reconciled with
-   #59; merge.
-4. Merge #52 and #55. Fix the field names in #56, add the real-record test, merge; close #45.
-5. Regenerate the two lines in #50 and merge; resolve the SPEC conflict in #32 and merge; close
-   #49 and #5.
-6. Land the tclk/1 construction restriction together with the settlement view and the derived
+#58 stays open. The queue below does not wait on it.
+
+### Merge now (once a maintainer approves the CI run)
+
+All six sit on current `main`, build and pass locally, and touch no vector.
+
+| PR | What it is | Note for the merge |
+| --- | --- | --- |
+| #60 | Decode enforces the 4096-char room cap before parsing | None |
+| #59 | Schema pins the value patterns the decoder already enforces | Land before #16 |
+| #63 | Hex decoder refuses empty input and stops echoing secrets in errors | Changelog line should say that, not "strict hex" |
+| #51 | Receipt must name the lock's rail and ref; zero witness rejected | Changelog states the rail comparison is byte-exact |
+| #52 | MCP window read isolates a malformed envelope and reports it | None |
+| #55 | MCP post keeps a string nonce exact | None |
+
+### Merge after a small fix
+
+| PR | Fix needed |
+| --- | --- |
+| #56 | Reconciliation key must read `sender` and `line`, not `from` and `text`; add a test through a real `TranscriptRecord`. Then close #45 and issue #2. |
+| #16 | Rebase on `main`; keep the three-line nested-key fix; drop the `presig` nonce and scalar tightening or reconcile its pattern with #59 first. |
+| #50 | Regenerate the reveal and refund lines with `ref` so they match `main`; then close issue #49. |
+| #32 | Resolve the `SPEC.md` conflict; changelog states that historical proposed-stage cancels naming an arbitrary id now fold to rejected. Then close issue #5. |
+| #62 | Make the non-strict mode select the offer room as the only post-accept source instead of admitting two rooms; keep the strict default; rewrite the spec and changelog justification to the per-client room quota. Then close issues #61 and #3. |
+| #13 | Reduce to the golden-vector checker plus a CI step that runs it; drop `apply_frame` and the memory rail, which have already drifted from `main`. |
+
+### Revise before merge
+
+| PR | Change |
+| --- | --- |
+| #54 | Keep the 1 MiB cap on room reads, posts, and error bodies; exempt or parameterize `/export`, which is the MCP full-history audit path. |
+
+### Close
+
+| PR | Reason |
+| --- | --- |
+| #45 | Superseded by #56, which carries the same per-attempt timeout. |
+| #53 | Makes two byte-distinct salt spellings open one commitment; canonical hex stays lowercase. |
+| #65 | Prints "Deal complete" after the strict fold stopped at `accepted`, on the strength of a world-writable note. No mergeable subset. |
+| #28 | No vector pin, no state machine, no CI wiring; a second lifecycle to migrate. |
+
+Issues to close without a PR: #64 (the named symbols are not in this repository).
+
+### Hold
+
+| PR | Reason |
+| --- | --- |
+| #58 | Stays open as the design draft. Apply the item 5 and 6 amendments above when revisited. |
+| #21 | Retarget. Regardless of protocol version it needs its own package: it imports a network-capable dependency under `src/`, which AGENTS.md forbids. |
+
+### After the queue
+
+1. Land the tclk/1 construction restriction with the settlement view and the derived
    `canLock`, `fundingDeadlinePassed`, and `refundOpen` predicates, plus emission-side checks for
    `expiresMs < claimByMs` and duplicate JSON keys. Close #12, #36, #41, #26, #48 through it.
-7. Reshape #62 into a single-source option and merge; close #65, #61, #3.
-8. Build the flop-core adapter against the restricted tclk/1 path with the settlement view.
-   Write the normative tclk/2 direct profile from what it teaches.
+2. Build the flop-core adapter against the restricted tclk/1 path with the settlement view.
+   Write the normative tclk/2 direct profile from what it teaches, and revisit #58 then.
 
 ## Part 4: answers to the six review questions
 
