@@ -387,6 +387,44 @@ export const TOOLS: readonly ManifestTool[] = [
     }
   },
   {
+    "name": "tclk_make_heartbeat",
+    "description": "Build a signed liveness frame for an accepted or locked contract. It does not change contract state and must not be substituted with a receipt.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string",
+          "description": "A did:key:z6Mk… transport identity."
+        },
+        "contract": {
+          "type": "string",
+          "description": "The 0x-prefixed 32-byte contract id."
+        },
+        "nonce": {
+          "type": "string",
+          "description": "Hex; minted if omitted."
+        },
+        "note": {
+          "type": "string",
+          "description": "Optional non-authoritative liveness note."
+        }
+      },
+      "required": [
+        "from",
+        "contract"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
     "name": "tclk_make_lock",
     "description": "Build the payer's lock frame naming the rail and its reference.",
     "inputSchema": {
@@ -593,7 +631,7 @@ export const TOOLS: readonly ManifestTool[] = [
   },
   {
     "name": "tclk_make_refund",
-    "description": "Build the payer's refund frame (valid only once refundAfterMs has passed).",
+    "description": "Build the payer's refund frame bound to the preceding lock's rail reference (valid only once refundAfterMs has passed).",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -605,13 +643,18 @@ export const TOOLS: readonly ManifestTool[] = [
           "type": "string",
           "description": "The 0x-prefixed 32-byte contract id."
         },
+        "ref": {
+          "type": "string",
+          "description": "Rail reference from the lock frame."
+        },
         "reason": {
           "type": "string"
         }
       },
       "required": [
         "from",
-        "contract"
+        "contract",
+        "ref"
       ],
       "additionalProperties": false,
       "$schema": "http://json-schema.org/draft-07/schema#"
@@ -626,7 +669,7 @@ export const TOOLS: readonly ManifestTool[] = [
   },
   {
     "name": "tclk_make_reveal",
-    "description": "Build the payee's reveal frame. Posting this publishes the secret.",
+    "description": "Build the payee's reveal frame, bound to the preceding lock's rail reference. Posting this publishes the secret.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -638,6 +681,10 @@ export const TOOLS: readonly ManifestTool[] = [
           "type": "string",
           "description": "The 0x-prefixed 32-byte contract id."
         },
+        "ref": {
+          "type": "string",
+          "description": "Rail reference from the lock frame."
+        },
         "secret": {
           "type": "string",
           "description": "32-byte preimage or witness, 0x-hex."
@@ -646,6 +693,7 @@ export const TOOLS: readonly ManifestTool[] = [
       "required": [
         "from",
         "contract",
+        "ref",
         "secret"
       ],
       "additionalProperties": false,

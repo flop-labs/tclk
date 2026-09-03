@@ -147,9 +147,16 @@ export function createServer(options: HandlerOptions = {}): McpServer {
   server.registerTool(
     "tclk_make_reveal",
     {
-      description: "Build the payee's reveal frame. Posting this publishes the secret.",
+      description:
+        "Build the payee's reveal frame, bound to the preceding lock's rail reference. " +
+        "Posting this publishes the secret.",
       annotations: READS,
-      inputSchema: { from: did, contract, secret: z.string().describe("32-byte preimage or witness, 0x-hex.") },
+      inputSchema: {
+        from: did,
+        contract,
+        ref: z.string().describe("Rail reference from the lock frame."),
+        secret: z.string().describe("32-byte preimage or witness, 0x-hex."),
+      },
     },
     (args) => run(() => h.tclk_make_reveal(args)),
   );
@@ -157,9 +164,16 @@ export function createServer(options: HandlerOptions = {}): McpServer {
   server.registerTool(
     "tclk_make_refund",
     {
-      description: "Build the payer's refund frame (valid only once refundAfterMs has passed).",
+      description:
+        "Build the payer's refund frame bound to the preceding lock's rail reference " +
+        "(valid only once refundAfterMs has passed).",
       annotations: READS,
-      inputSchema: { from: did, contract, reason: z.string().optional() },
+      inputSchema: {
+        from: did,
+        contract,
+        ref: z.string().describe("Rail reference from the lock frame."),
+        reason: z.string().optional(),
+      },
     },
     (args) => run(() => h.tclk_make_refund(args)),
   );
@@ -188,6 +202,23 @@ export function createServer(options: HandlerOptions = {}): McpServer {
       },
     },
     (args) => run(() => h.tclk_make_receipt(args)),
+  );
+
+  server.registerTool(
+    "tclk_make_heartbeat",
+    {
+      description:
+        "Build a signed liveness frame for an accepted or locked contract. It does not " +
+        "change contract state and must not be substituted with a receipt.",
+      annotations: READS,
+      inputSchema: {
+        from: did,
+        contract,
+        nonce: z.string().optional().describe("Hex; minted if omitted."),
+        note: z.string().optional().describe("Optional non-authoritative liveness note."),
+      },
+    },
+    (args) => run(() => h.tclk_make_heartbeat(args)),
   );
 
   server.registerTool(

@@ -311,7 +311,7 @@ await notes.set(note.ns, note.key, stateNoteValue("locked", ref), { if: stateNot
 
 // 4 — the payee claims by publishing the secret. Publishing it IS the claim.
 const revealFrame = {
-  type: "reveal", from: payee.did, contract: accept.contract, secret: lock.preimage,
+  type: "reveal", from: payee.did, contract: accept.contract, ref, secret: lock.preimage,
 };
 await post(payee, room, revealFrame);
 await rail.claim(ref, lock.preimage);

@@ -34,6 +34,7 @@ describe("createServer", () => {
       "tclk_apply_transcript",
       "tclk_decode",
       "tclk_make_cancel",
+      "tclk_make_heartbeat",
       "tclk_make_lock",
       "tclk_make_offer",
       "tclk_make_receipt",

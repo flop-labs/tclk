@@ -11,13 +11,19 @@
 export {
   TCLK_VERSION, TCLK_PREFIX, TCLK_DOMAIN, MAX_FRAME_CHARS,
   canonicalJson, offerId, contractId, isValidStatement, validateFrame,
-  makeOffer, makeAccept,
+  makeOffer, makeAccept, makeHeartbeat,
   isTclkLine, encodeFrame, decodeFrame, tryDecodeFrame,
 } from "./frames.js";
 export type {
   LockKind, JobRef, OfferFields, OfferFrame, AcceptFrame, AcceptCore, PresigRef,
-  LockFrame, RevealFrame, RefundFrame, CancelFrame, ReceiptFrame, TclkFrame,
+  LockFrame, RevealFrame, RefundFrame, CancelFrame, ReceiptFrame, HeartbeatFrame, TclkFrame,
 } from "./frames.js";
+
+export {
+  CANONICAL_RAIL_IDS, normalizeRailId, normalizeRailIds,
+  railSetsMatch, matchingRails, offerIncludesRail,
+} from "./rails.js";
+export type { CanonicalRailId } from "./rails.js";
 
 export {
   hashLockFromPreimage, generateHashLock, verifyHashPreimage, verifySecret,

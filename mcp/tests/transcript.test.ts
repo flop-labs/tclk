@@ -18,7 +18,7 @@ const h = createHandlers({ env: {} });
 const payer = signerFromSeed(hexToBytes(PAYER_SEED));
 const payee = signerFromSeed(hexToBytes(PAYEE_SEED));
 
-function records(lines: string[], timestampMs: number): TranscriptRecord[] {
+function records(lines: string[], timestampMs: number | number[]): TranscriptRecord[] {
   return lines.map((line, index) => {
     let from = PAYER_DID;
     let room = "mb-p-tclk-deadbeefdeadbeef";
@@ -35,7 +35,7 @@ function records(lines: string[], timestampMs: number): TranscriptRecord[] {
     return {
       room,
       seq: index,
-      timestampMs,
+      timestampMs: typeof timestampMs === "number" ? timestampMs : timestampMs[index]!,
       sender: signer.did,
       nonce,
       signature: signer.sign(canonicalMessage(room, Number(nonce), line)),
@@ -62,6 +62,7 @@ describe("happy path", () => {
     const reveal = h.tclk_make_reveal({
       from: PAYEE_DID,
       contract: accept.contract,
+      ref: "escrow-42",
       secret: accept.secret,
     });
     const receipt = h.tclk_make_receipt({
@@ -96,13 +97,8 @@ describe("happy path", () => {
 });
 
 describe("refund path", () => {
-  // The machine folds a whole transcript at ONE wall clock, so a transcript that reaches
-  // a refund must be an offer whose `expiresMs` outlives its own refund window —
-  // otherwise the accept, replayed at refund time, is (correctly) rejected as expired.
-  const lateExpiry = { ...HASH_OFFER, expiresMs: HASH_OFFER.refundAfterMs + 600_000 };
-
   it("folds offer → accept → lock → refund to refunded once the window is open", () => {
-    const { offer, accept } = openDeal(lateExpiry);
+    const { offer, accept } = openDeal();
     const lock = h.tclk_make_lock({
       from: PAYER_DID,
       contract: accept.contract,
@@ -112,25 +108,26 @@ describe("refund path", () => {
     const refund = h.tclk_make_refund({
       from: PAYER_DID,
       contract: accept.contract,
+      ref: "escrow-43",
       reason: "payee never revealed",
     });
 
     const open = h.tclk_apply_transcript({
       records: records(
         [offer.line, accept.line, lock.line, refund.line],
-        lateExpiry.refundAfterMs + 1,
+        [NOW - 1, NOW, NOW + 1, HASH_OFFER.refundAfterMs],
       ),
     });
     expect(open.steps.map((s) => s.ok)).toEqual([true, true, true, true]);
     expect(open.status).toBe("refunded");
     expect(open.secretRevealed).toBe(false);
 
-    // Same transcript, one millisecond before the window: the refund is refused and the
-    // contract stays locked.
+    // With only the refund record moved one millisecond before the boundary, the lock
+    // remains valid but the refund is refused.
     const early = h.tclk_apply_transcript({
       records: records(
         [offer.line, accept.line, lock.line, refund.line],
-        lateExpiry.refundAfterMs - 1,
+        [NOW - 1, NOW, NOW + 1, HASH_OFFER.refundAfterMs - 1],
       ),
     });
     expect(early.status).toBe("locked");
@@ -144,6 +141,7 @@ describe("fail-closed folding", () => {
     const stolenReveal = h.tclk_make_reveal({
       from: PAYER_DID,
       contract: accept.contract,
+      ref: "escrow-44",
       secret: accept.secret,
     });
 

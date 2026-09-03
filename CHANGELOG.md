@@ -8,6 +8,11 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- A schema-owned tclk/1 frame field contract, canonical settlement-rail registry and
+  intersection-based, order-independent rail matching helpers. Generated decoder fields
+  and the normative `SPEC.md` table are checked for drift in CI.
+- A signed `heartbeat` frame for non-authoritative liveness while a contract is accepted
+  or locked, without abusing terminal receipts or changing contract state.
 - A hosted deployment of the MCP server at `https://tclk.technocore.chat/mcp`, streamable
   HTTP, no account and no key. It is the no-custody Worker build: it binds neither
   `TECHNOCORE_SIGNING_KEY` nor `TCLK_PAYMENT_KEY` and refuses to serve if either is present,
@@ -31,6 +36,19 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `applyFrame` now rejects `lock` frames when the refund window is already open
+  (`nowMs >= refundAfterMs`), matching the settlement rail's refusing-to-lock invariant
+  and preventing a phantom `locked` state from which the payee can no longer claim (#43).
+- New reveal/refund builders include the preceding lock's rail reference, and the state
+  machine rejects a supplied mismatch. The field remains optional when decoding tclk/1 so
+  contracts emitted before it existed remain replayable; making it mandatory is reserved
+  for a versioned wire change.
+- Rail migration: new frame builders and capability tokens trim and ASCII-lowercase ids,
+  map `PaperRail`/`paper-rail` to canonical `paper`, and reject punctuation such as the live
+  `flop-htlc.` typo instead of coercing it. `paper` is explicitly a non-value rehearsal rail
+  (#31). New emissions reject unregistered ids, while tclk/1 decoding retains its historical
+  lowercase free-form grammar, duplicate arrays, and exact membership so existing custom-rail
+  contracts keep replaying. No golden wire constants changed.
 - Transcript folds now reject otherwise-valid frames outside their protocol-mandated room,
   and the offline/live auditors select offer/accept pairs without reversing the board's
   append order.

@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/flop-labs/tclk/schema/tclk1-frames.schema.json",
+  "title": "tclk/1 frame",
+  "oneOf": [
+    { "$ref": "#/$defs/offer" },
+    { "$ref": "#/$defs/accept" },
+    { "$ref": "#/$defs/lock" },
+    { "$ref": "#/$defs/reveal" },
+    { "$ref": "#/$defs/refund" },
+    { "$ref": "#/$defs/cancel" },
+    { "$ref": "#/$defs/receipt" },
+    { "$ref": "#/$defs/heartbeat" }
+  ],
+  "$defs": {
+    "did": {
+      "type": "string",
+      "pattern": "^did:key:z6Mk[1-9A-HJ-NP-Za-km-z]{44}$"
+    },
+    "hex32": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "hex33": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{66}$"
+    },
+    "nonce": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8,64}$"
+    },
+    "rail": {
+      "type": "string",
+      "description": "Decode-compatible tclk/1 spelling; new emissions use the canonical registry metadata below.",
+      "pattern": "^(?:[a-z0-9][a-z0-9._-]{0,63}|PaperRail)$",
+      "x-tclk-canonicalPattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "x-tclk-canonicalIds": [
+        "btc-htlc", "evm-htlc", "flop-htlc", "memory", "near-htlc", "paper", "x402"
+      ],
+      "x-tclk-aliases": {
+        "paperrail": "paper",
+        "paper-rail": "paper"
+      }
+    },
+    "job": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "proto": { "type": "string" },
+        "id": { "type": "string" },
+        "context": { "type": "string" }
+      },
+      "required": ["proto", "id"]
+    },
+    "presig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "nonce": { "$ref": "#/$defs/hex33" },
+        "s": { "type": "string", "pattern": "^0x[0-9a-f]{1,64}$" }
+      },
+      "required": ["nonce", "s"]
+    },
+    "offer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "offer" },
+        "from": { "$ref": "#/$defs/did" },
+        "role": { "enum": ["payer", "payee"] },
+        "amount": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "asset": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,32}$" },
+        "lock": { "enum": ["hash", "point"] },
+        "rails": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/rail" }
+        },
+        "claimByMs": { "type": "integer", "minimum": 1 },
+        "refundAfterMs": { "type": "integer", "minimum": 1 },
+        "expiresMs": { "type": "integer", "minimum": 1 },
+        "paymentKey": { "$ref": "#/$defs/hex33" },
+        "job": { "$ref": "#/$defs/job" },
+        "nonce": { "$ref": "#/$defs/nonce" },
+        "id": { "$ref": "#/$defs/hex32" }
+      },
+      "required": [
+        "type", "from", "role", "amount", "asset", "lock", "rails", "claimByMs",
+        "refundAfterMs", "expiresMs", "nonce", "id"
+      ]
+    },
+    "accept": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "accept" },
+        "from": { "$ref": "#/$defs/did" },
+        "ref": { "$ref": "#/$defs/hex32" },
+        "statement": {
+          "type": "string",
+          "pattern": "^0x(?:[0-9a-f]{64}|[0-9a-f]{66})$"
+        },
+        "contract": { "$ref": "#/$defs/hex32" },
+        "paymentKey": { "$ref": "#/$defs/hex33" },
+        "nonce": { "$ref": "#/$defs/nonce" }
+      },
+      "required": ["type", "from", "ref", "statement", "contract", "nonce"]
+    },
+    "lock": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "lock" },
+        "from": { "$ref": "#/$defs/did" },
+        "contract": { "$ref": "#/$defs/hex32" },
+        "rail": { "$ref": "#/$defs/rail" },
+        "ref": { "type": "string", "minLength": 1 },
+        "presig": { "$ref": "#/$defs/presig" }
+      },
+      "required": ["type", "from", "contract", "rail", "ref"]
+    },
+    "reveal": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "reveal" },
+        "from": { "$ref": "#/$defs/did" },
+        "contract": { "$ref": "#/$defs/hex32" },
+        "ref": { "type": "string", "minLength": 1 },
+        "secret": { "$ref": "#/$defs/hex32" }
+      },
+      "required": ["type", "from", "contract", "secret"]
+    },
+    "refund": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "refund" },
+        "from": { "$ref": "#/$defs/did" },
+        "contract": { "$ref": "#/$defs/hex32" },
+        "ref": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 }
+      },
+      "required": ["type", "from", "contract"]
+    },
+    "cancel": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "cancel" },
+        "from": { "$ref": "#/$defs/did" },
+        "contract": { "$ref": "#/$defs/hex32" },
+        "reason": { "type": "string", "minLength": 1 }
+      },
+      "required": ["type", "from", "contract"]
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "receipt" },
+        "from": { "$ref": "#/$defs/did" },
+        "contract": { "$ref": "#/$defs/hex32" },
+        "outcome": { "enum": ["claimed", "refunded", "cancelled"] },
+        "rail": { "$ref": "#/$defs/rail" },
+        "ref": { "type": "string", "minLength": 1 }
+      },
+      "required": ["type", "from", "contract", "outcome"]
+    },
+    "heartbeat": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "heartbeat" },
+        "from": { "$ref": "#/$defs/did" },
+        "contract": { "$ref": "#/$defs/hex32" },
+        "nonce": { "$ref": "#/$defs/nonce" },
+        "note": { "type": "string", "minLength": 1 }
+      },
+      "required": ["type", "from", "contract", "nonce"]
+    }
+  }
+}
