@@ -107,10 +107,20 @@ the public manual (`/llms.txt`), and any self-hosted deployment works identicall
 ## 3. Wire format
 
 A frame is the 6 chars `tclk1 ` followed by one JSON object, serialized canonically:
-object keys sorted, `,`/`:` separators only, `undefined`-valued keys dropped, every non-ASCII
-character `\uXXXX`-escaped. The prefix is the version; incompatible revisions change it
-(`tclk2 `), never the field semantics. Decoding is fail-closed: a known frame type with an
-unknown key, a missing field, or a malformed value is rejected, never coerced.
+object keys sorted lexicographically, `,`/`:` separators only (no whitespace outside strings),
+`undefined`-valued keys dropped.
+
+String escaping follows RFC 8785 §3.2.2.2 conventions:
+- Quotation mark `\"` and reverse solidus `\\` use two-character escapes.
+- Standard whitespace control characters use short escapes: `\b`, `\f`, `\n`, `\r`, `\t`.
+- Other C0 control characters (< 0x20) are escaped as `\u00xx` using lowercase hex digits.
+- Solidus `/` is NOT escaped.
+- Non-ASCII code points (≥ 0x80) are escaped as `\uxxxx` using lowercase hex digits. Astral code points (above U+FFFF) are represented as UTF-16 surrogate pairs (`\udxxx\udxxx`).
+- Non-printable ASCII (0x7F / DEL) is forbidden in frame strings.
+
+The prefix is the version; incompatible revisions change it (`tclk2 `), never the field semantics.
+Decoding is fail-closed: a known frame type with an unknown key, a missing field, or a malformed
+value is rejected, never coerced.
 
 Common field shapes:
 

@@ -10,7 +10,7 @@
 
 import { describe, it, expect } from "vitest";
 
-import { encodeFrame, makeAccept, makeOffer } from "../src/index.js";
+import { decodeFrame, encodeFrame, makeAccept, makeOffer } from "../src/index.js";
 
 const PAYER_DID = "did:key:z6Mk" + "f".repeat(44);
 
@@ -92,5 +92,38 @@ describe("tclk golden vectors", () => {
     expect(line).toMatch(/^[\x20-\x7e]*$/);
     expect(line).toContain(String.raw`\u00e2`);
     expect(offer.id).toBe(NON_ASCII_OFFER_ID);
+  });
+
+  // Issue #48: Pin exact canonical JSON escaping forms (C0 controls, short escapes,
+  // non-ASCII BMP, surrogate pairs for astral code points, quotes, and backslashes).
+  it("pins canonical JSON escaping across C0 controls, short escapes, and surrogate pairs", () => {
+    const c = String.fromCharCode;
+    const jobId = "a\nb\tc\"d\\e/f" + c(7) + "g" + c(0xe9) + "h" + c(0xd83d, 0xde00);
+    const complexOffer = makeOffer({
+      from: "did:key:z6Mk" + "a".repeat(44),
+      role: "payer",
+      amount: "1",
+      asset: "FLOP",
+      lock: "hash",
+      rails: ["flop-htlc"],
+      claimByMs: 1_760_003_600_000,
+      refundAfterMs: 1_760_007_200_000,
+      expiresMs: 1_760_000_600_000,
+      job: { proto: "a2a", id: jobId },
+      nonce: "9f2c81d04c9e1f7a",
+    });
+
+    const expectedId = "0x6d256c211f927c2c23a874d35f4b5372de66b4642274ed8a8b62b73ca5bf6a58";
+    const expectedLine =
+      'tclk1 {"amount":"1","asset":"FLOP","claimByMs":1760003600000,"expiresMs":1760000600000,' +
+      '"from":"did:key:z6Mkaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",' +
+      `"id":"${expectedId}",` +
+      '"job":{"id":"a\\nb\\tc\\"d\\\\e/f\\u0007g\\u00e9h\\ud83d\\ude00","proto":"a2a"},' +
+      '"lock":"hash","nonce":"9f2c81d04c9e1f7a","rails":["flop-htlc"],"refundAfterMs":1760007200000,' +
+      '"role":"payer","type":"offer"}';
+
+    expect(complexOffer.id).toBe(expectedId);
+    expect(encodeFrame(complexOffer)).toBe(expectedLine);
+    expect(decodeFrame(expectedLine).id).toBe(expectedId);
   });
 });

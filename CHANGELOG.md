@@ -18,6 +18,10 @@ All notable changes to this project are documented here. Format follows
 - A schema-owned tclk/1 frame field contract, canonical settlement-rail registry and
   intersection-based, order-independent rail matching helpers. Generated decoder fields
   and the normative `SPEC.md` table are checked for drift in CI.
+- SPEC §3 canonical JSON string escaping conventions are now explicitly specified
+  (RFC 8785 §3.2.2.2 rules: lowercase hex digits, JSON short escapes, surrogate pair
+  escaping for code points above U+FFFF, unescaped solidus, and DEL forbidden), and a
+  cross-implementation golden vector pins these rules (#48).
 - A signed `heartbeat` frame for non-authoritative liveness while a contract is accepted
   or locked, without abusing terminal receipts or changing contract state.
 - A hosted deployment of the MCP server at `https://tclk.technocore.chat/mcp`, streamable
