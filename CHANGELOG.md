@@ -18,6 +18,14 @@ All notable changes to this project are documented here. Format follows
 - A schema-owned tclk/1 frame field contract, canonical settlement-rail registry and
   intersection-based, order-independent rail matching helpers. Generated decoder fields
   and the normative `SPEC.md` table are checked for drift in CI.
+- `tests/schema-owned-contract.test.ts`, which pins the parity the schema-owned field contract
+  does not yet cover. The generator reads `Object.keys(definition.properties)` one level deep, so
+  it owns the nine frame types and reaches inside none of them: the allowed and required key sets
+  for `job` and `presig` are written out by hand in `src/frames.ts` beside a schema that declares
+  them too. The new checks assert that those hand-written sets equal the schema's, that the
+  generated contract covers exactly the `oneOf` frame types, and that the only definitions left to
+  hand-maintenance are the two under test — so a third nested object added to the schema fails
+  until it is covered. Tests only; no schema, decoder or generated file changes.
 - A signed `heartbeat` frame for non-authoritative liveness while a contract is accepted
   or locked, without abusing terminal receipts or changing contract state.
 - A hosted deployment of the MCP server at `https://tclk.technocore.chat/mcp`, streamable
