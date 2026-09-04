@@ -6,6 +6,17 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- `vectors/tclk-v1.golden.json`: a portable, language-agnostic companion to
+  `tests/vectors.test.ts` — one fully-populated, decodable example of every tclk/1 frame
+  type (offer, accept, lock, reveal, refund, cancel, receipt, heartbeat), for a
+  from-scratch implementation in any language to check its encoder/decoder against
+  without a TypeScript toolchain. See `vectors/README.md`.
+- `tests/interop-vectors.test.ts`: proves the portable file stays in sync with the
+  reference encoder/decoder (round-trip in both directions) on every test run.
+- `scripts/generate-interop-vectors.mjs`: regenerates the portable file from the built
+  reference implementation; only needed if the wire format changes on purpose.
+
 ### Fixed
 
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
