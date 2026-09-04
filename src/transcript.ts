@@ -251,8 +251,12 @@ export function foldTranscript(records: readonly TranscriptRecord[]): Transcript
   // These do not refuse to fold — a partial window or post-reap export is legitimate —
   // but a silent gap or timestamp edit can flip a deadline-dependent outcome (reveal vs
   // refund) with every signature intact. Surface it instead of failing closed.
+  // Only verified rows count for gaps — an unsigned/BAD row still shows as BAD in
+  // `steps` but must not make a censored verified seq look contiguous (e.g. verified
+  // 1,3 padded with unverified 2 should still be a gap).
   const byRoom = new Map<string, TranscriptRecord[]>();
   for (const r of records) {
+    if (!verifyTranscriptRecord(r).ok) continue;
     const list = byRoom.get(r.room) ?? [];
     list.push(r);
     byRoom.set(r.room, list);
@@ -277,8 +281,9 @@ export function foldTranscript(records: readonly TranscriptRecord[]): Transcript
       }
     }
   }
-  // Generic trust-boundary warning when any deadline-sensitive frame is present.
+  // Generic trust-boundary warning when any verified deadline-sensitive frame is present.
   const hasDeadlineFrame = records.some((r) => {
+    if (!verifyTranscriptRecord(r).ok) return false;
     const f = tryDecodeFrame(r.line);
     return f !== null && (f.type === "accept" || f.type === "lock" || f.type === "reveal" || f.type === "refund");
   });
