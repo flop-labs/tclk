@@ -7,7 +7,7 @@
 // Fail-closed on the wire: a non-2xx answer throws with the status and the venue's own
 // first line (its 400s name the offending field), never a silently empty result.
 
-import { parseTranscriptExport, type TranscriptRecord } from "@flop-labs/tclk";
+import { parseRecordJson, parseTranscriptExport, type TranscriptRecord } from "@flop-labs/tclk";
 
 const NAME_RE = /^[a-z0-9][a-z0-9_-]{0,47}$/;
 
@@ -99,7 +99,8 @@ export function createClient(opts: { baseUrl?: string; fetch?: FetchLike } = {})
       if (!response.ok) await fail(response, `GET /r/${room}`);
       let view: unknown;
       try {
-        view = await response.json();
+        const text = await response.text();
+        view = parseRecordJson(text);
       } catch {
         throw new Error(`tclk-mcp: GET /r/${room} did not return JSON`);
       }

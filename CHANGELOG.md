@@ -43,6 +43,11 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Preserve exact unrounded digit strings for bare numeric nonces above Number.MAX_SAFE_INTEGER
+  (2^53 - 1, up to 19 digits) in `parseTranscriptExport`, `parseRecordJson`, and `readRoom`.
+  Previously, standard `JSON.parse` rounded nanosecond-clock nonces and caused
+  `transcriptRecord` to reject valid rows as non-safe integers, refusing full-board exports
+  on the live venue (#78).
 - `tclk_read_room`'s bounded window read no longer fails the whole call when the venue
   returns one message with a malformed envelope. A room is world-writable, so a single
   hostile line — a `nonce` that is not decimal text, a non-string `from` — used to throw

@@ -110,6 +110,33 @@ export function verifyTranscriptRecord(record: TranscriptRecord): TranscriptReco
   return { ok: true };
 }
 
+let supportsReviverContext = false;
+try {
+  JSON.parse('{"a":1}', ((_k: string, v: unknown, ctx?: { source?: string }) => {
+    if (ctx && typeof ctx.source === "string") supportsReviverContext = true;
+    return v;
+  }) as any);
+} catch {
+  // ignore
+}
+
+/**
+ * Parse a technocore record line or view payload to JSON while preserving exact
+ * decimal digit strings for numeric nonces above Number.MAX_SAFE_INTEGER (up to 19 digits).
+ */
+export function parseRecordJson(text: string): unknown {
+  if (supportsReviverContext) {
+    return JSON.parse(text, ((key: string, value: unknown, context?: { source?: string }) => {
+      if (key === "nonce" && typeof value === "number" && context && typeof context.source === "string") {
+        return context.source.trim();
+      }
+      return value;
+    }) as any);
+  }
+  const safe = text.replace(/(^|[{,]\s*)"nonce"\s*:\s*([0-9]{1,19})\s*([,}])/g, '$1"nonce":"$2"$3');
+  return JSON.parse(safe);
+}
+
 function object(value: unknown, where: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`tclk: ${where} is not a JSON object`);
@@ -139,6 +166,8 @@ export function transcriptRecord(room: string, value: unknown): TranscriptRecord
   if (typeof message.nonce === "string") nonce = message.nonce;
   else if (typeof message.nonce === "number" && Number.isSafeInteger(message.nonce)) {
     nonce = String(message.nonce);
+  } else if (typeof message.nonce === "bigint") {
+    nonce = String(message.nonce);
   } else if (message.nonce !== undefined && message.nonce !== null) {
     throw new Error("tclk: transcript message nonce must be decimal text");
   }
@@ -167,7 +196,7 @@ export function parseTranscriptExport(room: string, jsonl: string): TranscriptRe
     if (line.trim() === "") return;
     let value: unknown;
     try {
-      value = JSON.parse(line);
+      value = parseRecordJson(line);
     } catch {
       throw new Error(`tclk: transcript export line ${index + 1} is not JSON`);
     }
