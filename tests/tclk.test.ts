@@ -280,6 +280,34 @@ describe("tclk state machine", () => {
     expect(contradictoryReceipt.state).toBe(claimed.state);
   });
 
+  it("accepts a canonical receipt rail for a lock stored under a registry alias", () => {
+    const offer = baseOffer({ rails: ["paper"], nonce: "aabbccddeeff0011" });
+    const { lock, state } = accepted(offer);
+    const locked = applyFrame(state, {
+      type: "lock", from: PAYER_DID, contract: state.contract!, rail: "paperrail", ref: "escrow-42",
+    }, T0 + 1);
+    expect(locked.ok).toBe(true);
+    expect(locked.state.rail).toBe("paperrail");
+
+    const claimed = applyFrame(locked.state, {
+      type: "reveal", from: PAYEE_DID, contract: state.contract!, ref: "escrow-42",
+      secret: lock.preimage,
+    }, T0 + 2);
+    expect(claimed.ok).toBe(true);
+
+    const canonicalReceipt = applyFrame(claimed.state, {
+      type: "receipt", from: PAYER_DID, contract: state.contract!, outcome: "claimed",
+      rail: "paper", ref: "escrow-42",
+    }, T0 + 3);
+    expect(canonicalReceipt.ok).toBe(true);
+
+    const aliasReceipt = applyFrame(claimed.state, {
+      type: "receipt", from: PAYER_DID, contract: state.contract!, outcome: "claimed",
+      rail: "paper-rail", ref: "escrow-42",
+    }, T0 + 3);
+    expect(aliasReceipt.ok).toBe(true);
+  });
+
   it.each([
     ["NaN", Number.NaN],
     ["Infinity", Number.POSITIVE_INFINITY],
