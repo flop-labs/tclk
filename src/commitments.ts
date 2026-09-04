@@ -19,6 +19,19 @@ import { SECP256K1_N } from "./points.js";
 
 const HEX32 = /^0x[0-9a-f]{64}$/;
 
+/**
+ * Characters technocore rewrites to a space before it stores a message: control,
+ * format, line- and paragraph-separator. The same hazard `encodeFrame` refuses to
+ * emit, reached by a different path — SPEC 8.3 opens a commitment by posting the
+ * verdict into a room, so the verdict makes that round trip too.
+ *
+ * Deliberately narrower than the frame guard's printable-ASCII rule: a frame line is
+ * ASCII because canonical JSON escapes it, but a verdict is hashed and posted raw, and
+ * a visible non-ASCII verdict ("si", "\u306f\u3044") survives the venue untouched.
+ * Only the invisible classes are a problem.
+ */
+const VENUE_REWRITES = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+
 function requireSecret(value: string, name: string): Uint8Array {
   if (!HEX32.test(value)) throw new Error(`tclk: ${name} must be 32 bytes of 0x-hex`);
   return hexToU8a(value);
@@ -44,6 +57,12 @@ export function voteCommitment(contract: string, verdict: string, salt: string):
   if (!HEX32.test(contract)) throw new Error("tclk: contract must be a 0x-hex contract id");
   if (verdict.length === 0) throw new Error("tclk: verdict must not be empty");
   if (verdict.includes("|")) throw new Error("tclk: verdict must not contain '|'");
+  // A verdict carrying one of these commits fine and can then never be reopened: the
+  // venue swaps it for a space in the reveal round, so the string that comes back is
+  // not the string that was hashed. Refuse at commit time rather than strand the vote.
+  if (VENUE_REWRITES.test(verdict)) {
+    throw new Error("tclk: verdict must not contain characters the venue rewrites");
+  }
   requireSecret(salt, "salt");
   return u8aToHex(
     sha256(stringToU8a(`${TCLK_DOMAIN}|commit|${contract}|${verdict}|${salt}`)),

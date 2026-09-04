@@ -36,6 +36,41 @@ describe("commit–reveal voting", () => {
     expect(verifyVoteCommitment("0x" + "00".repeat(32), CONTRACT, "yes", salt)).toBe(false);
   });
 
+  it("refuses a verdict carrying a character the venue rewrites", () => {
+    // technocore replaces controls and format characters with a space before storing.
+    // SPEC 8.3 opens a commitment by posting the verdict into a room, so such a verdict
+    // commits fine and can then never be reopened: what comes back is not what was
+    // hashed. encodeFrame already refuses these on the frame path; this is the same
+    // hazard reached through arbitration.
+    const chr = (n: number) => String.fromCharCode(n);
+    const stranded = [
+      ["newline", "yes" + chr(0x0a)],
+      ["DEL", "yes" + chr(0x7f)],
+      ["zero-width space", "y" + chr(0x200b) + "es"],
+      ["zero-width joiner", "yes" + chr(0x200d)],
+      ["bidi override", chr(0x202e) + "yes"],
+      ["soft hyphen", "y" + chr(0x00ad) + "es"],
+      ["BOM", chr(0xfeff) + "yes"],
+      ["line separator", "yes" + chr(0x2028)],
+    ] as const;
+
+    for (const [label, verdict] of stranded) {
+      expect(() => voteCommitment(CONTRACT, verdict, generateSalt()), label).toThrow(
+        /venue rewrites/,
+      );
+    }
+  });
+
+  it("still accepts a visible non-ASCII verdict, which the venue leaves alone", () => {
+    // The venue stores code points verbatim and only rewrites the invisible classes, so
+    // the guard must not become an ASCII-only rule and lock out non-English juries.
+    for (const verdict of ["si", "\u306f\u3044", "\u043d\u0435\u0442", "\u2713"]) {
+      const salt = generateSalt();
+      const commitment = voteCommitment(CONTRACT, verdict, salt);
+      expect(verifyVoteCommitment(commitment, CONTRACT, verdict, salt)).toBe(true);
+    }
+  });
+
   it("binds to the contract, so a verdict cannot be lifted to another deal", () => {
     const salt = generateSalt();
     const commitment = voteCommitment(CONTRACT, "yes", salt);

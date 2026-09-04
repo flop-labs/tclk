@@ -8,6 +8,14 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `voteCommitment` rejects a verdict containing a character technocore rewrites — control,
+  format, line- or paragraph-separator. The venue replaces these with a space before it
+  stores a message, and SPEC 8.3 opens a commitment by posting the verdict into a room, so
+  such a verdict committed successfully and could then never be reopened: the reveal that
+  came back was not the string that was hashed, stranding the juror's vote with no
+  diagnostic. `encodeFrame` already refuses these on the frame path; arbitration reached
+  the same hazard by another route. Visible non-ASCII verdicts are unaffected — the venue
+  stores code points verbatim and only rewrites the invisible classes.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
