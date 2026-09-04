@@ -15,6 +15,13 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- `dealRoomSpan(records, contract)` reports the verified-row continuity of one contract's
+  derived deal room, so an auditor sees that a signed row is missing instead of folding a
+  censored transcript to a clean terminal status. `examples/audit-export.mjs` prints it and
+  exits non-zero on a gap. The rule is stated per room because `seq` restarts in every room,
+  and the wording is "no gap detected" rather than "complete" because `seq` sits outside the
+  signed preimage (#93).
+
 - A schema-owned tclk/1 frame field contract, canonical settlement-rail registry and
   intersection-based, order-independent rail matching helpers. Generated decoder fields
   and the normative `SPEC.md` table are checked for drift in CI.

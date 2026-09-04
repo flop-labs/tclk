@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 import {
   OFFER_ROOM,
   dealRoom,
+  dealRoomSpan,
   findContractHandshake,
   foldTranscript,
   parseTranscriptExport,
@@ -48,6 +49,16 @@ if (folded.state === null) {
   process.exit(1);
 }
 
+const span = dealRoomSpan(deal, contract);
+const range = span.count === 0 ? "none" : `${span.firstSeq}..${span.lastSeq}`;
+console.log(`\n${span.room}: ${span.count} verified rows, seq ${range} — ${span.gapFree ? "no gap detected" : "GAP"}`);
+console.log("  \"no gap detected\" is not a completeness proof: seq is venue metadata outside the");
+console.log("  signature, so renumbering the kept rows, or dropping the last one, leaves no gap.");
+
 const terminal = ["claimed", "refunded", "cancelled"].includes(folded.state.status);
 console.log(`\nfold → ${folded.state.status}${terminal ? "" : " (not terminal)"}`);
+if (span.count > 0 && !span.gapFree) {
+  console.error("a signed row is missing from the deal room, so this fold is not the whole deal");
+  process.exit(1);
+}
 process.exit(terminal ? 0 : 1);

@@ -110,6 +110,58 @@ export function verifyTranscriptRecord(record: TranscriptRecord): TranscriptReco
   return { ok: true };
 }
 
+export interface DealRoomSpan {
+  /** The derived deal room this contract's post-accept frames belong to. */
+  room: string;
+  /** Rows supplied for that room whose signature verifies. */
+  count: number;
+  firstSeq: number | null;
+  lastSeq: number | null;
+  /** True when the verified rows run `1..n` with no hole. Not a completeness proof. */
+  gapFree: boolean;
+}
+
+/**
+ * Row continuity of one contract's derived deal room. The derived name addresses the room by
+ * the contract id, so it carries that contract's post-accept frames and nothing else, which is
+ * what makes a hole in its sequence meaningful. The shared board gives no such reading:
+ * thousands of contracts interleave there, so a gap between one contract's rows is the normal
+ * case and carries no information.
+ *
+ * Only rows whose signature verifies are counted, so a hole cannot be closed with unsigned
+ * padding - closing one needs a signed row for that room, which cannot be forged.
+ *
+ * `gapFree` is **not** a completeness proof, and an auditor that reports it as one is worse
+ * than one that reports nothing. `seq` is venue metadata outside the signed `room|nonce|line`
+ * preimage, so an editor who drops a row and renumbers the rows it keeps leaves no hole, and
+ * dropping the last row leaves no hole either. Report this as "no gap detected".
+ */
+export function dealRoomSpan(
+  records: readonly TranscriptRecord[],
+  contract: string,
+): DealRoomSpan {
+  const room = dealRoom(contract);
+  const seqs: number[] = [];
+  for (const record of records) {
+    if (!record || record.room !== room) continue;
+    if (!verifyTranscriptRecord(record).ok) continue;
+    seqs.push(record.seq);
+  }
+  if (seqs.length === 0) {
+    return { room, count: 0, firstSeq: null, lastSeq: null, gapFree: false };
+  }
+  seqs.sort((left, right) => left - right);
+  const firstSeq = seqs[0];
+  const lastSeq = seqs[seqs.length - 1];
+  return {
+    room,
+    count: seqs.length,
+    firstSeq,
+    lastSeq,
+    gapFree: firstSeq === 1 && seqs.length === lastSeq - firstSeq + 1,
+  };
+}
+
 function object(value: unknown, where: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`tclk: ${where} is not a JSON object`);
