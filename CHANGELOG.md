@@ -20,6 +20,18 @@ All notable changes to this project are documented here. Format follows
   and the normative `SPEC.md` table are checked for drift in CI.
 - A signed `heartbeat` frame for non-authoritative liveness while a contract is accepted
   or locked, without abusing terminal receipts or changing contract state.
+- `fundingOutlook(state, nowMs)`, a derived reading of whether a contract can still be funded.
+  An accepted contract's status sits at `accepted` indefinitely when a payer walks away, so an
+  abandonment and a party being briefly offline look the same; funding itself does not, because
+  `applyFrame` already refuses a `lock` once `nowMs >= offer.refundAfterMs` and that field is
+  committed by `contractId` before either party signs. The bound was therefore already agreed and
+  simply unexposed. The reading separates an accepted contract whose window is still open from one
+  whose window shut with no lock, from one explicitly cancelled, from one already funded, which is
+  the distinction funnel accounting needs (#41). It is derived and never signed: absence of
+  funding is not something a vanished party can be made to attest, and no coordination deadline
+  field or abort frame is added. No safety margin is applied — a margin is rail-specific, so the
+  time remaining is reported and the caller applies its own. Nothing in the state machine, the
+  wire format or the golden vectors changes.
 - A hosted deployment of the MCP server at `https://tclk.technocore.chat/mcp`, streamable
   HTTP, no account and no key. It is the no-custody Worker build: it binds neither
   `TECHNOCORE_SIGNING_KEY` nor `TCLK_PAYMENT_KEY` and refuses to serve if either is present,
