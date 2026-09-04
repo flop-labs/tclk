@@ -56,9 +56,12 @@ console.log(`\n${span.room}: ${span.count} verified rows, seq ${range} — ${ver
 if (span.count === 0) {
   console.log("  an empty deal room reads the same whether it was censored or simply expired: the");
   console.log("  venue deletes a room after seven days with no write, and a terminal deal stops writing.");
-} else {
+} else if (span.gapFree) {
   console.log("  \"no gap detected\" is not a completeness proof: seq is venue metadata outside the");
   console.log("  signature, so renumbering the kept rows, or dropping the last one, leaves no gap.");
+} else {
+  console.log("  a position between the first and last row is missing: the room held a signed row");
+  console.log("  that this file does not.");
 }
 
 const terminal = ["claimed", "refunded", "cancelled"].includes(folded.state.status);

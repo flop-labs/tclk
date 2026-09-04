@@ -308,6 +308,27 @@ describe("derived deal-room continuity", () => {
     expect(dealRoomSpan(renumbered, supplied.contract).gapFree).toBe(true);
   });
 
+  it("does not let a duplicated row close a hole", () => {
+    const supplied = rows();
+    // A repeat of a genuine row verifies like the original, because `seq` is not in the signed
+    // preimage and nothing else changes. Counting rows rather than positions would read
+    // 1,2,2,4 as four rows across a span of four and call it whole.
+    const padded = [
+      ...supplied.board,
+      supplied.lockRow,
+      supplied.revealRow,
+      supplied.revealRow,
+      supplied.refundRow(4),
+    ];
+
+    expect(dealRoomSpan(padded, supplied.contract)).toMatchObject({
+      count: 4,
+      firstSeq: 1,
+      lastSeq: 4,
+      gapFree: false,
+    });
+  });
+
   it("does not let an unsigned row close a hole", () => {
     const supplied = rows();
     const padding = { ...supplied.revealRow, nonce: null, signature: null };

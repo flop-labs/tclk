@@ -131,6 +131,11 @@ export interface DealRoomSpan {
  * Only rows whose signature verifies are counted, so a hole cannot be closed with unsigned
  * padding - closing one needs a signed row for that room, which cannot be forged.
  *
+ * `gapFree` compares distinct positions, not row count. A duplicated row is a genuine signed
+ * row and verifies like any other, so counting rows lets one close a hole arithmetically:
+ * `1,2,2,4` is four rows across a span of four and only three positions. `count` stays the row
+ * count, because that is the honest number to print beside "verified rows".
+ *
  * `firstSeq === 1` is required because a derived room is small and holds one contract, so it
  * never loses a prefix. It is not a rule that generalizes: the venue's ring evicts from the
  * front, so a busy room retains a contiguous window that does not begin at 1.
@@ -145,24 +150,26 @@ export function dealRoomSpan(
   contract: string,
 ): DealRoomSpan {
   const room = dealRoom(contract);
-  const seqs: number[] = [];
+  let count = 0;
+  const positions = new Set<number>();
   for (const record of records) {
     if (!record || record.room !== room) continue;
     if (!verifyTranscriptRecord(record).ok) continue;
-    seqs.push(record.seq);
+    count += 1;
+    positions.add(record.seq);
   }
-  if (seqs.length === 0) {
+  if (count === 0) {
     return { room, count: 0, firstSeq: null, lastSeq: null, gapFree: false };
   }
-  seqs.sort((left, right) => left - right);
-  const firstSeq = seqs[0];
-  const lastSeq = seqs[seqs.length - 1];
+  const sorted = [...positions].sort((left, right) => left - right);
+  const firstSeq = sorted[0];
+  const lastSeq = sorted[sorted.length - 1];
   return {
     room,
-    count: seqs.length,
+    count,
     firstSeq,
     lastSeq,
-    gapFree: firstSeq === 1 && seqs.length === lastSeq - firstSeq + 1,
+    gapFree: firstSeq === 1 && positions.size === lastSeq - firstSeq + 1,
   };
 }
 
