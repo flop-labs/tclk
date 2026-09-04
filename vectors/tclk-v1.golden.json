@@ -1,0 +1,104 @@
+{
+  "schema": "tclk-interop-vectors-v1",
+  "wirePrefix": "tclk1 ",
+  "generatedBy": "@flop-labs/tclk (reference TS implementation)",
+  "purpose": "One decodable, fully-populated example of every tclk/1 frame type, for a from-scratch port in any language to check its encoder and decoder against without a TypeScript toolchain. `frame` is the canonical object; `line` is exactly what encodeFrame() produces for it and what decodeFrame() must reproduce it from.",
+  "vectors": {
+    "offer": {
+      "frame": {
+        "from": "did:key:z6Mkffffffffffffffffffffffffffffffffffffffffffff",
+        "role": "payer",
+        "amount": "1000000",
+        "asset": "FLOP",
+        "lock": "hash",
+        "rails": [
+          "flop-htlc",
+          "x402"
+        ],
+        "claimByMs": 1756703600000,
+        "refundAfterMs": 1756707200000,
+        "expiresMs": 1756700600000,
+        "job": {
+          "proto": "a2a",
+          "id": "task-3f",
+          "context": "ctx-1"
+        },
+        "nonce": "9f2c81d04c9e1f7a",
+        "type": "offer",
+        "id": "0xd001fbbf4fa36d9ab8ea88df02a8b3303539e9d59f7ff9d9bfeb679318e9ce75"
+      },
+      "line": "tclk1 {\"amount\":\"1000000\",\"asset\":\"FLOP\",\"claimByMs\":1756703600000,\"expiresMs\":1756700600000,\"from\":\"did:key:z6Mkffffffffffffffffffffffffffffffffffffffffffff\",\"id\":\"0xd001fbbf4fa36d9ab8ea88df02a8b3303539e9d59f7ff9d9bfeb679318e9ce75\",\"job\":{\"context\":\"ctx-1\",\"id\":\"task-3f\",\"proto\":\"a2a\"},\"lock\":\"hash\",\"nonce\":\"9f2c81d04c9e1f7a\",\"rails\":[\"flop-htlc\",\"x402\"],\"refundAfterMs\":1756707200000,\"role\":\"payer\",\"type\":\"offer\"}"
+    },
+    "accept": {
+      "frame": {
+        "type": "accept",
+        "from": "did:key:z6Mkgggggggggggggggggggggggggggggggggggggggggggg",
+        "ref": "0xd001fbbf4fa36d9ab8ea88df02a8b3303539e9d59f7ff9d9bfeb679318e9ce75",
+        "statement": "0xabababababababababababababababababababababababababababababababab",
+        "nonce": "0011223344556677",
+        "contract": "0x2768bf32b455317879796093ff2e5882371cbec238611ca71f555a7fcbe58e1c"
+      },
+      "line": "tclk1 {\"contract\":\"0x2768bf32b455317879796093ff2e5882371cbec238611ca71f555a7fcbe58e1c\",\"from\":\"did:key:z6Mkgggggggggggggggggggggggggggggggggggggggggggg\",\"nonce\":\"0011223344556677\",\"ref\":\"0xd001fbbf4fa36d9ab8ea88df02a8b3303539e9d59f7ff9d9bfeb679318e9ce75\",\"statement\":\"0xabababababababababababababababababababababababababababababababab\",\"type\":\"accept\"}"
+    },
+    "lock": {
+      "frame": {
+        "type": "lock",
+        "from": "did:key:z6Mkffffffffffffffffffffffffffffffffffffffffffff",
+        "contract": "0x2768bf32b455317879796093ff2e5882371cbec238611ca71f555a7fcbe58e1c",
+        "rail": "flop-htlc",
+        "ref": "escrow-9001"
+      },
+      "line": "tclk1 {\"contract\":\"0x2768bf32b455317879796093ff2e5882371cbec238611ca71f555a7fcbe58e1c\",\"from\":\"did:key:z6Mkffffffffffffffffffffffffffffffffffffffffffff\",\"rail\":\"flop-htlc\",\"ref\":\"escrow-9001\",\"type\":\"lock\"}"
+    },
+    "reveal": {
+      "frame": {
+        "type": "reveal",
+        "from": "did:key:z6Mkgggggggggggggggggggggggggggggggggggggggggggg",
+        "contract": "0x2768bf32b455317879796093ff2e5882371cbec238611ca71f555a7fcbe58e1c",
+        "ref": "escrow-9001",
+        "secret": "0x1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "line": "tclk1 {\"contract\":\"0x2768bf32b455317879796093ff2e5882371cbec238611ca71f555a7fcbe58e1c\",\"from\":\"did:key:z6Mkgggggggggggggggggggggggggggggggggggggggggggg\",\"ref\":\"escrow-9001\",\"secret\":\"0x1111111111111111111111111111111111111111111111111111111111111111\",\"type\":\"reveal\"}"
+    },
+    "refund": {
+      "frame": {
+        "type": "refund",
+        "from": "did:key:z6Mkffffffffffffffffffffffffffffffffffffffffffff",
+        "contract": "0x2768bf32b455317879796093ff2e5882371cbec238611ca71f555a7fcbe58e1c",
+        "ref": "escrow-9001",
+        "reason": "claim window elapsed"
+      },
+      "line": "tclk1 {\"contract\":\"0x2768bf32b455317879796093ff2e5882371cbec238611ca71f555a7fcbe58e1c\",\"from\":\"did:key:z6Mkffffffffffffffffffffffffffffffffffffffffffff\",\"reason\":\"claim window elapsed\",\"ref\":\"escrow-9001\",\"type\":\"refund\"}"
+    },
+    "cancel": {
+      "frame": {
+        "type": "cancel",
+        "from": "did:key:z6Mkffffffffffffffffffffffffffffffffffffffffffff",
+        "contract": "0x2768bf32b455317879796093ff2e5882371cbec238611ca71f555a7fcbe58e1c",
+        "reason": "counterparty unresponsive"
+      },
+      "line": "tclk1 {\"contract\":\"0x2768bf32b455317879796093ff2e5882371cbec238611ca71f555a7fcbe58e1c\",\"from\":\"did:key:z6Mkffffffffffffffffffffffffffffffffffffffffffff\",\"reason\":\"counterparty unresponsive\",\"type\":\"cancel\"}"
+    },
+    "receipt": {
+      "frame": {
+        "type": "receipt",
+        "from": "did:key:z6Mkgggggggggggggggggggggggggggggggggggggggggggg",
+        "contract": "0x2768bf32b455317879796093ff2e5882371cbec238611ca71f555a7fcbe58e1c",
+        "outcome": "claimed",
+        "rail": "flop-htlc",
+        "ref": "escrow-9001"
+      },
+      "line": "tclk1 {\"contract\":\"0x2768bf32b455317879796093ff2e5882371cbec238611ca71f555a7fcbe58e1c\",\"from\":\"did:key:z6Mkgggggggggggggggggggggggggggggggggggggggggggg\",\"outcome\":\"claimed\",\"rail\":\"flop-htlc\",\"ref\":\"escrow-9001\",\"type\":\"receipt\"}"
+    },
+    "heartbeat": {
+      "frame": {
+        "type": "heartbeat",
+        "from": "did:key:z6Mkffffffffffffffffffffffffffffffffffffffffffff",
+        "contract": "0x2768bf32b455317879796093ff2e5882371cbec238611ca71f555a7fcbe58e1c",
+        "nonce": "aa11bb22cc33dd44",
+        "note": "still here"
+      },
+      "line": "tclk1 {\"contract\":\"0x2768bf32b455317879796093ff2e5882371cbec238611ca71f555a7fcbe58e1c\",\"from\":\"did:key:z6Mkffffffffffffffffffffffffffffffffffffffffffff\",\"nonce\":\"aa11bb22cc33dd44\",\"note\":\"still here\",\"type\":\"heartbeat\"}"
+    }
+  }
+}
