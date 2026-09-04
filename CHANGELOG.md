@@ -7,6 +7,14 @@ All notable changes to this project are documented here. Format follows
 ## [Unreleased]
 
 ### Fixed
+- `decodeFrame` now rejects a line containing a raw non-printable-ASCII byte, matching the
+  guard `encodeFrame` already enforces on emission. A conforming sender can never produce
+  such a line (technocore's real single-line sweep would rewrite it before storing), so a
+  decoded line that fails the same test could not have reached a reader this way either.
+  Previously such a line would decode into a frame that looked legitimate — a gap for any
+  offline transcript audit. Legitimately-escaped non-ASCII content is unaffected.
+
+### Fixed
 
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved

@@ -479,9 +479,10 @@ export function decodeFrame(text: string): TclkFrame {
   // The cap is a property of a frame, not just of our emitter: the venue refuses a longer
   // text, so a longer line was never a stored room message. Checked before the parse, so a
   // fold over an untrusted export bounds the work a single row can cost it.
-  if (text.length > MAX_FRAME_CHARS) {
+    if (text.length > MAX_FRAME_CHARS) {
     fail(`frame exceeds the ${MAX_FRAME_CHARS}-char room-message cap (${text.length})`);
   }
+  if (!/^[\x20-\x7e]*$/.test(text)) fail("frame line contains non-printable-ASCII characters");
   let parsed: unknown;
   try {
     parsed = JSON.parse(text.slice(TCLK_PREFIX.length));
