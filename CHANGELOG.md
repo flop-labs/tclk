@@ -8,6 +8,12 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `findContractHandshake` now recomputes the contract id from the offer and acceptance
+  core before returning a pair. It previously returned any signed accept naming the
+  queried contract that followed its referenced offer, so an attacker could name an
+  arbitrary contract id over a victim's public offer and be reported as the
+  authenticated handshake while `applyFrame` later rejects it. Code follows SPEC §3.2;
+  the spec already requires both sides to recompute and reject on mismatch.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
