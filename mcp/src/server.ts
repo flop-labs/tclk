@@ -332,7 +332,13 @@ export function createServer(options: HandlerOptions = {}): McpServer {
         line,
         did: did.optional(),
         sig: z.string().optional().describe("86 unpadded base64url characters."),
-        nonce: z.number().int().optional(),
+        nonce: z
+          .union([
+            z.number().int().safe().nonnegative(),
+            z.string().regex(/^[0-9]{1,19}$/, "1 to 19 decimal digits"),
+          ])
+          .optional()
+          .describe("Signed-lane nonce; safe integer or 1-19 decimal digit string."),
       },
     },
     (args) => run(() => h.tclk_post_frame(args)),
@@ -344,7 +350,9 @@ export function createServer(options: HandlerOptions = {}): McpServer {
       description:
         "Read a room as complete transcript records ready for tclk_apply_transcript. " +
         "Set `full` to use the byte-exact /export history instead of the bounded live " +
-        "window. Records preserve line, sender, signature, nonce, sequence and venue time.",
+        "window. Records preserve line, sender, signature, nonce, sequence and venue time. " +
+        "A window read whose venue returns a malformed envelope sets that message aside " +
+        "in `malformed` (with its seq and reason) rather than failing the whole read.",
       annotations: NETWORK_READS,
       inputSchema: {
         room,

@@ -46,9 +46,9 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "proto": { "type": "string" },
-        "id": { "type": "string" },
-        "context": { "type": "string" }
+        "proto": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,31}$" },
+        "id": { "type": "string", "minLength": 1 },
+        "context": { "type": "string", "minLength": 1 }
       },
       "required": ["proto", "id"]
     },
@@ -57,7 +57,7 @@
       "additionalProperties": false,
       "properties": {
         "nonce": { "$ref": "#/$defs/hex33" },
-        "s": { "type": "string", "pattern": "^0x[0-9a-f]{1,64}$" }
+        "s": { "type": "string", "pattern": "^0x(?:[0-9a-f]{2}){1,32}$" }
       },
       "required": ["nonce", "s"]
     },

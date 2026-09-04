@@ -31,10 +31,22 @@ export function u8aToHex(value: Uint8Array): string {
   return out;
 }
 
-/** Decode `0x`-hex to bytes. Throws on non-hex or odd-length input (fail-closed). */
+/**
+ * Decode `0x`-hex to bytes. Throws on non-hex or odd-length input (fail-closed).
+ *
+ * `0x` is the spelling for zero bytes; `""` is not hex and is refused like any other
+ * malformed input. The refusal carries the input's length, never its value —
+ * `hashLockFromPreimage` and `pointLockFromWitness` decode secret preimages and
+ * witnesses through here, and an echoed secret lands in whatever log catches the throw.
+ */
 export function hexToU8a(value: string): Uint8Array {
-  if (!value) return new Uint8Array();
-  if (!isHex(value)) throw new Error(`Expected hex value to convert, found '${value}'`);
+  if (!isHex(value)) {
+    // `isHex` is a type guard, so it narrows `value` to `never` in this branch; widen it
+    // back, because untyped callers can still reach this line with a non-string.
+    const seen = value as unknown;
+    const shape = typeof seen === "string" ? `${seen.length} chars` : typeof seen;
+    throw new Error(`tclk: expected 0x-prefixed even-length hex, got ${shape}`);
+  }
   const body = value.slice(2);
   const out = new Uint8Array(body.length / 2);
   for (let i = 0; i < out.length; i++) {

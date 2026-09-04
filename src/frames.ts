@@ -476,6 +476,12 @@ export function encodeFrame(frame: TclkFrame): string {
 /** Decode a room-message line. Throws on a malformed tclk line or a non-tclk line. */
 export function decodeFrame(text: string): TclkFrame {
   if (!isTclkLine(text)) fail("not a tclk/1 line");
+  // The cap is a property of a frame, not just of our emitter: the venue refuses a longer
+  // text, so a longer line was never a stored room message. Checked before the parse, so a
+  // fold over an untrusted export bounds the work a single row can cost it.
+  if (text.length > MAX_FRAME_CHARS) {
+    fail(`frame exceeds the ${MAX_FRAME_CHARS}-char room-message cap (${text.length})`);
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(text.slice(TCLK_PREFIX.length));

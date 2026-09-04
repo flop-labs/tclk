@@ -730,7 +730,18 @@ export const TOOLS: readonly ManifestTool[] = [
           "description": "86 unpadded base64url characters."
         },
         "nonce": {
-          "type": "integer"
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "string",
+              "pattern": "^[0-9]{1,19}$"
+            }
+          ],
+          "description": "Signed-lane nonce; safe integer or 1-19 decimal digit string."
         }
       },
       "required": [
@@ -750,7 +761,7 @@ export const TOOLS: readonly ManifestTool[] = [
   },
   {
     "name": "tclk_read_room",
-    "description": "Read a room as complete transcript records ready for tclk_apply_transcript. Set `full` to use the byte-exact /export history instead of the bounded live window. Records preserve line, sender, signature, nonce, sequence and venue time.",
+    "description": "Read a room as complete transcript records ready for tclk_apply_transcript. Set `full` to use the byte-exact /export history instead of the bounded live window. Records preserve line, sender, signature, nonce, sequence and venue time. A window read whose venue returns a malformed envelope sets that message aside in `malformed` (with its seq and reason) rather than failing the whole read.",
     "inputSchema": {
       "type": "object",
       "properties": {

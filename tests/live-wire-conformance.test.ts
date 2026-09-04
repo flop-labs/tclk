@@ -15,11 +15,13 @@ import {
   makeAccept,
   makeOffer,
   matchingRails,
+  MAX_FRAME_CHARS,
   offerId,
   openContract,
   parseCapabilityToken,
   railSetsMatch,
   TCLK_PREFIX,
+  tryDecodeFrame,
 } from "../src/index.js";
 
 const PAYER = "did:key:z6Mk" + "f".repeat(44);
@@ -230,5 +232,32 @@ describe("live-wire conformance gaps", () => {
       note: "agentic-commerce heartbeat",
       status: "active",
     } as never)).toThrow(/unknown field on receipt/);
+  });
+
+  it("refuses a line the venue could never have stored, on decode as well as encode", () => {
+    const beat = (note: string) => ({
+      type: "heartbeat" as const,
+      from: PAYER,
+      contract: "0x" + "11".repeat(32),
+      nonce: "0123456789abcdef",
+      note,
+    });
+    // Grow the note until the line lands exactly on the cap: both halves must still take it.
+    const spare = MAX_FRAME_CHARS - encodeFrame(beat("x")).length;
+    const atCap = beat("x".repeat(1 + spare));
+    expect(encodeFrame(atCap).length).toBe(MAX_FRAME_CHARS);
+    expect(decodeFrame(encodeFrame(atCap))).toEqual(atCap);
+
+    // One character more, and neither half takes it.
+    const overCap = beat("x".repeat(2 + spare));
+    const line = `${TCLK_PREFIX}${canonicalJson(overCap)}`;
+    expect(line.length).toBe(MAX_FRAME_CHARS + 1);
+    expect(() => encodeFrame(overCap)).toThrow(/room-message cap/);
+    expect(() => decodeFrame(line)).toThrow(/room-message cap/);
+    expect(tryDecodeFrame(line)).toBeNull();
+
+    // The bound is what keeps one doctored export row from costing a fold a megabyte of parsing.
+    const megabyte = `${TCLK_PREFIX}${canonicalJson(beat("x".repeat(1_000_000)))}`;
+    expect(tryDecodeFrame(megabyte)).toBeNull();
   });
 });

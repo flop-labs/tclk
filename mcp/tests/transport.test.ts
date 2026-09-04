@@ -91,6 +91,52 @@ describe("tclk_post_frame — tier 2, server-signed", () => {
     expect(JSON.parse(String(calls[0].init?.body))).toMatchObject({ did: signer.did, nonce: "7", text: line });
   });
 
+  it("passes a caller's legal 19-digit string nonce straight through without precision loss", async () => {
+    const { calls, fetchLike } = fakeFetch([{ body: "ok 14" }]);
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+    const line = offerLine();
+    const nonce19 = "1730000000000000001";
+
+    const result = await h.tclk_post_frame({
+      room: ROOM,
+      line,
+      did: signer.did,
+      sig: signer.sign(canonicalMessage(ROOM, nonce19, line)),
+      nonce: nonce19,
+    });
+    expect(result.posted && result.tier).toBe("caller-signed");
+    if (result.posted && result.tier === "caller-signed") {
+      expect(result.nonce).toBe(nonce19);
+    }
+    const body = JSON.parse(String(calls[0].init?.body));
+    expect(body.nonce).toBe(nonce19);
+    // Prove no numeric precision loss occurred
+    expect(String(Number(nonce19))).not.toBe(nonce19);
+    expect(body.nonce).not.toBe(String(Number(nonce19)));
+  });
+
+  it("rejects an unsafe numeric nonce or malformed string in the shared handler", async () => {
+    const { fetchLike } = fakeFetch([{ body: "ok 14" }]);
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+    const line = offerLine();
+
+    await expect(h.tclk_post_frame({
+      room: ROOM,
+      line,
+      did: signer.did,
+      sig: "x".repeat(86),
+      nonce: 9007199254740992,
+    })).rejects.toThrow(/must be a non-negative safe integer or a 1-19 decimal digit string/);
+
+    await expect(h.tclk_post_frame({
+      room: ROOM,
+      line,
+      did: signer.did,
+      sig: "x".repeat(86),
+      nonce: "123bad",
+    })).rejects.toThrow(/must be a non-negative safe integer or a 1-19 decimal digit string/);
+  });
+
   it("surfaces the venue's refusal instead of swallowing it", async () => {
     const { fetchLike } = fakeFetch([{ status: 403, body: "403 bad sig\n" }]);
     const h = createHandlers({ env: { TECHNOCORE_SIGNING_KEY: PAYER_SEED }, fetch: fetchLike });
@@ -147,6 +193,75 @@ describe("tclk_read_room", () => {
     expect(() => h.tclk_apply_transcript({ records: result.records })).toThrow(
       /offer must be posted in tclk-offers/,
     );
+  });
+
+  it("isolates a malformed envelope instead of failing the whole window read", async () => {
+    const line = offerLine();
+    const nonce = 11;
+    const good = signer.sign(canonicalMessage("lobby", nonce, line));
+    const { fetchLike } = fakeFetch([
+      {
+        body: "",
+        json: {
+          room: "lobby",
+          count: 4,
+          last_seq: 33,
+          messages: [
+            { seq: 30, ts: "2026-01-01T00:00:00Z", from: "~stranger", text: "gm" },
+            // Hostile envelope: `nonce` is a JSON boolean, which transcriptRecord refuses.
+            // Before the fix this one message threw and took the entire read down with it.
+            { seq: 31, ts: "2026-01-01T00:00:01Z", from: "~attacker", nonce: true, text: "tclk1 x" },
+            { seq: 32, ts: "2026-01-01T00:00:02Z", from: signer.did, nonce: String(nonce), sig: good, text: line },
+            // A second bad shape: `from` is not a string.
+            { seq: 33, ts: "2026-01-01T00:00:03Z", from: 12345, text: "gm" },
+          ],
+        },
+      },
+    ]);
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+
+    const result = await h.tclk_read_room({ room: "lobby" });
+    // The two well-formed envelopes survive; the two hostile ones are set aside, not dropped.
+    expect(result.records).toHaveLength(2);
+    expect(result.records.map((r) => r.seq)).toEqual([30, 32]);
+    expect(result.malformed).toHaveLength(2);
+    expect(result.malformed.map((m) => m.seq)).toEqual([31, 33]);
+    expect(result.malformed[0].reason).toMatch(/nonce/);
+    // lastSeq still reflects the venue's own count, so `since` paging is unbroken.
+    expect(result.lastSeq).toBe(33);
+
+    // The surviving signed record is intact: it carries the sender and signature the
+    // venue verified, ready to hand to a fold.
+    expect(result.records[1]).toMatchObject({ seq: 32, sender: signer.did, signature: good });
+  });
+
+  it("keeps the export's opposite rule: one bad row refuses the whole file", async () => {
+    // Pins the asymmetry rather than leaving it to a comment. An export claims to be the
+    // complete history, so it may not answer with a hole; a window may, because it says
+    // which seq it could not read. If either side is ever changed, this fails.
+    const good = JSON.stringify({ seq: 1, ts: "2026-01-01T00:00:00Z", from: "~a", text: "gm" });
+    const bad = JSON.stringify({ seq: 2, ts: "2026-01-01T00:00:01Z", from: "~b", nonce: true, text: "gm" });
+    const { fetchLike } = fakeFetch([{ body: `${good}\n${bad}\n` }]);
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+    await expect(h.tclk_read_room({ room: "lobby", full: true })).rejects.toThrow(/line 2/);
+  });
+
+  it("records a malformed envelope with no usable seq as null", async () => {
+    const { fetchLike } = fakeFetch([
+      {
+        body: "",
+        json: {
+          room: "lobby",
+          count: 1,
+          last_seq: 40,
+          messages: [{ seq: "not-a-number", ts: "2026-01-01T00:00:00Z", from: "~x", text: "gm" }],
+        },
+      },
+    ]);
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+    const result = await h.tclk_read_room({ room: "lobby" });
+    expect(result.records).toHaveLength(0);
+    expect(result.malformed).toEqual([{ seq: null, reason: expect.stringMatching(/seq/) }]);
   });
 
   it("reads and strictly parses the full JSONL export", async () => {
