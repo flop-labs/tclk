@@ -57,7 +57,8 @@ if (nextSpec === spec && !spec.includes(table)) {
 }
 
 if (process.argv.includes("--check")) {
-  if (readFileSync(generatedPath, "utf8") !== generated || spec !== nextSpec) {
+  const existing = readFileSync(generatedPath, "utf8").replaceAll(/\r\n/g, "\n");
+  if (existing !== generated || spec.replaceAll(/\r\n/g, "\n") !== nextSpec) {
     console.error("generated protocol fields are stale; run pnpm generate:protocol");
     process.exit(1);
   }
