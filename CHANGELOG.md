@@ -15,6 +15,15 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- `SPEC.md` §3 now pins the canonical-JSON escape forms the ids depend on: lowercase hex, the
+  five JSON short escapes, `\u00xx` for the remaining C0 controls, `\uxxxx` per UTF-16 code unit
+  (so an astral character is two escapes and there is no `\u{…}` form), `/` left unescaped, and
+  U+007F not permitted in a frame at all — the one code point neither escape rule reaches. §3.1
+  hashes the escaped string, so each of these was an unwritten choice that changes every `id`,
+  and a port picking differently had its frames rejected with `offer id mismatch` (#48).
+  `tests/canonical-escapes.test.ts` pins each form against a hand-written expected string, and
+  checks the id against an independently written escaper. Documentation and tests only: no
+  behaviour, wire byte or golden vector changed.
 - A schema-owned tclk/1 frame field contract, canonical settlement-rail registry and
   intersection-based, order-independent rail matching helpers. Generated decoder fields
   and the normative `SPEC.md` table are checked for drift in CI.

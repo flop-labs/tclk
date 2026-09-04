@@ -112,6 +112,25 @@ character `\uXXXX`-escaped. The prefix is the version; incompatible revisions ch
 (`tclk2 `), never the field semantics. Decoding is fail-closed: a known frame type with an
 unknown key, a missing field, or a malformed value is rejected, never coerced.
 
+The escape forms are normative rather than stylistic, because §3.1 hashes this exact string:
+an implementation that spells one differently computes a different `id` for the same terms, and
+the reference then rejects its frames with `offer id mismatch`. Inside a JSON string:
+
+| code point | on the wire | example |
+|---|---|---|
+| `"` and `\` | `\"` and `\\` | |
+| U+0008 U+0009 U+000A U+000C U+000D | the short escapes `\b` `\t` `\n` `\f` `\r` | |
+| any other below U+0020 | `\u00xx` | U+001B → `\u001b` |
+| U+0020–U+007E, `"` and `\` aside | the character itself | `/` stays `/`, never `\/` |
+| U+0080 and up | `\uxxxx`, one per UTF-16 code unit | U+1F600 → `\ud83d\ude00` |
+
+Hex digits are lowercase, and there is no `\u{…}` form: an astral character is always the two
+escapes of its surrogate pair, and a lone surrogate is the one escape of itself. **U+007F (DEL)
+is not permitted in a frame.** It is the one code point neither rule escapes — JSON's own
+escaping stops at U+001F and the non-ASCII rule starts at U+0080 — so it would reach the wire
+raw, which §2's ASCII-only requirement forbids: technocore sweeps it to a space before storing,
+leaving a stored line that is not the line the sender signed.
+
 Common field shapes:
 
 | shape | rule |
