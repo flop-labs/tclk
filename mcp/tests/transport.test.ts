@@ -5,6 +5,8 @@
 import { describe, expect, it } from "vitest";
 import { ed25519 } from "@noble/curves/ed25519.js";
 
+import { transcriptRecord, verifyTranscriptRecord } from "@flop-labs/tclk";
+
 import { canonicalMessage, signerFromSeed } from "../src/signing.js";
 import { createHandlers } from "../src/tools.js";
 import { HASH_OFFER, PAYER_SEED, fakeFetch, hexToBytes } from "./fixtures.js";
@@ -115,6 +117,54 @@ describe("tclk_post_frame — tier 2, server-signed", () => {
     expect(body.nonce).not.toBe(String(Number(nonce19)));
   });
 
+  it("refuses a nonce spelling the library's own fold would reject", async () => {
+    const { calls, fetchLike } = fakeFetch([{ body: "ok 15" }]);
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+    const line = offerLine();
+    // Canonical decimal is the whole rule: `verifyTranscriptRecord` accepts
+    // /^(?:0|[1-9][0-9]*)$/ and nothing else, and `postSigned` sends the string through
+    // verbatim. Posting `0000001730000000001` put a record on the board that this same
+    // package then refuses to fold, and the frame cannot be taken back.
+    const padded = "0000001730000000001";
+    await expect(
+      h.tclk_post_frame({
+        room: ROOM,
+        line,
+        did: signer.did,
+        sig: signer.sign(canonicalMessage(ROOM, padded, line)),
+        nonce: padded,
+      }),
+    ).rejects.toThrow(/no leading zero/);
+    expect(calls).toHaveLength(0);
+
+    // The reason it must be refused, stated as the round trip it breaks.
+    const record = transcriptRecord(ROOM, {
+      seq: 1,
+      ts: "2026-09-04T00:00:00Z",
+      from: signer.did,
+      nonce: padded,
+      sig: signer.sign(canonicalMessage(ROOM, padded, line)),
+      text: line,
+    });
+    expect(verifyTranscriptRecord(record)).toMatchObject({
+      ok: false,
+      reason: "record nonce is not canonical decimal",
+    });
+
+    // `0` itself is canonical and still accepted.
+    const zero = fakeFetch([{ body: "ok 16" }]);
+    const h0 = createHandlers({ env: {}, fetch: zero.fetchLike });
+    const posted = await h0.tclk_post_frame({
+      room: ROOM,
+      line,
+      did: signer.did,
+      sig: signer.sign(canonicalMessage(ROOM, "0", line)),
+      nonce: "0",
+    });
+    expect(posted.posted && posted.tier).toBe("caller-signed");
+    expect(JSON.parse(String(zero.calls[0].init?.body)).nonce).toBe("0");
+  });
+
   it("rejects an unsafe numeric nonce or malformed string in the shared handler", async () => {
     const { fetchLike } = fakeFetch([{ body: "ok 14" }]);
     const h = createHandlers({ env: {}, fetch: fetchLike });
@@ -126,7 +176,7 @@ describe("tclk_post_frame — tier 2, server-signed", () => {
       did: signer.did,
       sig: "x".repeat(86),
       nonce: 9007199254740992,
-    })).rejects.toThrow(/must be a non-negative safe integer or a 1-19 decimal digit string/);
+    })).rejects.toThrow(/must be a non-negative safe integer or 1-19 decimal digits with no leading zero/);
 
     await expect(h.tclk_post_frame({
       room: ROOM,
@@ -134,7 +184,7 @@ describe("tclk_post_frame — tier 2, server-signed", () => {
       did: signer.did,
       sig: "x".repeat(86),
       nonce: "123bad",
-    })).rejects.toThrow(/must be a non-negative safe integer or a 1-19 decimal digit string/);
+    })).rejects.toThrow(/must be a non-negative safe integer or 1-19 decimal digits with no leading zero/);
   });
 
   it("surfaces the venue's refusal instead of swallowing it", async () => {

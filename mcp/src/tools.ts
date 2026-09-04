@@ -60,6 +60,13 @@ function fail(msg: string): never {
   throw new Error(`tclk-mcp: ${msg}`);
 }
 
+/**
+ * A signed-lane nonce as text: canonical decimal, no leading zero, at most 19 digits so
+ * the venue's 64-bit counter round-trips. The same spelling `verifyTranscriptRecord`
+ * accepts, bounded — one written any other way cannot be folded back.
+ */
+export const CANONICAL_NONCE = /^(?:0|[1-9][0-9]{0,18})$/;
+
 /** 0x-prefixed lowercase 32-byte hex, the spelling the core's crypto expects. */
 function normalizeScalar(spec: string, name: string): string {
   const trimmed = spec.trim();
@@ -377,11 +384,18 @@ export function createHandlers(options: HandlerOptions = {}) {
         fail("pass all three of `did`, `sig` and `nonce`, or none of them");
       }
 
+      // A string nonce goes to the venue verbatim, and the signature covers the spelling
+      // as written. `verifyTranscriptRecord` in the library accepts only canonical decimal
+      // (`/^(?:0|[1-9][0-9]*)$/`), so a leading-zero nonce yields a record this same package
+      // refuses to fold: either the venue echoes `007` back and the read path calls it "not
+      // canonical decimal", or it normalizes to `7` and the signature over `room|007|text`
+      // no longer verifies. Neither is recoverable — the frame is on the board and cannot
+      // move state. Admit only the spelling the read path accepts.
       if (input.nonce !== undefined) {
         const isSafe = typeof input.nonce === "number" && Number.isSafeInteger(input.nonce) && input.nonce >= 0;
-        const isDecimal = typeof input.nonce === "string" && /^[0-9]{1,19}$/.test(input.nonce);
+        const isDecimal = typeof input.nonce === "string" && CANONICAL_NONCE.test(input.nonce);
         if (!isSafe && !isDecimal) {
-          fail("`nonce` must be a non-negative safe integer or a 1-19 decimal digit string");
+          fail("`nonce` must be a non-negative safe integer or 1-19 decimal digits with no leading zero");
         }
       }
 

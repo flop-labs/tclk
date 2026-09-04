@@ -66,7 +66,7 @@ describe("createServer", () => {
     await client.close();
   });
 
-  it("validates tclk_post_frame nonce: accepts safe int or 1-19 digit string, rejects unsafe numbers and malformed strings", async () => {
+  it("validates tclk_post_frame nonce: accepts safe int or canonical 1-19 digit string, rejects unsafe numbers, malformed and leading-zero strings", async () => {
     const client = await connect();
 
     // 1. Safe integer is accepted (schema validation passes; error comes from frame validation)
@@ -108,6 +108,15 @@ describe("createServer", () => {
     });
     expect(validStr.isError).toBe(true);
     expect((validStr.content as { text: string }[])[0].text).toMatch(/not a tclk\/1 line/);
+
+    // 6. A leading zero is rejected at the schema: the record it would post is one the
+    //    library's own `verifyTranscriptRecord` calls "not canonical decimal".
+    const paddedStr = await client.callTool({
+      name: "tclk_post_frame",
+      arguments: { room: "lobby", line: "gm", did: "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX", sig: "x".repeat(86), nonce: "0000001730000000001" },
+    });
+    expect(paddedStr.isError).toBe(true);
+    expect((paddedStr.content as { text: string }[])[0].text).toMatch(/Invalid arguments/);
 
     await client.close();
   });
