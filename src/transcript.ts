@@ -110,6 +110,69 @@ export function verifyTranscriptRecord(record: TranscriptRecord): TranscriptReco
   return { ok: true };
 }
 
+export interface DealRoomSpan {
+  /** The derived deal room this contract's post-accept frames belong to. */
+  room: string;
+  /** Rows supplied for that room whose signature verifies. */
+  count: number;
+  firstSeq: number | null;
+  lastSeq: number | null;
+  /** True when the verified rows run `1..n` with no hole. Not a completeness proof. */
+  gapFree: boolean;
+}
+
+/**
+ * Row continuity of one contract's derived deal room. The derived name addresses the room by
+ * the contract id, so it carries that contract's post-accept frames and nothing else, which is
+ * what makes a hole in its sequence meaningful. The shared board gives no such reading:
+ * thousands of contracts interleave there, so a gap between one contract's rows is the normal
+ * case and carries no information.
+ *
+ * Only rows whose signature verifies are counted, so a hole cannot be closed with unsigned
+ * padding - closing one needs a signed row for that room, which cannot be forged.
+ *
+ * `gapFree` compares distinct positions, not row count. A duplicated row is a genuine signed
+ * row and verifies like any other, so counting rows lets one close a hole arithmetically:
+ * `1,2,2,4` is four rows across a span of four and only three positions. `count` stays the row
+ * count, because that is the honest number to print beside "verified rows".
+ *
+ * `firstSeq === 1` is required because a derived room is small and holds one contract, so it
+ * never loses a prefix. It is not a rule that generalizes: the venue's ring evicts from the
+ * front, so a busy room retains a contiguous window that does not begin at 1.
+ *
+ * `gapFree` is **not** a completeness proof, and an auditor that reports it as one is worse
+ * than one that reports nothing. `seq` is venue metadata outside the signed `room|nonce|line`
+ * preimage, so an editor who drops a row and renumbers the rows it keeps leaves no hole, and
+ * dropping the last row leaves no hole either. Report this as "no gap detected".
+ */
+export function dealRoomSpan(
+  records: readonly TranscriptRecord[],
+  contract: string,
+): DealRoomSpan {
+  const room = dealRoom(contract);
+  let count = 0;
+  const positions = new Set<number>();
+  for (const record of records) {
+    if (!record || record.room !== room) continue;
+    if (!verifyTranscriptRecord(record).ok) continue;
+    count += 1;
+    positions.add(record.seq);
+  }
+  if (count === 0) {
+    return { room, count: 0, firstSeq: null, lastSeq: null, gapFree: false };
+  }
+  const sorted = [...positions].sort((left, right) => left - right);
+  const firstSeq = sorted[0];
+  const lastSeq = sorted[sorted.length - 1];
+  return {
+    room,
+    count,
+    firstSeq,
+    lastSeq,
+    gapFree: firstSeq === 1 && positions.size === lastSeq - firstSeq + 1,
+  };
+}
+
 function object(value: unknown, where: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`tclk: ${where} is not a JSON object`);

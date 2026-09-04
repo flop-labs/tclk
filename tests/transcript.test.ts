@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   encodeFrame,
   dealRoom,
+  dealRoomSpan,
   findContractHandshake,
   foldTranscript,
   generateHashLock,
@@ -233,5 +234,110 @@ describe("trusted transcript records", () => {
       [offerRecord, acceptRecord],
       accept.contract,
     )).toEqual({ offer: offerRecord, accept: acceptRecord });
+  });
+});
+
+describe("derived deal-room continuity", () => {
+  function rows() {
+    const { lock, offer, accept } = deal();
+    const room = dealRoom(accept.contract);
+    const lockFrame = {
+      type: "lock" as const,
+      from: payer.did,
+      contract: accept.contract,
+      rail: "flop-htlc",
+      ref: "escrow-42",
+    };
+    const reveal = {
+      type: "reveal" as const,
+      from: payee.did,
+      contract: accept.contract,
+      secret: lock.preimage,
+    };
+    const refund = { type: "refund" as const, from: payer.did, contract: accept.contract };
+    return {
+      contract: accept.contract,
+      room,
+      board: [
+        record(BOARD, 1, NOW - 1, payer, encodeFrame(offer)),
+        record(BOARD, 2, NOW, payee, encodeFrame(accept)),
+      ],
+      lockRow: record(room, 1, NOW + 1, payer, encodeFrame(lockFrame)),
+      revealRow: record(room, 2, NOW + 2, payee, encodeFrame(reveal)),
+      refundRow: (seq: number) =>
+        record(room, seq, NOW + 7_200_001, payer, encodeFrame(refund)),
+    };
+  }
+
+  it("counts a whole deal room as gap free, and ignores the board rows", () => {
+    const supplied = rows();
+    expect(
+      dealRoomSpan([...supplied.board, supplied.lockRow, supplied.revealRow], supplied.contract),
+    ).toEqual({
+      room: supplied.room,
+      count: 2,
+      firstSeq: 1,
+      lastSeq: 2,
+      gapFree: true,
+    });
+  });
+
+  it("detects the deleted reveal that folds a claimed deal to refunded with no bad step", () => {
+    const supplied = rows();
+    const censored = [...supplied.board, supplied.lockRow, supplied.refundRow(3)];
+
+    const folded = foldTranscript(censored);
+    expect(folded.state?.status).toBe("refunded");
+    expect(folded.steps.every((step) => step.ok)).toBe(true);
+
+    expect(dealRoomSpan(censored, supplied.contract)).toMatchObject({
+      count: 2,
+      firstSeq: 1,
+      lastSeq: 3,
+      gapFree: false,
+    });
+  });
+
+  it("does not detect the same deletion once the kept rows are renumbered", () => {
+    const supplied = rows();
+    // `seq` is venue metadata outside the signed `room|nonce|line` preimage, so the refund
+    // still verifies at 2. This pins the limit rather than claiming it away: counting catches
+    // a careless editor, and "no gap detected" must never be read as "transcript complete".
+    const renumbered = [...supplied.board, supplied.lockRow, supplied.refundRow(2)];
+    expect(foldTranscript(renumbered).state?.status).toBe("refunded");
+    expect(dealRoomSpan(renumbered, supplied.contract).gapFree).toBe(true);
+  });
+
+  it("does not let a duplicated row close a hole", () => {
+    const supplied = rows();
+    // A repeat of a genuine row verifies like the original, because `seq` is not in the signed
+    // preimage and nothing else changes. Counting rows rather than positions would read
+    // 1,2,2,4 as four rows across a span of four and call it whole.
+    const padded = [
+      ...supplied.board,
+      supplied.lockRow,
+      supplied.revealRow,
+      supplied.revealRow,
+      supplied.refundRow(4),
+    ];
+
+    expect(dealRoomSpan(padded, supplied.contract)).toMatchObject({
+      count: 4,
+      firstSeq: 1,
+      lastSeq: 4,
+      gapFree: false,
+    });
+  });
+
+  it("does not let an unsigned row close a hole", () => {
+    const supplied = rows();
+    const padding = { ...supplied.revealRow, nonce: null, signature: null };
+    const padded = [...supplied.board, supplied.lockRow, padding, supplied.refundRow(3)];
+
+    expect(dealRoomSpan(padded, supplied.contract)).toMatchObject({
+      count: 2,
+      lastSeq: 3,
+      gapFree: false,
+    });
   });
 });

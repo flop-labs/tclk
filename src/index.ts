@@ -36,11 +36,11 @@ export type { TclkStatus, ContractState, StepResult } from "./machine.js";
 
 export {
   verifyTranscriptRecord, transcriptRecord, parseTranscriptExport,
-  findContractHandshake, foldTranscript,
+  findContractHandshake, foldTranscript, dealRoomSpan,
 } from "./transcript.js";
 export type {
   TranscriptRecord, TranscriptRecordVerification, TranscriptStep, TranscriptFoldResult,
-  ContractHandshake,
+  ContractHandshake, DealRoomSpan,
 } from "./transcript.js";
 
 export { lockTerms, MemoryRail } from "./rail.js";
