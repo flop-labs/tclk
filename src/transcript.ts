@@ -54,6 +54,31 @@ export interface TranscriptFoldResult {
   steps: TranscriptStep[];
 }
 
+/**
+ * Which single room a fold reads post-accept frames from. Exactly one, in either mode —
+ * admitting both rooms would leave the result depending on how the caller interleaved two
+ * independent streams (per-room `seq`, millisecond timestamps that can tie), so signed
+ * evidence would no longer determine one state.
+ *
+ * - `"strict"` — SPEC §2 as first written: post-accept frames only in the contract's derived
+ *   deal room. The default.
+ * - `"offer-room"` — post-accept frames only in `tclk-offers`; a frame in the derived room is
+ *   rejected like any other wrong-room frame. For deals whose payer could not open the derived
+ *   room — a venue can refuse a new room outright (service-wide cap, `400`) or per client
+ *   (`rate_rooms_per_day`, `429`) — and so announced the lock on the board instead.
+ *
+ * Neither mode relaxes anything but the room: the frame still has to be signed by a party,
+ * name this contract, and pass the state guards. Neither consults a settlement rail — a fold
+ * says what the signed transcript establishes, not that anything was funded. And the board
+ * is a ~10 MiB ring: a deal kept there stops being verifiable from the venue within hours,
+ * so `"offer-room"` restores visibility, not durability.
+ */
+export type RoomBinding = "strict" | "offer-room";
+
+export interface FoldOptions {
+  roomBinding?: RoomBinding;
+}
+
 export interface ContractHandshake {
   offer: TranscriptRecord;
   accept: TranscriptRecord;
@@ -231,9 +256,17 @@ export function findContractHandshake(
  * Authenticate and fold records in the supplied order. Every record gets a verdict;
  * invalid signatures, forged `from` fields, wrong rooms, malformed lines and bad
  * transitions are rejected without changing state. Deadline guards use that record's
- * venue timestamp.
+ * venue timestamp. `options.roomBinding` selects how the room binding is enforced
+ * (see RoomBinding); the default is strict.
  */
-export function foldTranscript(records: readonly TranscriptRecord[]): TranscriptFoldResult {
+export function foldTranscript(
+  records: readonly TranscriptRecord[],
+  options: FoldOptions = {},
+): TranscriptFoldResult {
+  const roomBinding: RoomBinding = options.roomBinding ?? "strict";
+  if (roomBinding !== "strict" && roomBinding !== "offer-room") {
+    throw new Error(`tclk: unknown roomBinding ${JSON.stringify(roomBinding)}`);
+  }
   const steps: TranscriptStep[] = [];
   let state: ContractState | null = null;
 
@@ -288,10 +321,14 @@ export function foldTranscript(records: readonly TranscriptRecord[]): Transcript
       return;
     }
 
+    // Offer/accept always belong to the board; post-accept frames belong to exactly one
+    // room chosen by the mode. A frame anywhere else is rejected, in either mode.
     const expectedRoom =
       frame.type === "offer" || frame.type === "accept" || state.contract === undefined
         ? OFFER_ROOM
-        : dealRoom(state.contract);
+        : roomBinding === "offer-room"
+          ? OFFER_ROOM
+          : dealRoom(state.contract);
     if (record.room !== expectedRoom) {
       const where = expectedRoom === OFFER_ROOM
         ? OFFER_ROOM

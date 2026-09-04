@@ -34,6 +34,7 @@ import {
   type OfferFrame,
   type PresigRef,
   type TclkFrame,
+  type RoomBinding,
   type TranscriptRecord,
 } from "@flop-labs/tclk";
 
@@ -256,8 +257,8 @@ export function createHandlers(options: HandlerOptions = {}) {
      * each record signature and sender binding, then applies its frame at that record's
      * venue timestamp. Every record gets a verdict and invalid input changes no state.
      */
-    tclk_apply_transcript(input: { records: TranscriptRecord[] }) {
-      const folded = foldTranscript(input.records);
+    tclk_apply_transcript(input: { records: TranscriptRecord[]; roomBinding?: RoomBinding }) {
+      const folded = foldTranscript(input.records, { roomBinding: input.roomBinding });
       if (folded.state === null) {
         const offerFailure = folded.steps.find((step) => step.type === "offer" && !step.ok);
         fail(

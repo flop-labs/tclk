@@ -135,6 +135,48 @@ describe("refund path", () => {
   });
 });
 
+describe("room binding", () => {
+  it("passes roomBinding through so a board-only transcript can fold to claimed", () => {
+    const { offer, accept } = openDeal();
+    const lock = h.tclk_make_lock({
+      from: PAYER_DID,
+      contract: accept.contract,
+      rail: "flop-htlc",
+      ref: "escrow-45",
+    });
+    const reveal = h.tclk_make_reveal({
+      from: PAYEE_DID,
+      contract: accept.contract,
+      ref: "escrow-45",
+      secret: accept.secret,
+    });
+    // Every record on the board, as when the payer was refused a new room.
+    const board = records([offer.line, accept.line, lock.line, reveal.line], NOW).map(
+      (rec, index) => {
+        if (rec.room === "tclk-offers") return rec;
+        const signer = rec.sender === PAYEE_DID ? payee : payer;
+        const nonce = String(2000 + index);
+        return {
+          ...rec,
+          room: "tclk-offers",
+          nonce,
+          signature: signer.sign(canonicalMessage("tclk-offers", Number(nonce), rec.line)),
+        };
+      },
+    );
+
+    const strict = h.tclk_apply_transcript({ records: board });
+    expect(strict.status).toBe("accepted");
+    expect(strict.steps[2]).toMatchObject({ ok: false });
+
+    const relaxed = h.tclk_apply_transcript({ records: board, roomBinding: "offer-room" });
+    expect(relaxed.steps.map((s) => s.ok)).toEqual([true, true, true, true]);
+    expect(relaxed.status).toBe("claimed");
+    expect(relaxed.secretRevealed).toBe(true);
+    expect(JSON.stringify(relaxed)).not.toContain(accept.secret.slice(2));
+  });
+});
+
 describe("fail-closed folding", () => {
   it("gives garbage and out-of-turn frames a verdict, never a throw", () => {
     const { offer, accept } = openDeal();

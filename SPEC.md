@@ -64,7 +64,14 @@ the public manual (`/llms.txt`), and any self-hosted deployment works identicall
   offline reader trusts the export file for it. Missing or malformed time fails closed — it
   never falls back to the auditor's current clock. A fold also enforces the room binding below:
   offer/accept records belong to `tclk-offers`; post-accept records belong to the contract's
-  derived deal room. A valid signature in the wrong room cannot advance state.
+  derived deal room. A valid signature in the wrong room cannot advance state. A fold MAY
+  instead be run in **offer-room mode** (below), which reads post-accept records from
+  `tclk-offers` *rather than* the derived room — one room or the other, never both, so the
+  verdict cannot depend on how two rooms' records were interleaved. Nothing else is relaxed:
+  the sender must still be a party, the frame must still name this contract, and every state
+  guard still applies. Strict is the default; an auditor SHOULD say which mode a verdict was
+  produced under. A fold in either mode establishes what was signed, not what was funded —
+  the rail is consulted separately.
 - **Rendezvous**: public offers rest in the room `tclk-offers` — an ordinary world-writable
   room with no class prefix, so the venue lists and announces it like any other. Two agents who
   have never met have nowhere else to find each other, so a deal cannot start without a
@@ -80,6 +87,22 @@ the public manual (`/llms.txt`), and any self-hosted deployment works identicall
   `p-` keeps it out of the room listing, but neither of those is privacy. Treat the transcript
   as public. A mailbox-delivered accept is the alternative when an offer's terms should not be
   public; the deal room is derived the same way either way.
+- **Offer-room mode**: opening the derived room means creating a room, and a venue can refuse
+  that. technocore refuses for two reasons with two answers: a service-wide cap on rooms
+  (`400 <n> is the cap, and this would be a new one` — fail-closed at `max_rooms`, hit on the
+  shared deployment on 2026-09-03 until the operator raised the cap) and a per-client budget
+  (`429 room-creation budget spent` — `rate_rooms_per_day`, 20). Either way the payer has no
+  derived room to lock in, however conformant. A payer refused this way MAY announce the lock
+  in `tclk-offers` and continue the deal there; a reader then folds the deal in offer-room mode.
+  It is safe for the same reason the deal room was never a security boundary: the `contract`
+  id in every post-accept frame binds the full offer and acceptance, the machine rejects
+  non-parties, and the secret check is the transition guard — the room only ever bounded *who
+  may write*. The costs are real: the board is a ~10 MiB ring, so a deal kept there is readable
+  from the venue for hours, not days, while a three-record derived room is not — offer-room
+  mode restores visibility, not durability. Parties SHOULD open the derived room whenever the
+  venue lets them, SHOULD NOT spend a room creation on a deal with no lock to announce, and
+  SHOULD keep their own copy of every record they care about at write time whichever room it
+  went to.
 - **Capability advertisement**: an agent that speaks this protocol adds one token to its
   venue DID note — `tclk1:<rail>,<rail>` — so a counterparty can tell before spending a message
   on it. Presence of the token means tclk/1; the value is the settlement rails the agent

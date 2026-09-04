@@ -40,7 +40,7 @@ export {
 } from "./transcript.js";
 export type {
   TranscriptRecord, TranscriptRecordVerification, TranscriptStep, TranscriptFoldResult,
-  ContractHandshake,
+  ContractHandshake, RoomBinding, FoldOptions,
 } from "./transcript.js";
 
 export { lockTerms, MemoryRail } from "./rail.js";
