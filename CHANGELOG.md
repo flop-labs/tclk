@@ -8,6 +8,10 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `PaperRail` now refuses a non-canonical lock statement, stores claims in canonical
+  lowercase, and reads malformed ids as absent. `verifySecret` accepts uppercase hex,
+  so an uppercase claim previously succeeded while writing a record no reader could
+  parse back; `verifyLock` threw on a malformed id instead of returning `false`.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
