@@ -191,7 +191,11 @@ party advertises supported rails. For PTLC rails that settle by signature, `pres
 payer's Schnorr adaptor pre-signature `{nonce, s}` under the statement `Y` over the rail's claim
 message: the payee completes it with `y` (`adapt`), and the completed signature both settles the
 rail and — by `extractWitness` — hands `y` to anyone holding the pre-signature. Verifying it is
-`verifyPreSignature` against the payer's `paymentKey`.
+`verifyPreSignature` against the payer's `paymentKey`, evaluated out-of-band by the payee
+against the settlement rail's specific claim message prior to secret reveal. Transcript readers
+and `applyFrame` enforce the structural wire validity of `presig` (shape of `nonce` and scalar
+`s`), but do not evaluate the cryptographic pre-signature because the claim message is defined
+by the settlement rail and is not part of the coordination transcript.
 
 ### 3.4 `reveal`
 

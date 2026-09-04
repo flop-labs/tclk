@@ -427,6 +427,46 @@ describe("tclk PTLC path (adaptor cycle)", () => {
     expect(claimed.ok).toBe(true);
     expect(claimed.state.status).toBe("claimed");
   });
+
+  it("presig verification is an out-of-band payee obligation over the rail claimMsg; applyFrame enforces structural shape without claimMsg (#36)", () => {
+    const payerSecret = "0x" + "11".repeat(32);
+    const payerKey = schnorrAdaptor.getPublicKey(payerSecret)!;
+    const payeeKey = schnorrAdaptor.getPublicKey("0x" + "22".repeat(32))!;
+
+    const offer = baseOffer({ lock: "point", paymentKey: payerKey });
+    const ptlc = generatePointLock();
+    const accept = makeAccept(offer, { from: PAYEE_DID, statement: ptlc.statement, paymentKey: payeeKey });
+    const acceptedState = applyFrame(openContract(offer), accept, T0).state;
+
+    const realClaimMsg = "0x" + "cd".repeat(32);
+    const validPre = schnorrAdaptor.preSign(payerSecret, realClaimMsg, ptlc.statement)!;
+
+    // 1. Structural wire invalidity is rejected by applyFrame (and validateFrame)
+    const malformedNonce = { nonce: "0x" + "00".repeat(10), s: validPre.s };
+    expect(applyFrame(acceptedState, {
+      type: "lock", from: PAYER_DID, contract: acceptedState.contract!, rail: "flop-htlc",
+      ref: "escrow-7", presig: malformedNonce,
+    }, T0).ok).toBe(false);
+
+    // 2. Structurally valid presig with arbitrary/mismatched claim signature passes applyFrame:
+    // the coordination state machine has no claim message and does not verify the pre-signature.
+    const wrongClaimMsg = "0x" + "ee".repeat(32);
+    const mismatchedPre = schnorrAdaptor.preSign(payerSecret, wrongClaimMsg, ptlc.statement)!;
+    const lockedStep = applyFrame(acceptedState, {
+      type: "lock", from: PAYER_DID, contract: acceptedState.contract!, rail: "flop-htlc",
+      ref: "escrow-7", presig: mismatchedPre,
+    }, T0);
+    expect(lockedStep.ok).toBe(true);
+    expect(lockedStep.state.status).toBe("locked");
+    expect(lockedStep.state.presig).toEqual(mismatchedPre);
+
+    // 3. Out-of-band payee verification: payee checks presig against their rail claimMsg.
+    // When mismatched, payee verification fails, so payee refuses to adapt or reveal.
+    expect(schnorrAdaptor.verifyPreSignature(payerKey, realClaimMsg, ptlc.statement, lockedStep.state.presig!)).toBe(false);
+
+    // When valid for realClaimMsg, payee verification passes and reveals safely.
+    expect(schnorrAdaptor.verifyPreSignature(payerKey, realClaimMsg, ptlc.statement, validPre)).toBe(true);
+  });
 });
 
 describe("tclk MemoryRail (reference rail predicates)", () => {
