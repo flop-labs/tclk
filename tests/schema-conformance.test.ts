@@ -3,7 +3,9 @@
 // generated decoder contract or the normative SPEC table from drifting away unnoticed.
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -60,6 +62,36 @@ describe("protocol schema", () => {
       ["scripts/generate-frame-fields.mjs", "--check"],
       { cwd: root, stdio: "pipe" },
     )).not.toThrow();
+  });
+
+  // That check compares both artefacts byte for byte, and nothing pinned the checkout's line
+  // endings, so a clone made with `core.autocrlf=true` reported the protocol as stale when
+  // only its line endings differed. Line endings are the checkout's business; what the schema
+  // says is not, and folding them away must not cost the check its teeth.
+  it("reports drift by generated content, not by checkout line endings", () => {
+    const scratch = mkdtempSync(join(tmpdir(), "tclk-eol-"));
+    try {
+      for (const dir of ["schema", "scripts", "src"]) mkdirSync(join(scratch, dir));
+      const schemaCopy = join(scratch, "schema", "tclk1-frames.schema.json");
+      const script = join(scratch, "scripts", "generate-frame-fields.mjs");
+      copyFileSync(join(root, "scripts", "generate-frame-fields.mjs"), script);
+      copyFileSync(join(root, "schema", "tclk1-frames.schema.json"), schemaCopy);
+      const generatedCopy = join(scratch, "src", "frame-fields.generated.ts");
+      for (const file of [join("src", "frame-fields.generated.ts"), "SPEC.md"]) {
+        writeFileSync(join(scratch, file), readFileSync(join(root, file), "utf8").replace(/\r?\n/g, "\r\n"));
+      }
+      const check = () => execFileSync(process.execPath, [script, "--check"], { stdio: "pipe" });
+
+      expect(readFileSync(generatedCopy, "utf8")).toContain("\r\n");
+      expect(check).not.toThrow();
+
+      const drifted = JSON.parse(readFileSync(schemaCopy, "utf8"));
+      drifted.$defs.rail["x-tclk-canonicalIds"].push("unregenerated-rail");
+      writeFileSync(schemaCopy, JSON.stringify(drifted, null, 2));
+      expect(check).toThrow();
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
   });
 
   it("keeps historical duplicate rail arrays decodable under tclk1", () => {
