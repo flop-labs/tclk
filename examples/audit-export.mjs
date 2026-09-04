@@ -43,6 +43,18 @@ for (const step of folded.steps) {
   console.log(`${verdict} ${step.room}#${step.seq} ${step.type ?? "record"}${step.reason ? ` — ${step.reason}` : ""}`);
 }
 
+if (folded.warnings?.length) {
+  console.error("\nwarnings (timestamps/seq are venue metadata, not signed — see SPEC §2):");
+  for (const w of folded.warnings) console.error(`  WARN: ${w}`);
+  // A gap or reordering can flip claimed↔refunded with no BAD verdict (see #93).
+  // A backwards timestamp can flip a deadline with all signatures valid.
+  const fatal = folded.warnings.some((w) => w.includes("gap detected") || w.includes("seq not strictly increasing") || w.includes("timestamp goes backwards"));
+  if (fatal) {
+    console.error("\ntranscript is not per-room contiguous/monotonic — refusing to treat fold as audit proof");
+    process.exit(1);
+  }
+}
+
 if (folded.state === null) {
   console.error("no authenticated contract could be opened");
   process.exit(1);
@@ -50,4 +62,7 @@ if (folded.state === null) {
 
 const terminal = ["claimed", "refunded", "cancelled"].includes(folded.state.status);
 console.log(`\nfold → ${folded.state.status}${terminal ? "" : " (not terminal)"}`);
+if (folded.warnings?.length) {
+  console.log("note: timestamps/seq are venue metadata, not covered by signature — verify settlement on the rail");
+}
 process.exit(terminal ? 0 : 1);
