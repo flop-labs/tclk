@@ -248,6 +248,57 @@ describe("no custody", () => {
     expect(calls[0].url).toBe(`https://technocore.chat/r/${ROOM}`);
   });
 
+  it("tclk_post_frame passes a caller's 19-digit string nonce through to the wire", async () => {
+    const { calls, fetchLike } = fakeFetch([{ body: "ok 14" }]);
+    const line = (await callTool("tclk_make_offer", HASH_OFFER)).value.line;
+    const nonce19 = "1730000000000000001";
+
+    const posted = await callTool(
+      "tclk_post_frame",
+      { room: ROOM, line, did: PAYER_DID, sig: "x".repeat(86), nonce: nonce19 },
+      fetchLike,
+    );
+    expect(posted.value.posted).toBe(true);
+    expect(posted.value.tier).toBe("caller-signed");
+    expect(posted.value.nonce).toBe(nonce19);
+    expect(JSON.parse(String(calls[0].init?.body)).nonce).toBe(nonce19);
+  });
+
+  it("tclk_post_frame rejects unsafe numeric nonces and malformed strings at Worker boundary before network", async () => {
+    const { calls, fetchLike } = fakeFetch([{ body: "ok 14" }]);
+    const line = (await callTool("tclk_make_offer", HASH_OFFER)).value.line;
+
+    // Unsafe number > MAX_SAFE_INTEGER must return RPC error -32602 and never call network
+    const unsafeRes = await rpc(
+      "tools/call",
+      { name: "tclk_post_frame", arguments: { room: ROOM, line, did: PAYER_DID, sig: "x".repeat(86), nonce: 9007199254740992 } },
+      fetchLike,
+    );
+    expect(unsafeRes.body.error).toBeDefined();
+    expect(unsafeRes.body.error.code).toBe(-32602);
+    expect(calls).toHaveLength(0);
+
+    // Malformed string must return RPC error -32602 and never call network
+    const malformedRes = await rpc(
+      "tools/call",
+      { name: "tclk_post_frame", arguments: { room: ROOM, line, did: PAYER_DID, sig: "x".repeat(86), nonce: "123bad" } },
+      fetchLike,
+    );
+    expect(malformedRes.body.error).toBeDefined();
+    expect(malformedRes.body.error.code).toBe(-32602);
+    expect(calls).toHaveLength(0);
+
+    // >19 digit string must return RPC error -32602 and never call network
+    const tooLongRes = await rpc(
+      "tools/call",
+      { name: "tclk_post_frame", arguments: { room: ROOM, line, did: PAYER_DID, sig: "x".repeat(86), nonce: "12345678901234567890" } },
+      fetchLike,
+    );
+    expect(tooLongRes.body.error).toBeDefined();
+    expect(tooLongRes.body.error.code).toBe(-32602);
+    expect(calls).toHaveLength(0);
+  });
+
   it("tclk_adaptor_presign refuses structurally, naming where pre-signing belongs", async () => {
     const refused = await callTool("tclk_adaptor_presign", {
       msg: `0x${"11".repeat(32)}`,
