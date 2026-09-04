@@ -198,6 +198,7 @@ function requireKeys(
 function validateJob(v: unknown): JobRef {
   if (!v || typeof v !== "object" || Array.isArray(v)) fail("job must be an object");
   const job = v as Record<string, unknown>;
+  if ("type" in job) fail("unknown field on job: type");
   requireKeys({ ...job, type: "job" }, new Set(["type", "proto", "id", "context"]), ["proto", "id"]);
   requireString(job.proto, "job.proto", /^[a-z0-9][a-z0-9._-]{0,31}$/);
   requireString(job.id, "job.id");
@@ -331,6 +332,7 @@ export function validateFrame(value: unknown): TclkFrame {
       if (frame.presig !== undefined) {
         const presig = frame.presig as Record<string, unknown>;
         if (!presig || typeof presig !== "object" || Array.isArray(presig)) fail("presig must be an object");
+        if ("type" in presig) fail("unknown field on presig: type");
         requireKeys({ ...presig, type: "presig" }, new Set(["type", "nonce", "s"]), ["nonce", "s"]);
         requireString(presig.nonce, "presig.nonce", HEX33);
         requireString(presig.s, "presig.s", SCALAR_HEX);
