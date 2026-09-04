@@ -56,8 +56,12 @@ if (nextSpec === spec && !spec.includes(table)) {
   throw new Error("SPEC.md has no generated frame-field markers");
 }
 
+// Line endings belong to the checkout, not to the schema. Compare with CRLF folded to LF so
+// a working tree that stores them that way does not read as protocol drift; writes stay LF.
+const sameContent = (a, b) => a.replaceAll("\r\n", "\n") === b.replaceAll("\r\n", "\n");
+
 if (process.argv.includes("--check")) {
-  if (readFileSync(generatedPath, "utf8") !== generated || spec !== nextSpec) {
+  if (!sameContent(readFileSync(generatedPath, "utf8"), generated) || !sameContent(spec, nextSpec)) {
     console.error("generated protocol fields are stale; run pnpm generate:protocol");
     process.exit(1);
   }
