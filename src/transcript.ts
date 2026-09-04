@@ -131,6 +131,10 @@ export interface DealRoomSpan {
  * Only rows whose signature verifies are counted, so a hole cannot be closed with unsigned
  * padding - closing one needs a signed row for that room, which cannot be forged.
  *
+ * `firstSeq === 1` is required because a derived room is small and holds one contract, so it
+ * never loses a prefix. It is not a rule that generalizes: the venue's ring evicts from the
+ * front, so a busy room retains a contiguous window that does not begin at 1.
+ *
  * `gapFree` is **not** a completeness proof, and an auditor that reports it as one is worse
  * than one that reports nothing. `seq` is venue metadata outside the signed `room|nonce|line`
  * preimage, so an editor who drops a row and renumbers the rows it keeps leaves no hole, and

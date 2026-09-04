@@ -51,9 +51,15 @@ if (folded.state === null) {
 
 const span = dealRoomSpan(deal, contract);
 const range = span.count === 0 ? "none" : `${span.firstSeq}..${span.lastSeq}`;
-console.log(`\n${span.room}: ${span.count} verified rows, seq ${range} — ${span.gapFree ? "no gap detected" : "GAP"}`);
-console.log("  \"no gap detected\" is not a completeness proof: seq is venue metadata outside the");
-console.log("  signature, so renumbering the kept rows, or dropping the last one, leaves no gap.");
+const verdict = span.count === 0 ? "no rows" : span.gapFree ? "no gap detected" : "GAP";
+console.log(`\n${span.room}: ${span.count} verified rows, seq ${range} — ${verdict}`);
+if (span.count === 0) {
+  console.log("  an empty deal room reads the same whether it was censored or simply expired: the");
+  console.log("  venue deletes a room after seven days with no write, and a terminal deal stops writing.");
+} else {
+  console.log("  \"no gap detected\" is not a completeness proof: seq is venue metadata outside the");
+  console.log("  signature, so renumbering the kept rows, or dropping the last one, leaves no gap.");
+}
 
 const terminal = ["claimed", "refunded", "cancelled"].includes(folded.state.status);
 console.log(`\nfold → ${folded.state.status}${terminal ? "" : " (not terminal)"}`);
