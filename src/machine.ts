@@ -213,7 +213,7 @@ export function applyFrame(state: ContractState, frame: TclkFrame, nowMs: number
       if (frame.outcome !== state.status) {
         return reject(state, `receipt outcome ${frame.outcome} does not match ${state.status}`);
       }
-      if (frame.rail !== undefined && state.rail !== undefined && frame.rail !== state.rail) {
+      if (frame.rail !== undefined && state.rail !== undefined && normalizeRailId(frame.rail) !== normalizeRailId(state.rail)) {
         return reject(state, `receipt rail ${frame.rail} does not match contract rail ${state.rail}`);
       }
       if (frame.ref !== undefined && state.railRef !== undefined && frame.ref !== state.railRef) {
