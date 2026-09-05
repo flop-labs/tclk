@@ -430,6 +430,7 @@ export function createHandlers(options: HandlerOptions = {}) {
           records,
           count: records.length,
           lastSeq: records.at(-1)?.seq ?? null,
+          generation: null,
         };
       }
 
@@ -469,6 +470,7 @@ export function createHandlers(options: HandlerOptions = {}) {
         malformed,
         count: records.length,
         lastSeq: view.last_seq,
+        generation: view.generation,
       };
     },
 

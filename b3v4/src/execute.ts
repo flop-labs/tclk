@@ -233,8 +233,8 @@ export async function executeFastPath(
     let heartbeatNeeded = false;
 
     try {
-      const roomRecords = await venue.readRoom(room);
-      heartbeatNeeded = roomRecords.length === 0;
+      const roomResult = await venue.readRoom(room);
+      heartbeatNeeded = roomResult.records.length === 0;
     } catch {
       heartbeatNeeded = true;
     }
@@ -354,8 +354,8 @@ export async function executeFastPath(
 
     // ── G. Verify signed lock record ──────────────────────────────────────
     try {
-      const roomRecords = await venue.readRoom(room);
-      const lockRecord = roomRecords.find((r) => {
+      const roomResult = await venue.readRoom(room);
+      const lockRecord = roomResult.records.find((r) => {
         const frame = tryDecodeFrame(r.line);
         return frame?.type === "lock" && frame.contract === selected.contract;
       });

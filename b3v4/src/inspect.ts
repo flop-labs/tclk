@@ -161,11 +161,11 @@ export async function inspect(
 
   if (dr) {
     try {
-      const roomRecords = await venue.readRoom(dr);
-      roomExists = roomRecords.length > 0;
+      const roomResult = await venue.readRoom(dr);
+      roomExists = roomResult.records.length > 0;
 
       // Check for existing lock frames
-      for (const record of roomRecords) {
+      for (const record of roomResult.records) {
         const frame = tryDecodeFrame(record.line);
         if (frame !== null && frame.type === "lock") {
           existingLock = true;

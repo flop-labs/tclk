@@ -18,7 +18,7 @@ import {
 } from "@flop-labs/tclk";
 import { encodeFrame, type TclkFrame } from "@flop-labs/tclk";
 
-import type { VenueIO, VenueSigner } from "./types.js";
+import type { RoomReadResult, VenueIO, VenueSigner } from "./types.js";
 
 const DEFAULT_TECHNOCORE_URL = "https://technocore.chat";
 
@@ -50,7 +50,10 @@ export function createVenueIO(opts: {
           // Skip malformed records — a room is world-writable input.
         }
       }
-      return records;
+      // Extract generation from view if available (X-Room-Generation header)
+      const generation = (view as unknown as Record<string, unknown>).generation as number | null ?? null;
+      const lastSeq = records.length > 0 ? records[records.length - 1].seq : null;
+      return { records, generation, lastSeq };
     },
 
     async exportRoom(room) {
@@ -118,23 +121,37 @@ export function createMockVenueIO(): VenueIO & {
   posted: { room: string; did: string; text: string }[];
   notes: Map<string, string>;
   roomData: Map<string, TranscriptRecord[]>;
+  generations: Map<string, number>;
   addRoomData(room: string, records: TranscriptRecord[]): void;
+  setGeneration(room: string, gen: number): void;
 } {
   const posted: { room: string; did: string; text: string }[] = [];
   const notes = new Map<string, string>();
   const roomData = new Map<string, TranscriptRecord[]>();
+  const generations = new Map<string, number>();
 
   return {
     posted,
     notes,
     roomData,
+    generations,
 
     addRoomData(room, records) {
       roomData.set(room, records);
     },
 
-    async readRoom(room) {
-      return roomData.get(room) ?? [];
+    setGeneration(room, gen) {
+      generations.set(room, gen);
+    },
+
+    async readRoom(room, since) {
+      const allRecords = roomData.get(room) ?? [];
+      const filtered = since !== undefined
+        ? allRecords.filter((r) => r.seq > since)
+        : allRecords;
+      const generation = generations.get(room) ?? null;
+      const lastSeq = filtered.length > 0 ? filtered[filtered.length - 1].seq : null;
+      return { records: filtered, generation, lastSeq };
     },
 
     async exportRoom(room) {

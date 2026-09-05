@@ -128,8 +128,16 @@ export interface VenueSigner {
   nextNonce(): string;
 }
 
+export interface RoomReadResult {
+  records: TranscriptRecord[];
+  /** Venue generation for this room. Changes when room is recreated. */
+  generation: number | null;
+  /** Last seq in the response, or null if empty. */
+  lastSeq: number | null;
+}
+
 export interface VenueIO {
-  readRoom(room: string, since?: number): Promise<TranscriptRecord[]>;
+  readRoom(room: string, since?: number): Promise<RoomReadResult>;
   exportRoom(room: string): Promise<TranscriptRecord[]>;
   postSigned(room: string, signer: VenueSigner, line: string): Promise<string>;
   noteGet(ns: string, key: string): Promise<string | null>;

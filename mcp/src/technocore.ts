@@ -40,6 +40,7 @@ export interface RoomView {
   count: number;
   first_seq?: number | null;
   last_seq: number;
+  generation: number | null;
   messages: RoomMessage[];
 }
 
@@ -107,7 +108,31 @@ export function createClient(opts: { baseUrl?: string; fetch?: FetchLike } = {})
       if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.messages)) {
         throw new Error(`tclk-mcp: GET /r/${room} returned no messages array`);
       }
-      return parsed as RoomView;
+      const bodyGeneration: number | null = Number.isSafeInteger(parsed.generation)
+        ? (parsed.generation as number)
+        : null;
+      const headerGenerationText = response.headers.get("x-room-generation");
+      const headerGeneration: number | null =
+        headerGenerationText !== null && /^\d+$/.test(headerGenerationText.trim())
+          ? Number.parseInt(headerGenerationText.trim(), 10)
+          : null;
+      const generation: number | null =
+        Number.isSafeInteger(headerGeneration) ? headerGeneration : bodyGeneration;
+      const roomView = parsed as {
+        room: string;
+        count: number;
+        first_seq?: number | null;
+        last_seq: number;
+        messages: RoomMessage[];
+      };
+      return {
+        room: roomView.room,
+        count: roomView.count,
+        first_seq: roomView.first_seq,
+        last_seq: roomView.last_seq,
+        messages: roomView.messages,
+        generation,
+      };
     },
 
     async exportRoom(room) {

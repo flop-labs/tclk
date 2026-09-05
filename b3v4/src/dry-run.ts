@@ -49,8 +49,8 @@ export async function buildDryRunPlan(
   let heartbeatLine: string | undefined;
 
   try {
-    const roomRecords = await venue.readRoom(room);
-    if (roomRecords.length === 0) {
+    const roomResult = await venue.readRoom(room);
+    if (roomResult.records.length === 0) {
       // Room is empty or doesn't exist — need a heartbeat to create it
       heartbeat = makeHeartbeat({
         from: offer.from,

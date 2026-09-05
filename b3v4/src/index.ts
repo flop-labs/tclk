@@ -37,6 +37,7 @@ export { VenueNoteStore } from "./venue-note-store.js";
 export { createAuthorizationStore } from "./authorization-store.js";
 export { createEvidenceCollector } from "./evidence.js";
 export { TimingRecorder } from "./timing.js";
+export { watchForAccept, watchAndExecute } from "./watcher.js";
 
 export type {
   GateResult,
