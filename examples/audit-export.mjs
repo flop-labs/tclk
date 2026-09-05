@@ -13,6 +13,7 @@ import {
   findContractHandshake,
   foldTranscript,
   parseTranscriptExport,
+  checkNonceOrder,
 } from "../dist/index.js";
 
 const [offersFile, dealFile, contract] = process.argv.slice(2);
@@ -43,6 +44,19 @@ for (const step of folded.steps) {
   console.log(`${verdict} ${step.room}#${step.seq} ${step.type ?? "record"}${step.reason ? ` — ${step.reason}` : ""}`);
 }
 
+// `seq` and `ts` are venue metadata, so whoever hands over the file can renumber
+// them; the record nonce sits inside the signed preimage and cannot follow. A
+// signer's own records arriving out of the order that signer numbered them is
+// therefore attested rather than asserted, and survives a renumbering.
+const outOfOrder = checkNonceOrder([handshake.offer, handshake.accept, ...deal]);
+for (const issue of outOfOrder) {
+  const who = `${issue.sender.slice(0, 24)}…`;
+  console.error(
+    `BAD ${issue.room} rows ${issue.previousIndex} and ${issue.index} from ${who} are supplied ` +
+    `out of the order that signer signed them (nonce ${issue.previousNonce} then ${issue.nonce})`,
+  );
+}
+
 if (folded.state === null) {
   console.error("no authenticated contract could be opened");
   process.exit(1);
@@ -50,4 +64,11 @@ if (folded.state === null) {
 
 const terminal = ["claimed", "refunded", "cancelled"].includes(folded.state.status);
 console.log(`\nfold → ${folded.state.status}${terminal ? "" : " (not terminal)"}`);
+
+if (outOfOrder.length > 0) {
+  console.error(
+    `\nrefusing to treat this fold as evidence: ${outOfOrder.length} record(s) supplied out of signed order`,
+  );
+  process.exit(1);
+}
 process.exit(terminal ? 0 : 1);

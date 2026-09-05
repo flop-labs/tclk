@@ -13,6 +13,7 @@ import {
   makeAccept,
   makeOffer,
   parseTranscriptExport,
+  checkNonceOrder,
   type TranscriptRecord,
 } from "../src/index.js";
 
@@ -233,5 +234,78 @@ describe("trusted transcript records", () => {
       [offerRecord, acceptRecord],
       accept.contract,
     )).toEqual({ offer: offerRecord, accept: acceptRecord });
+  });
+});
+
+describe("checkNonceOrder", () => {
+  // `nonce` here is the frame's own field, which exists to defeat the venue's
+  // duplicate-text filter — distinct from the record nonce this check reads.
+  function heartbeat(contract: string, nonce: string) {
+    return { type: "heartbeat" as const, from: payee.did, contract, nonce };
+  }
+
+  it("reports nothing on a deal supplied in the order it was signed", () => {
+    const { lock, offer, accept } = deal();
+    const room = dealRoom(accept.contract);
+    expect(checkNonceOrder([
+      record(BOARD, 1, NOW - 1, payer, encodeFrame(offer)),
+      record(BOARD, 2, NOW, payee, encodeFrame(accept)),
+      record(room, 1, NOW + 1, payer, encodeFrame({
+        type: "lock", from: payer.did, contract: accept.contract, rail: "flop-htlc", ref: "escrow-42",
+      })),
+      record(room, 2, NOW + 2, payee, encodeFrame({
+        type: "reveal", from: payee.did, contract: accept.contract, secret: lock.preimage,
+      })),
+    ])).toEqual([]);
+  });
+
+  it("catches two records of one signer supplied out of the order that signer numbered them", () => {
+    const { accept } = deal();
+    const room = dealRoom(accept.contract);
+    const first = record(room, 2, NOW + 2, payee, encodeFrame(heartbeat(accept.contract, "aa11bb22cc33dd44")));
+    const second = record(room, 3, NOW + 3, payee, encodeFrame(heartbeat(accept.contract, "bb22cc33dd44ee55")));
+
+    expect(checkNonceOrder([second, first])).toMatchObject([
+      { room, sender: payee.did, index: 1, previousIndex: 0 },
+    ]);
+  });
+
+  it("still catches the swap when the supplier renumbers seq and ts to hide it", () => {
+    const { accept } = deal();
+    const room = dealRoom(accept.contract);
+    const first = record(room, 2, NOW + 2, payee, encodeFrame(heartbeat(accept.contract, "aa11bb22cc33dd44")));
+    const second = record(room, 3, NOW + 3, payee, encodeFrame(heartbeat(accept.contract, "bb22cc33dd44ee55")));
+
+    // seq and ts are venue metadata and outside the signature, so a supplier may
+    // rewrite them freely; the nonce inside the preimage cannot follow.
+    const disguised = [
+      { ...second, seq: 2, timestampMs: NOW + 2 },
+      { ...first, seq: 3, timestampMs: NOW + 3 },
+    ];
+    expect(disguised.map((r) => r.seq)).toEqual([2, 3]);
+    expect(checkNonceOrder(disguised)).toHaveLength(1);
+  });
+
+  it("does not fault two signers whose records interleave", () => {
+    const { accept } = deal();
+    const room = dealRoom(accept.contract);
+    // The payee's nonce is lower than the payer's, and it arrives second. Ordering
+    // between two signers is not attested, so this is not an ordering fault.
+    const payerRow = record(room, 9, NOW + 9, payer, encodeFrame({
+      type: "lock", from: payer.did, contract: accept.contract, rail: "flop-htlc", ref: "escrow-42",
+    }));
+    const payeeRow = record(room, 1, NOW + 1, payee, encodeFrame(heartbeat(accept.contract, "cc33dd44ee55ff66")));
+    expect(BigInt(payeeRow.nonce as string) < BigInt(payerRow.nonce as string)).toBe(true);
+    expect(checkNonceOrder([payerRow, payeeRow])).toEqual([]);
+  });
+
+  it("ignores a record whose signature does not verify, since its nonce is asserted only", () => {
+    const { accept } = deal();
+    const room = dealRoom(accept.contract);
+    const first = record(room, 2, NOW + 2, payee, encodeFrame(heartbeat(accept.contract, "aa11bb22cc33dd44")));
+    const second = record(room, 3, NOW + 3, payee, encodeFrame(heartbeat(accept.contract, "bb22cc33dd44ee55")));
+    const forged = { ...first, signature: second.signature };
+
+    expect(checkNonceOrder([second, forged])).toEqual([]);
   });
 });
