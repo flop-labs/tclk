@@ -12,6 +12,7 @@ import {
   decodeFrame,
   encodeFrame,
   generateHashLock,
+  isTclkLine,
   makeAccept,
   makeOffer,
   matchingRails,
@@ -259,5 +260,50 @@ describe("live-wire conformance gaps", () => {
     // The bound is what keeps one doctored export row from costing a fold a megabyte of parsing.
     const megabyte = `${TCLK_PREFIX}${canonicalJson(beat("x".repeat(1_000_000)))}`;
     expect(tryDecodeFrame(megabyte)).toBeNull();
+  });
+
+  // The prefix is the version marker, not a validity guarantee: it says which revision a
+  // line claims, not that the line decodes. Measured on the live board (#89), 5,529 of
+  // 13,939 prefixed lines were rejected here, mostly one fleet naming the offer `offer_id`
+  // instead of `ref` and posting types this union does not define. So a count taken by
+  // prefix is not a count of frames; take it with tryDecodeFrame.
+  it("treats the tclk1 prefix as a version marker, not a validity check", () => {
+    const id = offerId(offer());
+    const statement = "0x" + "11".repeat(32);
+
+    const foreign: Array<[string, RegExp]> = [
+      // accept naming the offer with offer_id, where SPEC 3.2 says ref
+      [
+        `{"type":"accept","offer_id":"${id}","from":"${PAYEE}","statement":"${statement}","nonce":"8899aabbccddeeff"}`,
+        /unknown field on accept: offer_id/,
+      ],
+      // settle, a type this union does not define
+      [
+        `{"type":"settle","offer_id":"${id}","from":"${PAYER}","rail":"paper","status":"settled"}`,
+        /unknown frame type: settle/,
+      ],
+      // confirm, a type this union does not define
+      [
+        `{"type":"confirm","offer_id":"${id}","from":"${PAYER}","status":"confirmed"}`,
+        /unknown frame type: confirm/,
+      ],
+    ];
+
+    for (const [body, reason] of foreign) {
+      const line = TCLK_PREFIX + body;
+      expect(isTclkLine(line)).toBe(true);
+      expect(tryDecodeFrame(line)).toBeNull();
+      expect(() => decodeFrame(line)).toThrow(reason);
+    }
+
+    // A line without the prefix is the other rejection class: not this version at all.
+    expect(isTclkLine("gm from ~alice")).toBe(false);
+    expect(() => decodeFrame("gm from ~alice")).toThrow(/not a tclk\/1 line/);
+
+    // And a frame this library emits still passes both, so the filter is not just
+    // rejecting everything that reaches it.
+    const canonical = encodeFrame(offer());
+    expect(isTclkLine(canonical)).toBe(true);
+    expect(tryDecodeFrame(canonical)).not.toBeNull();
   });
 });
