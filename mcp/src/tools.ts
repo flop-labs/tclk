@@ -323,7 +323,12 @@ export function createHandlers(options: HandlerOptions = {}) {
     tclk_adaptor_extract(input: { presig: PresigRef; signature: PresigRef }) {
       const witness = schnorrAdaptor.extractWitness(input.presig, input.signature);
       if (witness === null) {
-        return { ok: false as const, error: "extract failed: malformed pre-signature or signature" };
+        return {
+          ok: false as const,
+          error:
+            "extract failed: malformed pre-signature or signature, or the two do not adapt " +
+            "to one another",
+        };
       }
       return { ok: true as const, witness };
     },

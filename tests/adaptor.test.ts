@@ -46,6 +46,42 @@ describe("Schnorr adaptor signature", () => {
     expect(verifyPointWitness(T, recovered)).toBe(true);
   });
 
+  it("extraction binds the nonce: a mismatched pair yields null, not a wrong witness", () => {
+    // Two pre-signatures over the SAME message under the SAME statement. They differ only
+    // in the random `r`, which the caller neither chooses nor sees.
+    const pk = getPublicKey(SK)!;
+    const { witness: t, statement: T } = generatePointLock();
+    const preA = preSign(SK, MSG, T)!;
+    const preB = preSign(SK, MSG, T)!;
+    expect(preA.nonce).not.toEqual(preB.nonce);
+
+    // The payer completes B. Nothing here is malformed and every part checks out on its own.
+    const sigB = adapt(preB, t)!;
+    expect(verifyPreSignature(pk, MSG, T, preA)).toBe(true);
+    expect(verifySignature(pk, MSG, sigB)).toBe(true);
+
+    // A payee holding preA and watching sigB land must not be handed a witness: the scalar
+    // difference exists, but `t·G != R − R̂`, so it opens nothing. Returning it would break
+    // the atomic-linkage property this module's own header names as load-bearing.
+    expect(extractWitness(preA, sigB)).toBeNull();
+
+    // The matching pair still extracts, and still opens the leaf.
+    expect(verifyPointWitness(T, extractWitness(preB, sigB)!)).toBe(true);
+  });
+
+  it("extraction rejects a signature whose nonce was substituted after the fact", () => {
+    const { witness: t, statement: T } = generatePointLock();
+    const pre = preSign(SK, MSG, T)!;
+    const sig = adapt(pre, t)!;
+    // Same scalars, a different announced nonce: the arithmetic is untouched and the
+    // relation is not.
+    const otherNonce = preSign(SK, MSG, T)!.nonce;
+    expect(extractWitness(pre, { nonce: otherNonce, s: sig.s })).toBeNull();
+    // A nonce that is not a point at all is refused rather than ignored.
+    expect(extractWitness(pre, { nonce: "0xbad", s: sig.s })).toBeNull();
+    expect(extractWitness({ nonce: "0xbad", s: pre.s }, sig)).toBeNull();
+  });
+
   it("a pre-signature alone is not a valid signature (no witness leaked)", () => {
     const pk = getPublicKey(SK)!;
     const { statement: T } = generatePointLock();
