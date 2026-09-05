@@ -15,6 +15,14 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- `checkNonceOrder(records)`, which reports where one signer's records are supplied out of
+  the order that signer numbered them. `seq` and `timestampMs` are venue metadata a file
+  supplier can renumber, while the record nonce is inside the signed preimage
+  `room|nonce|line` and cannot follow, so this detection survives a renumbering that defeats
+  a `seq`-based ordering check. Scoped per `(room, sender)` — the scope the venue enforces —
+  so it makes no claim about ordering between two parties, and it does not detect deletion
+  or truncation. `examples/audit-export.mjs` refuses to treat a fold as evidence when it
+  fires.
 - A schema-owned tclk/1 frame field contract, canonical settlement-rail registry and
   intersection-based, order-independent rail matching helpers. Generated decoder fields
   and the normative `SPEC.md` table are checked for drift in CI.

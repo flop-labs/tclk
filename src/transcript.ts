@@ -227,6 +227,78 @@ export function findContractHandshake(
   return null;
 }
 
+/** One place a signer's own records arrive out of the order that signer numbered them. */
+export interface NonceOrderIssue {
+  room: string;
+  sender: string;
+  /** Index in the supplied array of the record that goes backwards. */
+  index: number;
+  /** Index of that signer's previous record in the same room. */
+  previousIndex: number;
+  nonce: string;
+  previousNonce: string;
+}
+
+/**
+ * Check that each signer's records arrive in the order that signer numbered them.
+ *
+ * `seq` and `timestampMs` are venue metadata: a file supplier can renumber both, so a
+ * reordering check built on them is defeated by editing the numbers it reads. `nonce` is
+ * different — it sits inside the signed preimage `room|nonce|line`, and the venue requires
+ * it to exceed the last nonce that key used in that room. Reordering two records from one
+ * signer therefore moves their nonces out of order, and putting the nonces back means
+ * forging a signature over a different preimage.
+ *
+ * Scope is per `(room, sender)`, which is the scope the venue actually enforces. Two
+ * parties give two attested chains and no attested interleaving between them, so this
+ * says nothing about the order of a payer's record relative to a payee's.
+ *
+ * What it does not catch: deletion of a record, truncation of the last one, and
+ * reordering across signers. Nothing in an export catches the first two.
+ *
+ * Only authenticated records are considered — an unverified record's nonce is asserted,
+ * not attested, so it carries no ordering claim.
+ *
+ * One measured caveat: the venue looks for a key's last nonce only within the newest
+ * portion of a room it scans, so on a long busy room a legitimate lower nonce can appear
+ * once older traffic buries the record that would have refused it. Observed once in 12,387
+ * signed records on `tclk-offers`, and not at all in two quieter rooms. A derived deal room
+ * — a handful of records from two keys — is never near that boundary.
+ */
+export function checkNonceOrder(records: readonly TranscriptRecord[]): NonceOrderIssue[] {
+  const highest = new Map<string, { value: bigint; index: number; nonce: string }>();
+  const issues: NonceOrderIssue[] = [];
+
+  records.forEach((record, index) => {
+    if (!record || typeof record.nonce !== "string") return;
+    if (!verifyTranscriptRecord(record).ok) return;
+
+    let value: bigint;
+    try {
+      value = BigInt(record.nonce);
+    } catch {
+      return;
+    }
+
+    const key = `${record.room} ${record.sender}`;
+    const previous = highest.get(key);
+    if (previous !== undefined && value <= previous.value) {
+      issues.push({
+        room: record.room,
+        sender: record.sender,
+        index,
+        previousIndex: previous.index,
+        nonce: record.nonce,
+        previousNonce: previous.nonce,
+      });
+      return;
+    }
+    highest.set(key, { value, index, nonce: record.nonce });
+  });
+
+  return issues;
+}
+
 /**
  * Authenticate and fold records in the supplied order. Every record gets a verdict;
  * invalid signatures, forged `from` fields, wrong rooms, malformed lines and bad
