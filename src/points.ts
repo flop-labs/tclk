@@ -46,14 +46,22 @@ export function pointLockFromWitness(witness: string | Uint8Array): PointLock {
 
 /** Mint a fresh random point lock `(y, Y=y·G)`. */
 export function generatePointLock(): PointLock {
-  // Rejection-sample a valid scalar (overwhelmingly first try; guards the y∉[1,n) tail).
-  for (;;) {
-    try {
-      return pointLockFromWitness(randomU8a(32));
-    } catch {
-      // negligible-probability out-of-range draw; retry.
-    }
+  // Rejection-sample a valid scalar, testing the draw inline rather than by catching
+  // `pointLockFromWitness`. A bare `catch` here also swallows `randomU8a`'s refusal on a
+  // runtime with no Web Crypto CSPRNG, and retrying *that* forever turns the loud failure
+  // `hex.ts` raises on purpose into a synchronous spin that no timer, signal handler or
+  // `await` can interrupt. `generateHashLock` and `generateSalt` let the same refusal
+  // through; this was the one generator that did not.
+  //
+  // Bounded for the same reason: a draw lands outside [1, n) with probability under 2^-128,
+  // so exhausting these attempts means the CSPRNG is broken, not that we were unlucky.
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const y = randomU8a(32);
+    const v = BigInt(u8aToHex(y));
+    if (v === 0n || v >= SECP256K1_N) continue;
+    return pointLockFromWitness(y);
   }
+  throw new Error("tclk: CSPRNG returned no scalar in [1, n) in 8 draws");
 }
 
 /** True iff `witness` (y) is the discrete-log of `statement` (Y): `compressed(y·G) == Y`. */
