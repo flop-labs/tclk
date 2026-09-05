@@ -237,10 +237,13 @@ export function findContractHandshake(
  * `timestampMs` and `seq` are venue metadata, not covered by the sender's Ed25519
  * signature (`room|nonce|line` only). A file supplier can therefore rewrite `ts`
  * to move a reveal across `refundAfterMs` and flip `claimed`↔`refunded` with all
- * signatures still valid. Callers that treat a fold as settlement proof must verify
- * the rail (`verifyLock`/`claim`/`refund`) — the transcript is coordination, not
- * settlement. `warnings` surfaces this and any per-room ordering or monotonicity
- * issues (see also #93).
+ * signatures still valid. It can also delete a row and renumber the rows it keeps
+ * (or drop the last row) to leave no gap — `seq` is not signed, so a contiguous
+ * `1,2` proves nothing about completeness. A gap is evidence of absence; the
+ * absence of a gap is not evidence of presence. Callers that treat a fold as
+ * settlement proof must verify the rail (`verifyLock`/`claim`/`refund`) — the
+ * transcript is coordination, not settlement. `warnings` surfaces this and any
+ * per-room ordering or monotonicity issues (see also #93).
  */
 export function foldTranscript(records: readonly TranscriptRecord[]): TranscriptFoldResult {
   const steps: TranscriptStep[] = [];
