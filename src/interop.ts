@@ -65,7 +65,32 @@ export function a2aJob(taskId: string, contextId?: string): JobRef {
     : { proto: "a2a", id: taskId, context: contextId };
 }
 
-/** Bind an offer to a Virtuals ACP job. */
+/**
+ * Bind an offer to a Virtuals ACP job.
+ *
+ * `number` is accepted because an ACP job id reads as one, and `String(jobId)` was silently
+ * wrong for two shapes of it. A job id above `Number.MAX_SAFE_INTEGER` has already been
+ * rounded by the time this function sees it — `9007199254740993` arrives as
+ * `9007199254740992` — and the offer id, then the contract id, commit to the *rounded*
+ * value. The result is a payment leg bound to a job nobody opened, with every signature
+ * valid and no error anywhere: the same failure the transport nonce path already refuses
+ * numerically (see `mcp/src/technocore.ts`, "a stored nonce may exceed 2^53 and must stay
+ * exact"). A non-integral or non-finite number was worse still, since `String()` renders it
+ * as `1.5`, `NaN` or `1e+21` and the frame validator has no opinion on the contents of
+ * `job.id`.
+ *
+ * So the numeric arm is narrowed to what it can carry losslessly, and the remedy is in the
+ * message: pass the id as a decimal string, which is exact at any width. Builder-side only
+ * — `validateFrame` and the decoder are untouched, because a frame already posted in a room
+ * must keep decoding whatever it says.
+ */
 export function acpJob(jobId: string | number): JobRef {
+  if (typeof jobId === "number" && !Number.isSafeInteger(jobId)) {
+    throw new Error(
+      `tclk: ACP job id ${jobId} is not a safe integer, so a number cannot carry it ` +
+        "exactly — pass it as a decimal string. The offer and contract ids commit to this " +
+        "value, and a rounded one binds the payment to a different job",
+    );
+  }
   return { proto: "acp", id: String(jobId) };
 }
