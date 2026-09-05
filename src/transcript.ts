@@ -160,6 +160,17 @@ export function transcriptRecord(room: string, value: unknown): TranscriptRecord
   };
 }
 
+function parseTranscriptExportLine(line: string): unknown {
+  // Technocore may serialize nonce as a JSON number. Preserve the exact
+  // decimal digits before JSON.parse can round values above 2^53 - 1.
+  const exactNonce = /("nonce"\s*:\s*)(-?\d+)(?=\s*[,}])/;
+  const normalized = line.replace(
+    exactNonce,
+    (_match, prefix: string, nonce: string) => `${prefix}"${nonce}"`,
+  );
+  return JSON.parse(normalized);
+}
+
 /** Parse a byte-exact technocore `/export` JSONL response. One malformed row fails all. */
 export function parseTranscriptExport(room: string, jsonl: string): TranscriptRecord[] {
   const records: TranscriptRecord[] = [];
@@ -167,7 +178,7 @@ export function parseTranscriptExport(room: string, jsonl: string): TranscriptRe
     if (line.trim() === "") return;
     let value: unknown;
     try {
-      value = JSON.parse(line);
+      value = parseTranscriptExportLine(line);
     } catch {
       throw new Error(`tclk: transcript export line ${index + 1} is not JSON`);
     }

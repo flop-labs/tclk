@@ -217,6 +217,28 @@ describe("trusted transcript records", () => {
     expect(() => parseTranscriptExport(BOARD, localeTimestamp)).toThrow(/timezone-qualified/);
   });
 
+  it("preserves large numeric nonces from byte-exact exports", () => {
+    const { offer } = deal();
+    const line = encodeFrame(offer);
+    const nonce = "1788605346703840081";
+
+    const raw = `{"seq":7,"ts":"${new Date(NOW).toISOString()}","from":${JSON.stringify(
+      payer.did,
+    )},"nonce":${nonce},"sig":null,"text":${JSON.stringify(line)}}`;
+
+    expect(parseTranscriptExport(BOARD, raw)).toEqual([
+      {
+        room: BOARD,
+        seq: 7,
+        timestampMs: NOW,
+        sender: payer.did,
+        nonce,
+        signature: null,
+        line,
+      },
+    ]);
+  });
+
   it("never synthesizes offer-before-accept order while selecting a board handshake", () => {
     const { offer, accept } = deal();
     const earlyAccept = record(BOARD, 1, NOW - 1, payee, encodeFrame(accept));
