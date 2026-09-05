@@ -40,6 +40,11 @@ All notable changes to this project are documented here. Format follows
   no fallback clock. `examples/audit-export.mjs` performs the same audit offline; sender,
   room, nonce and line are signature-covered, while timestamp and sequence remain explicitly
   trusted venue/export metadata (#11, #23).
+- Clarify SPEC §3.3 to explicitly document that Schnorr adaptor pre-signature verification
+  (`verifyPreSignature`) is evaluated out-of-band by the payee against the settlement rail's
+  claim message before revealing secrets, while transcript readers and `applyFrame` enforce
+  wire structural shapes without evaluating rail claim signatures. Pinned with unit and
+  negative regression tests (#36).
 
 ### Fixed
 
