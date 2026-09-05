@@ -555,4 +555,42 @@ describe("tclk interop mappings", () => {
     expect(a2aJob("t-1")).toEqual({ proto: "a2a", id: "t-1" });
     expect(a2aJob("t-1", "c-9")).toEqual({ proto: "a2a", id: "t-1", context: "c-9" });
   });
+
+  it("refuses an ACP job id a number cannot carry, and takes it as a string", () => {
+    // 2^53 + 1 does not exist as a double: it arrives here already rounded down, and
+    // `String()` would render the rounded value with nothing to notice. The offer id — and
+    // then the contract id — commit to whatever `job.id` says, so the payment leg would be
+    // bound to a job nobody opened, every signature valid.
+    expect(9_007_199_254_740_993).toBe(9_007_199_254_740_992);
+    expect(() => acpJob(9_007_199_254_740_993)).toThrow(/not a safe integer/);
+    expect(() => acpJob(9_007_199_254_740_993)).toThrow(/decimal string/);
+
+    // A decimal string is exact at any width, and is what the message asks for.
+    expect(acpJob("9007199254740993")).toEqual({ proto: "acp", id: "9007199254740993" });
+    const offer = baseOffer({ job: acpJob("9007199254740993") });
+    expect(decodeFrame(encodeFrame(offer)).job).toEqual({
+      proto: "acp",
+      id: "9007199254740993",
+    });
+
+    // Nothing a `String()` renders as a non-integer may reach `job.id` either: the frame
+    // validator has no opinion on its contents, so `1.5`, `NaN` and `1e+21` were all
+    // acceptable job identifiers.
+    for (const bad of [1.5, Number.NaN, Infinity, -Infinity, 1e21]) {
+      expect(() => acpJob(bad)).toThrow(/not a safe integer/);
+    }
+
+    // Ordinary ids still work, negatives and zero included — ACP assigns them, not us.
+    expect(acpJob(0)).toEqual({ proto: "acp", id: "0" });
+    expect(acpJob(-1)).toEqual({ proto: "acp", id: "-1" });
+    expect(acpJob(Number.MAX_SAFE_INTEGER)).toEqual({ proto: "acp", id: "9007199254740991" });
+  });
+
+  it("keeps decoding a frame whose job id was already rounded", () => {
+    // The builder is the only thing that got stricter. A frame posted before this fix is
+    // in a room forever and must keep folding, so the decoder's view of `job.id` is
+    // unchanged: it is an opaque non-empty string.
+    const line = encodeFrame(baseOffer({ job: { proto: "acp", id: "9007199254740992" } }));
+    expect(decodeFrame(line).job).toEqual({ proto: "acp", id: "9007199254740992" });
+  });
 });

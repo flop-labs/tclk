@@ -341,6 +341,10 @@ the *payment leg* of a job defined elsewhere, never a competing task schema:
   evaluator accepting delivery is the payee's cue to reveal (or, with `Sig`-augmented policies
   on a rail that supports them, the evaluator is the co-signer). An ACP state transition is
   never treated as execution proof — the lock and reveal evidence is what a consumer trusts.
+  `id` is a **decimal string** on the wire, like every other job id: the offer id and then the
+  contract id commit to its exact text, and a job id above 2^53 does not survive a JavaScript
+  number, so `acpJob` refuses a number it cannot carry rather than binding the payment to a
+  rounded one.
 - **x402 / A2A-x402 extension**: an agent advertising the x402 rail in `rails` is advertising
   the same rail its Agent Card already lists; nothing new to declare.
 
