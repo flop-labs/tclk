@@ -1,6 +1,7 @@
 packages:
   - '.'
   - 'mcp'
+  - 'b3v4'
 
 # esbuild and workerd ship prebuilt binaries that their postinstall scripts unpack;
 # vitest and wrangler do not run without them. pnpm blocks dependency lifecycle

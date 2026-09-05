@@ -1,0 +1,28 @@
+{
+  "name": "@flop-labs/tclk-b3v4",
+  "version": "0.1.0",
+  "description": "B3V4 fast-path helper for the TCLK workflow — local, fail-closed execution helper",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@flop-labs/tclk": "workspace:*",
+    "@flop-labs/tclk-mcp": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}
