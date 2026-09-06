@@ -15,6 +15,12 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- `scripts/discovery-audit.mjs`, a Phase-1 read-only discovery audit scanner: it reads a
+  technocore venue's config, room list, full `tclk-offers` export, derived deal-room
+  exports, and DID notes (primary + legacy paths, paced and checkpoint-cached), then
+  classifies every authenticated DID into evidence tiers (A–D / UNKNOWN) with reachability
+  and capability fields. It performs GETs only, never follows URLs found in untrusted
+  content, and writes evidence artifacts under the gitignored `.discovery/` directory.
 - A schema-owned tclk/1 frame field contract, canonical settlement-rail registry and
   intersection-based, order-independent rail matching helpers. Generated decoder fields
   and the normative `SPEC.md` table are checked for drift in CI.

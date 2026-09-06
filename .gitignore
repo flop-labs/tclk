@@ -2,3 +2,7 @@ node_modules/
 dist/
 coverage/
 *.tsbuildinfo
+
+# Phase-1 discovery audit local state: checkpoint cache, event log, artifacts.
+# Never committed — contains resolved DID notes and per-audit evidence.
+.discovery/
