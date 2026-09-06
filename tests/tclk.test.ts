@@ -26,6 +26,7 @@ import {
   makeAccept,
   makeOffer,
   MemoryRail,
+  offerId,
   openContract,
   parseStateNoteValue,
   OFFER_ROOM,
@@ -306,6 +307,56 @@ describe("tclk state machine", () => {
       rail: "paper-rail", ref: "escrow-42",
     }, T0 + 3);
     expect(aliasReceipt.ok).toBe(true);
+  });
+
+  it("a historical custom rail id rejects cleanly rather than throwing out of applyFrame", () => {
+    // The offer is DECODED, not built: `makeOffer` requires canonical rails, while
+    // `validateFrame` admits a pre-registry spelling on the decode path (LEGACY_RAIL), which
+    // is how such a frame reaches a fold — off the wire. `lock` then stores `frame.rail`
+    // verbatim, so `state.rail` need not be canonical.
+    //
+    // This pins the fallback in `sameTclkRail`. Calling `normalizeRailId` on `state.rail`
+    // unguarded throws, and `foldTranscript` calls `applyFrame` with no try/catch
+    // (src/transcript.ts:308) — so the throw ends the fold of an entire room instead of
+    // marking one record bad, which is worse than the mismatch being fixed.
+    const CUSTOM = "acme-custom-rail";
+    const core = {
+      amount: "1000000", asset: "FLOP", claimByMs: CLAIM_BY, expiresMs: EXPIRES,
+      from: PAYER_DID, lock: "hash", nonce: "0011223344556677",
+      rails: [CUSTOM], refundAfterMs: REFUND_AFTER, role: "payer", type: "offer",
+    } as const;
+    const offer = decodeFrame(
+      TCLK_PREFIX + JSON.stringify({ ...core, id: offerId(core as never) }),
+    ) as OfferFrame;
+    expect(offer.rails).toEqual([CUSTOM]);
+
+    const { lock, state } = accepted(offer);
+    const locked = applyFrame(state, {
+      type: "lock", from: PAYER_DID, contract: state.contract!, rail: CUSTOM, ref: "escrow-9",
+    }, T0 + 1);
+    expect(locked.ok).toBe(true);
+    expect(locked.state.rail).toBe(CUSTOM);
+
+    const claimed = applyFrame(locked.state, {
+      type: "reveal", from: PAYEE_DID, contract: state.contract!, ref: "escrow-9",
+      secret: lock.preimage,
+    }, T0 + 2);
+    expect(claimed.ok).toBe(true);
+
+    // Same spelling: equal by the exact-match short circuit, never reaching the registry.
+    const same = applyFrame(claimed.state, {
+      type: "receipt", from: PAYER_DID, contract: state.contract!, outcome: "claimed",
+      rail: CUSTOM, ref: "escrow-9",
+    }, T0 + 3);
+    expect(same.ok).toBe(true);
+
+    // A different unregistered spelling: a clean rejection, and above all not a throw.
+    const other = applyFrame(claimed.state, {
+      type: "receipt", from: PAYER_DID, contract: state.contract!, outcome: "claimed",
+      rail: "acme-other-rail", ref: "escrow-9",
+    }, T0 + 3);
+    expect(other.ok).toBe(false);
+    expect(other.reason).toContain("does not match");
   });
 
   it.each([
