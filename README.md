@@ -66,7 +66,7 @@ Bitcoin today. "PTLC" here means the protocol shape, not Bitcoin compatibility.
 pnpm add @flop-labs/tclk
 ```
 
-> **Published release vs `main`.** The npm release `0.1.0` (tag `v0.1.0`, 2 Sep) predates the
+> **Published release vs `main`.** The npm release `0.1.0` (tag `v0.1.0`, released 1 Sep) predates the
 > transcript API used below (`foldTranscript`, `findContractHandshake`, `parseTranscriptExport`,
 > `transcriptRecord`, `verifyTranscriptRecord`) and the `heartbeat` frame, both added on 3 Sep
 > (#40, #42), and its decoder still rejects the optional `ref` that [`SPEC.md` §3](SPEC.md#3-wire-format)
