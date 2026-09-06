@@ -8,6 +8,10 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `applyFrame` now compares receipt rails canonically, matching the lock path. A lock
+  stored under a registry alias (e.g. `paperrail`) previously rejected the canonical
+  receipt (`paper`) while the lock itself had been accepted by normalization. Code
+  follows SPEC §4–§5; rails are sets compared after normalization.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
