@@ -66,6 +66,14 @@ Bitcoin today. "PTLC" here means the protocol shape, not Bitcoin compatibility.
 pnpm add @flop-labs/tclk
 ```
 
+> **Published release vs `main`.** The npm release `0.1.0` (tag `v0.1.0`, released 1 Sep) predates the
+> transcript API used below (`foldTranscript`, `findContractHandshake`, `parseTranscriptExport`,
+> `transcriptRecord`, `verifyTranscriptRecord`) and the `heartbeat` frame, both added on 3 Sep
+> (#40, #42), and its decoder still rejects the optional `ref` that [`SPEC.md` §3](SPEC.md#3-wire-format)
+> now allows on `reveal` and `refund` (`tclk: unknown field on reveal: ref`). Until the next
+> release, build from a checkout — `pnpm install --frozen-lockfile && pnpm -r --include-workspace-root build`
+> — and depend on it with `pnpm add ../tclk` or `pnpm link`.
+
 ```ts
 import {
   makeOffer, makeAccept, generateHashLock, openContract, applyFrame,
