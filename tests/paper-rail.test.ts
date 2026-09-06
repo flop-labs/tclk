@@ -13,6 +13,7 @@ import {
   MemoryNoteStore,
   PaperRail,
   PAPER_RECORD_PREFIX,
+  PAPER_RECORD_PREFIX_V2,
   decodePaperRecord,
   encodePaperRecord,
   paperNote,
@@ -78,7 +79,7 @@ describe("paper rail — the predicates a real rail must enforce", () => {
     // The stored line is readable without a parser — that is the point of the format.
     const { ns, key } = paperNote(deal.terms.contract);
     expect(notes.raw(ns, key)).toBe(
-      `${PAPER_RECORD_PREFIX} locked hash ${deal.terms.statement} ${REFUND_AFTER}`,
+      `${PAPER_RECORD_PREFIX_V2} locked hash ${deal.terms.statement} ${deal.terms.amount} ${deal.terms.asset} ${deal.terms.payer} ${deal.terms.payee} ${deal.terms.claimByMs} ${REFUND_AFTER}`,
     );
 
     await expect(rail.claim(ref, "0x" + "00".repeat(32))).rejects.toThrow(/secret/);
@@ -183,6 +184,25 @@ describe("paper rail — reads are anonymous input", () => {
     ] as const) {
       expect(decodePaperRecord(encodePaperRecord(record))).toEqual(record);
     }
+  });
+
+  it("keeps legacy tclkpaper1 lifecycle-compatible but not exact-verifiable", async () => {
+    const { rail, notes } = railAt();
+    const deal = terms();
+    const { ns, key } = paperNote(deal.terms.contract);
+
+    await notes.set(
+      ns,
+      key,
+      `${PAPER_RECORD_PREFIX} locked hash ${deal.terms.statement} ${REFUND_AFTER}`,
+    );
+
+    // v1 lacks amount/asset/payer/payee/claimByMs, so exact verification must fail closed.
+    expect(await rail.verifyLock(deal.terms, deal.terms.contract)).toBe(false);
+
+    // But existing rehearsal records remain usable for their lifecycle.
+    await rail.claim(deal.terms.contract, deal.secret);
+    expect((await rail.read(deal.terms.contract))?.status).toBe("claimed");
   });
 
   it("refuses to advance a record that changed under it", async () => {

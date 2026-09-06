@@ -23,8 +23,11 @@ import { isValidStatement, type LockKind } from "./frames.js";
 import { verifySecret } from "./locks.js";
 import type { LockTerms, SettlementRail } from "./rail.js";
 
-/** The record version, so a later shape cannot be mistaken for this one. */
+/** Legacy v1 prefix retained for public API and replay compatibility. */
 export const PAPER_RECORD_PREFIX = "tclkpaper1" as const;
+
+/** Current record version emitted by PaperRail. */
+export const PAPER_RECORD_PREFIX_V2 = "tclkpaper2" as const;
 
 /**
  * The note surface the paper rail records onto. Kept as an interface so the library
@@ -51,18 +54,47 @@ export interface PaperRecord {
   lock: LockKind;
   statement: string;
   refundAfterMs: number;
+
+  /** Present on tclkpaper2 records; absent on legacy tclkpaper1 records. */
+  amount?: string;
+  asset?: string;
+  payer?: string;
+  payee?: string;
+  claimByMs?: number;
+
   /** Present once claimed — the secret is public by then anyway, it was the claim. */
   secret?: string;
 }
 
 const CONTRACT_ID = /^0x[0-9a-f]{64}$/;
+const DID = /^did:key:z6Mk[1-9A-HJ-NP-Za-km-z]{44}$/;
+const AMOUNT = /^[1-9][0-9]*$/;
+const ASSET = /^[A-Za-z0-9_-]{1,32}$/;
 
 /**
  * Serialize a record to one note line. Single-line and space-separated so a human, a
  * shell, or an agent with only a fetch tool can read the state without a parser.
  */
 export function encodePaperRecord(record: PaperRecord): string {
-  const head = `${PAPER_RECORD_PREFIX} ${record.status} ${record.lock} ${record.statement} ${record.refundAfterMs}`;
+  const exact = [
+    record.amount,
+    record.asset,
+    record.payer,
+    record.payee,
+    record.claimByMs,
+  ];
+
+  const hasAllExact = exact.every((value) => value !== undefined);
+  const hasAnyExact = exact.some((value) => value !== undefined);
+
+  if (hasAnyExact && !hasAllExact) {
+    throw new Error("tclk: paper record has partial exact terms");
+  }
+
+  const head = hasAllExact
+    ? `${PAPER_RECORD_PREFIX_V2} ${record.status} ${record.lock} ${record.statement} ${record.amount} ${record.asset} ${record.payer} ${record.payee} ${record.claimByMs} ${record.refundAfterMs}`
+    : `${PAPER_RECORD_PREFIX} ${record.status} ${record.lock} ${record.statement} ${record.refundAfterMs}`;
+
   return record.secret === undefined ? head : `${head} ${record.secret}`;
 }
 
@@ -72,17 +104,80 @@ export function encodePaperRecord(record: PaperRecord): string {
  */
 export function decodePaperRecord(value: string): PaperRecord | null {
   const parts = value.split(" ");
-  if (parts.length < 5 || parts.length > 6) return null;
-  const [prefix, status, lock, statement, refundAfter, secret] = parts;
-  if (prefix !== PAPER_RECORD_PREFIX) return null;
-  if (status !== "locked" && status !== "claimed" && status !== "refunded") return null;
-  if (lock !== "hash" && lock !== "point") return null;
-  if (!isValidStatement(lock, statement)) return null;
-  const refundAfterMs = Number(refundAfter);
-  if (!Number.isSafeInteger(refundAfterMs) || refundAfterMs <= 0) return null;
-  if (secret !== undefined && !/^0x[0-9a-f]{64}$/.test(secret)) return null;
-  if ((status === "claimed") !== (secret !== undefined)) return null;
-  return { status, lock, statement, refundAfterMs, ...(secret === undefined ? {} : { secret }) };
+  const prefix = parts[0];
+
+  if (prefix === PAPER_RECORD_PREFIX) {
+    if (parts.length < 5 || parts.length > 6) return null;
+
+    const [, status, lock, statement, refundAfter, secret] = parts;
+
+    if (status !== "locked" && status !== "claimed" && status !== "refunded") return null;
+    if (lock !== "hash" && lock !== "point") return null;
+    if (!isValidStatement(lock, statement)) return null;
+
+    const refundAfterMs = Number(refundAfter);
+    if (!Number.isSafeInteger(refundAfterMs) || refundAfterMs <= 0) return null;
+
+    if (secret !== undefined && !/^0x[0-9a-f]{64}$/.test(secret)) return null;
+    if ((status === "claimed") !== (secret !== undefined)) return null;
+
+    return {
+      status,
+      lock,
+      statement,
+      refundAfterMs,
+      ...(secret === undefined ? {} : { secret }),
+    };
+  }
+
+  if (prefix === PAPER_RECORD_PREFIX_V2) {
+    if (parts.length < 10 || parts.length > 11) return null;
+
+    const [
+      ,
+      status,
+      lock,
+      statement,
+      amount,
+      asset,
+      payer,
+      payee,
+      claimBy,
+      refundAfter,
+      secret,
+    ] = parts;
+
+    if (status !== "locked" && status !== "claimed" && status !== "refunded") return null;
+    if (lock !== "hash" && lock !== "point") return null;
+    if (!isValidStatement(lock, statement)) return null;
+    if (!AMOUNT.test(amount) || !ASSET.test(asset)) return null;
+    if (!DID.test(payer) || !DID.test(payee)) return null;
+
+    const claimByMs = Number(claimBy);
+    const refundAfterMs = Number(refundAfter);
+
+    if (!Number.isSafeInteger(claimByMs) || claimByMs <= 0) return null;
+    if (!Number.isSafeInteger(refundAfterMs) || refundAfterMs <= 0) return null;
+    if (claimByMs >= refundAfterMs) return null;
+
+    if (secret !== undefined && !/^0x[0-9a-f]{64}$/.test(secret)) return null;
+    if ((status === "claimed") !== (secret !== undefined)) return null;
+
+    return {
+      status,
+      lock,
+      statement,
+      amount,
+      asset,
+      payer,
+      payee,
+      claimByMs,
+      refundAfterMs,
+      ...(secret === undefined ? {} : { secret }),
+    };
+  }
+
+  return null;
 }
 
 /** Where a contract's paper record lives, sharded like the state note. */
@@ -119,6 +214,11 @@ export class PaperRail implements SettlementRail {
       status: "locked",
       lock: terms.lock,
       statement: terms.statement,
+      amount: terms.amount,
+      asset: terms.asset,
+      payer: terms.payer,
+      payee: terms.payee,
+      claimByMs: terms.claimByMs,
       refundAfterMs: terms.refundAfterMs,
     };
     const won = await this.notes.set(ns, key, encodePaperRecord(record), { ifAbsent: true });
@@ -134,6 +234,11 @@ export class PaperRail implements SettlementRail {
       record.status === "locked" &&
       record.lock === terms.lock &&
       record.statement === terms.statement &&
+      record.amount === terms.amount &&
+      record.asset === terms.asset &&
+      record.payer === terms.payer &&
+      record.payee === terms.payee &&
+      record.claimByMs === terms.claimByMs &&
       record.refundAfterMs === terms.refundAfterMs
     );
   }
