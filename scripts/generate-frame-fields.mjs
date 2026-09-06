@@ -5,6 +5,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { normalizeLineEndings } from "./normalize-line-endings.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const schemaPath = join(root, "schema/tclk1-frames.schema.json");
@@ -57,7 +58,8 @@ if (nextSpec === spec && !spec.includes(table)) {
 }
 
 if (process.argv.includes("--check")) {
-  if (readFileSync(generatedPath, "utf8") !== generated || spec !== nextSpec) {
+  if (normalizeLineEndings(readFileSync(generatedPath, "utf8")) !== generated ||
+      normalizeLineEndings(spec) !== normalizeLineEndings(nextSpec)) {
     console.error("generated protocol fields are stale; run pnpm generate:protocol");
     process.exit(1);
   }
