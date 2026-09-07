@@ -62,5 +62,5 @@ export function matchingRails(
 /** Membership over canonical ids; unknown inputs throw rather than silently missing. */
 export function offerIncludesRail(offered: readonly string[], selected: string): boolean {
   const target = normalizeRailId(selected);
-  return offered.some((rail) => normalizeRailId(rail) === target);
+  return normalizeRailIds(offered).includes(target);
 }
