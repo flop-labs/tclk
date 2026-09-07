@@ -8,6 +8,9 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `offerIncludesRail` now validates and normalizes all elements in `offered` upfront,
+  making unknown-rail validation order-independent and rejecting non-array or empty
+  `offered` inputs consistently with `normalizeRailIds`.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
