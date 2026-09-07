@@ -91,6 +91,17 @@ describe("tclk_post_frame — tier 2, server-signed", () => {
     expect(JSON.parse(String(calls[0].init?.body))).toMatchObject({ did: signer.did, nonce: "7", text: line });
   });
 
+  it("rejects a structurally valid but non-canonical frame before posting", async () => {
+    const { calls, fetchLike } = fakeFetch([{ body: "ok 15" }]);
+    const h = createHandlers({ env: { TECHNOCORE_SIGNING_KEY: PAYER_SEED }, fetch: fetchLike });
+    const canonical = offerLine();
+    const frame = JSON.parse(canonical.slice("tclk1 ".length)) as Record<string, unknown>;
+    const nonCanonical = "tclk1 " + JSON.stringify(Object.fromEntries(Object.entries(frame).reverse()));
+
+    await expect(h.tclk_post_frame({ room: ROOM, line: nonCanonical })).rejects.toThrow(/not canonical/);
+    expect(calls).toHaveLength(0);
+  });
+
   it("passes a caller's legal 19-digit string nonce straight through without precision loss", async () => {
     const { calls, fetchLike } = fakeFetch([{ body: "ok 14" }]);
     const h = createHandlers({ env: {}, fetch: fetchLike });
