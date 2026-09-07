@@ -95,7 +95,16 @@ export function encodePaperRecord(record: PaperRecord): string {
     ? `${PAPER_RECORD_PREFIX_V2} ${record.status} ${record.lock} ${record.statement} ${record.amount} ${record.asset} ${record.payer} ${record.payee} ${record.claimByMs} ${record.refundAfterMs}`
     : `${PAPER_RECORD_PREFIX} ${record.status} ${record.lock} ${record.statement} ${record.refundAfterMs}`;
 
-  return record.secret === undefined ? head : `${head} ${record.secret}`;
+  const line = record.secret === undefined ? head : `${head} ${record.secret}`;
+
+  // A v2 writer must never persist bytes that its own decoder rejects.
+  // PaperRail.lock() is public and may be called with LockTerms that did not
+  // originate from the validated offer → accept state-machine path.
+  if (hasAllExact && decodePaperRecord(line) === null) {
+    throw new Error("tclk: refusing to encode an invalid tclkpaper2 record");
+  }
+
+  return line;
 }
 
 /**

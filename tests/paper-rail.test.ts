@@ -88,6 +88,17 @@ describe("paper rail — the predicates a real rail must enforce", () => {
     await expect(rail.refund(ref)).rejects.toThrow(/claimed/);
   });
 
+  it("rejects malformed direct LockTerms without writing a record", async () => {
+    const { rail, notes } = railAt();
+    const deal = terms();
+    const malformed = { ...deal.terms, amount: "0" };
+    const { ns, key } = paperNote(deal.terms.contract);
+
+    await expect(rail.lock(malformed)).rejects.toThrow(/invalid tclkpaper2 record/);
+
+    expect(notes.raw(ns, key)).toBeUndefined();
+  });
+
   it("refuses a second lock on the same contract", async () => {
     const { rail } = railAt();
     const deal = terms();
