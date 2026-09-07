@@ -8,6 +8,14 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `generatePointLock` no longer turns a CSPRNG failure into a silent, unkillable spin. Its
+  rejection-sampling loop caught every throw from the draw, including `randomU8a`'s refusal
+  when no Web Crypto CSPRNG is available and the 16-byte blinding draw `@noble/curves` makes
+  during the scalar multiplication. Either one was retried forever, synchronously, so the
+  loud failure `hex.ts` raises on purpose became a hang no timer, `await` or signal handler
+  could interrupt — the test runner itself wedges on it. The draw is now range-checked inline
+  and the loop is bounded, so a broken CSPRNG surfaces the way it already does through
+  `generateHashLock` and `generateSalt`.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
