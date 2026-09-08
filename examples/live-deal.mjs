@@ -223,8 +223,38 @@ if (job === undefined) {
   process.exit(2);
 }
 
-const payer = signerFromSeed(randomBytes(32));
-const payee = signerFromSeed(randomBytes(32));
+/**
+ * A signer from `<name>` in the environment, or a fresh throwaway.
+ *
+ * Both sides used to be `randomBytes(32)` unconditionally, which meant the first thing anyone
+ * new to tclk runs produced a transcript with no real identity on either side and never said
+ * so (raised by @ai-x-flop). The choreography it demonstrates is real; the record it leaves is
+ * evidence of nothing, because both keys are minted and discarded inside one process.
+ *
+ * The seed spellings are the two `TECHNOCORE_SIGNING_KEY` already takes — 64 hex characters,
+ * `0x`-prefixed or bare — so one habit serves the MCP server and this file. A malformed value
+ * stops the run and says which variable and what shape, rather than throwing out of
+ * `signerFromSeed` with the seed's length as the only clue; this is the file a newcomer runs
+ * and it should not be the one place that fails without a reason.
+ */
+function signerFrom(name) {
+  const spec = process.env[name];
+  if (spec === undefined || spec.trim() === "") {
+    return { signer: signerFromSeed(randomBytes(32)), ephemeral: true };
+  }
+  const trimmed = spec.trim();
+  if (!/^(0x)?[0-9a-fA-F]{64}$/.test(trimmed)) {
+    console.error(
+      `${name} must be a 32-byte Ed25519 seed: 64 hex characters, 0x-prefixed or bare.`,
+    );
+    process.exit(2);
+  }
+  const hex = trimmed.startsWith("0x") ? trimmed.slice(2) : trimmed;
+  return { signer: signerFromSeed(Buffer.from(hex, "hex")), ephemeral: false };
+}
+
+const { signer: payer, ephemeral: payerEphemeral } = signerFrom("TCLK_PAYER_SEED");
+const { signer: payee, ephemeral: payeeEphemeral } = signerFrom("TCLK_PAYEE_SEED");
 const rail = new PaperRail(notes);
 const now = Date.now();
 
@@ -247,8 +277,31 @@ if (BASE === DEFAULT_VENUE) {
     ].join("\n"),
   );
 }
-log("", `payer    ${payer.did}`);
-log("", `payee    ${payee.did}`);
+// The mode belongs on the same line as the DID, because the whole failure this guards against
+// is that an ephemeral run and a real one are indistinguishable in the output.
+const mode = (isEphemeral, name) =>
+  isEphemeral ? "(ephemeral — one-run key)" : `(from ${name})`;
+log("", `payer    ${payer.did} ${mode(payerEphemeral, "TCLK_PAYER_SEED")}`);
+log("", `payee    ${payee.did} ${mode(payeeEphemeral, "TCLK_PAYEE_SEED")}`);
+// Same shape as the TECHNOCORE_URL notice above (#6, #19): a default that is not an error but
+// changes what the run is worth gets said out loud, before anything is written.
+if (payerEphemeral && payeeEphemeral) {
+  console.log(
+    [
+      "",
+      "⚠  Both keys are minted and discarded by this process, so the transcript this run",
+      "   leaves proves the choreography and nothing about who ran it. It is a rehearsal,",
+      "   not evidence. To sign one side with an identity that appears elsewhere:",
+      "",
+      "     bash/zsh    TCLK_PAYEE_SEED=<64 hex> node examples/live-deal.mjs",
+      '     PowerShell  $env:TCLK_PAYEE_SEED = "<64 hex>"; node examples/live-deal.mjs',
+      "     cmd.exe     set TCLK_PAYEE_SEED=<64 hex> && node examples/live-deal.mjs",
+      "",
+      "   One real side still leaves the other a counterparty that appears nowhere else.",
+      "",
+    ].join("\n"),
+  );
+}
 console.log();
 
 // 0 — the job spec goes in a note, and the offer points at it. A frame carries the

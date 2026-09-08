@@ -8,6 +8,12 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `examples/live-deal.mjs` can now sign either side with a real identity: `TCLK_PAYER_SEED` and
+  `TCLK_PAYEE_SEED` take the same 64-hex seed spellings as `TECHNOCORE_SIGNING_KEY`, defaulting to
+  a throwaway key so the example still runs with nothing configured. Each side's DID now prints
+  the mode it ran in, and a run with both sides ephemeral says so before it writes: the transcript
+  proves the choreography and nothing about who ran it.
+
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
