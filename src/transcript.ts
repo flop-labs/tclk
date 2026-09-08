@@ -227,6 +227,96 @@ export function findContractHandshake(
   return null;
 }
 
+/** One place a signer's own records arrive out of the order that signer numbered them. */
+export interface NonceOrderIssue {
+  room: string;
+  sender: string;
+  /** Index in the supplied array of the record that goes backwards. */
+  index: number;
+  /** Index of that signer's previous record in the same room. */
+  previousIndex: number;
+  nonce: string;
+  previousNonce: string;
+}
+
+/**
+ * Check that each signer's records arrive in the order that signer numbered them.
+ *
+ * `seq` and `timestampMs` are venue metadata: a file supplier can renumber both, so a
+ * reordering check built on them is defeated by editing the numbers it reads. `nonce` is
+ * different — it sits inside the signed preimage `room|nonce|line`, and the venue requires
+ * it to exceed the last nonce that key used in that room. Reordering two records from one
+ * signer therefore moves their nonces out of order, and putting the nonces back means
+ * forging a signature over a different preimage.
+ *
+ * Scope is per `(room, sender)`, which is the scope the venue actually enforces. Two
+ * parties give two attested chains and no attested interleaving between them, so this
+ * says nothing about the order of a payer's record relative to a payee's.
+ *
+ * What it catches is reordering, including reordering hidden by renumbering `seq`.
+ * What it does not catch: deletion of a record, truncation of the last one,
+ * reordering across signers, and substituting one of a signer's records for another
+ * of that signer's.
+ *
+ * The last of those is worth stating precisely, because "shares a signer" is not the
+ * condition. A swap shows up only when the moved record is *followed in the supplied
+ * order* by a record from the same signer carrying a lower nonce. Substituting a
+ * signer's final record leaves nothing to bracket it, and the walk stays silent — so
+ * a supplier holding spare frames from both parties simply uses the one whose signer
+ * has no later row. That is a choice available to the supplier, not a gap this rule
+ * can be widened to close.
+ *
+ * Only authenticated records are considered — an unverified record's nonce is asserted,
+ * not attested, so it carries no ordering claim.
+ *
+ * One measured caveat: the venue looks for a key's last nonce only within the newest
+ * portion of a room it scans, so on a long busy room a legitimate lower nonce can appear
+ * once older traffic buries the record that would have refused it. Observed once in 12,387
+ * signed records on `tclk-offers`, and not at all in two quieter rooms. A derived deal room
+ * — a handful of records from two keys — is never near that boundary.
+ */
+export function checkNonceOrder(records: readonly TranscriptRecord[]): NonceOrderIssue[] {
+  // Against that signer's *immediately preceding* record, not the highest nonce seen
+  // from them. The rule above is stated that way — a swap shows when the moved record is
+  // followed in supplied order by a lower nonce — and the two readings disagree: with a
+  // running maximum, nonces 5, 3, 4 report both 5>3 and 5>4, when only the first steps
+  // backwards and 3 -> 4 rises. One reordering counted twice, the second row naming a
+  // predecessor the walk had already passed. The old name "highest" is what made the
+  // early return below look right.
+  const previousBySigner = new Map<string, { value: bigint; index: number; nonce: string }>();
+  const issues: NonceOrderIssue[] = [];
+
+  records.forEach((record, index) => {
+    if (!record || typeof record.nonce !== "string") return;
+    if (!verifyTranscriptRecord(record).ok) return;
+
+    let value: bigint;
+    try {
+      value = BigInt(record.nonce);
+    } catch {
+      return;
+    }
+
+    const key = `${record.room} ${record.sender}`;
+    const previous = previousBySigner.get(key);
+    if (previous !== undefined && value <= previous.value) {
+      issues.push({
+        room: record.room,
+        sender: record.sender,
+        index,
+        previousIndex: previous.index,
+        nonce: record.nonce,
+        previousNonce: previous.nonce,
+      });
+    }
+    // Advance even when this record was just reported: it is the predecessor of whatever
+    // this signer supplies next, and not advancing is what produced the duplicate row.
+    previousBySigner.set(key, { value, index, nonce: record.nonce });
+  });
+
+  return issues;
+}
+
 /**
  * Authenticate and fold records in the supplied order. Every record gets a verdict;
  * invalid signatures, forged `from` fields, wrong rooms, malformed lines and bad
