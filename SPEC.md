@@ -239,8 +239,13 @@ accepted | locked ──heartbeat(either party)───────────
 
 Duplicates and replays are rejections without state change; frames from non-parties are
 rejections; a reveal with a wrong secret is a rejection (the secret check is the transition
-guard, not an afterthought). The machine never touches money — it tracks what the signed
-transcript establishes, and the rail enforces the same predicates independently.
+guard, not an afterthought). When multiple competing `accept` frames target the same public
+offer, the contract binds strictly to the first valid `accept` in transcript append order. Any
+subsequent `accept` is a rejection without state change (`accept in status accepted`); an
+acceptor observing that an offer has already bound to a competing contract MUST treat its
+local state as defunct and release any local reservations or uncommitted lock states. The
+machine never touches money — it tracks what the signed transcript establishes, and the rail
+enforces the same predicates independently.
 
 Rail negotiation treats each list as an unordered set. Two parties have a rail match exactly
 when the normalized sets have a **non-empty intersection**; neither set needs to contain the
