@@ -251,9 +251,30 @@ function domainHash(tag: string, payload: string): string {
   return u8aToHex(sha256(stringToU8a(`${TCLK_DOMAIN}|${tag}|${toAscii(payload)}`)));
 }
 
-/** The offer id: sha256 over the domain-tagged canonical offer fields (without `id`). */
+/**
+ * The offer id: sha256 over the domain-tagged canonical offer fields (without `id`).
+ * A decoded `OfferFrame` is structurally an `OfferFields`, so the `id` it already carries
+ * is dropped here rather than hashed — `offerId(offer) === offer.id` for every valid offer.
+ */
 export function offerId(fields: OfferFields): string {
-  return domainHash("offer", canonicalJson(fields));
+  // Select the documented members explicitly: a decoded frame, a port's object or a caller's
+  // JavaScript may carry keys the type does not name, and none of them belong in the hash.
+  const core: OfferFields = {
+    type: fields.type,
+    from: fields.from,
+    role: fields.role,
+    amount: fields.amount,
+    asset: fields.asset,
+    lock: fields.lock,
+    rails: fields.rails,
+    claimByMs: fields.claimByMs,
+    refundAfterMs: fields.refundAfterMs,
+    expiresMs: fields.expiresMs,
+    nonce: fields.nonce,
+  };
+  if (fields.paymentKey !== undefined) core.paymentKey = fields.paymentKey;
+  if (fields.job !== undefined) core.job = fields.job;
+  return domainHash("offer", canonicalJson(core));
 }
 
 /** Acceptance core — the accept fields the contract id commits to. */
@@ -271,7 +292,16 @@ export interface AcceptCore {
  * with any term yields a different contract.
  */
 export function contractId(offer: OfferFrame, accept: AcceptCore): string {
-  return domainHash("contract", canonicalJson({ offer, accept }));
+  // Only the acceptance core is bound (SPEC §3.2): a full `AcceptFrame` (with `type` and
+  // `contract`) or any stray key must not change the id the counterparty derives.
+  const core: AcceptCore = {
+    from: accept.from,
+    ref: accept.ref,
+    statement: accept.statement,
+    nonce: accept.nonce,
+  };
+  if (accept.paymentKey !== undefined) core.paymentKey = accept.paymentKey;
+  return domainHash("contract", canonicalJson({ offer, accept: core }));
 }
 
 // ── Frame validation (fail-closed) ───────────────────────────────────────────
