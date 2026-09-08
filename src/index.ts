@@ -43,6 +43,8 @@ export type {
   ContractHandshake,
 } from "./transcript.js";
 
+export { parseRfc3339Instant } from "./timestamps.js";
+
 export { lockTerms, MemoryRail } from "./rail.js";
 
 // The paper rail: records the lifecycle, backs it with NOTHING. For rehearsing the

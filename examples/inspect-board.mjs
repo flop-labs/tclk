@@ -8,10 +8,7 @@
 
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { MAX_FRAME_CHARS, TCLK_PREFIX, isTclkLine, normalizeRailId, tryDecodeFrame } from "../dist/index.js";
-
-// Same timezone-qualified RFC 3339 grammar as src/transcript.ts.
-const TIMESTAMP = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
+import { MAX_FRAME_CHARS, TCLK_PREFIX, isTclkLine, normalizeRailId, parseRfc3339Instant, tryDecodeFrame } from "../dist/index.js";
 
 export function inspectBoard(jsonl, scope) {
   if (!["retained-export", "window", "recording"].includes(scope)) {
@@ -38,14 +35,10 @@ export function inspectBoard(jsonl, scope) {
     let message;
     try { message = JSON.parse(line); }
     catch { counts.malformedRows += 1; continue; }
+    const time = parseRfc3339Instant(message?.ts);
     if (!message || typeof message.text !== "string" ||
         !Number.isSafeInteger(message.seq) || message.seq < 0 ||
-        typeof message.ts !== "string" || !TIMESTAMP.test(message.ts)) {
-      counts.malformedRows += 1;
-      continue;
-    }
-    const time = Date.parse(message.ts);
-    if (!Number.isSafeInteger(time) || time < 0) {
+        time === null) {
       counts.malformedRows += 1;
       continue;
     }
