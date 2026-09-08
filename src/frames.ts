@@ -257,8 +257,24 @@ function domainHash(tag: string, payload: string): string {
  * is dropped here rather than hashed — `offerId(offer) === offer.id` for every valid offer.
  */
 export function offerId(fields: OfferFields): string {
-  const { id: _id, ...rest } = fields as OfferFields & { id?: string };
-  return domainHash("offer", canonicalJson(rest));
+  // Select the documented members explicitly: a decoded frame, a port's object or a caller's
+  // JavaScript may carry keys the type does not name, and none of them belong in the hash.
+  const core: OfferFields = {
+    type: fields.type,
+    from: fields.from,
+    role: fields.role,
+    amount: fields.amount,
+    asset: fields.asset,
+    lock: fields.lock,
+    rails: fields.rails,
+    claimByMs: fields.claimByMs,
+    refundAfterMs: fields.refundAfterMs,
+    expiresMs: fields.expiresMs,
+    nonce: fields.nonce,
+  };
+  if (fields.paymentKey !== undefined) core.paymentKey = fields.paymentKey;
+  if (fields.job !== undefined) core.job = fields.job;
+  return domainHash("offer", canonicalJson(core));
 }
 
 /** Acceptance core — the accept fields the contract id commits to. */

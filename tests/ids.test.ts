@@ -29,6 +29,21 @@ describe("offerId", () => {
   it("is idempotent over a full offer frame (the id it carries is not hashed)", () => {
     expect(offerId(offer)).toBe(offer.id);
   });
+
+  it("ignores keys outside the documented offer fields", () => {
+    const withExtra = { ...offer, extra: "z", contract: "0x" + "cd".repeat(32), nested: { a: 1 } } as typeof offer;
+    expect(offerId(withExtra)).toBe(offer.id);
+  });
+
+  it("still binds the optional job and paymentKey when present", () => {
+    const withJob = makeOffer({
+      from: PAYER_DID, role: "payer", amount: "1", asset: "FLOP", lock: "hash", rails: ["paper"],
+      claimByMs: 1756703600000, refundAfterMs: 1756707200000, expiresMs: 1756700600000,
+      nonce: "0f1e2d3c4b5a6978", job: { proto: "a2a", id: "task-1" },
+    });
+    expect(withJob.id).not.toBe(offer.id);
+    expect(offerId(withJob)).toBe(withJob.id);
+  });
 });
 
 describe("contractId", () => {
