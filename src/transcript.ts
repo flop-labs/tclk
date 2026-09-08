@@ -117,6 +117,48 @@ function object(value: unknown, where: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function lastTopLevelNumericNonce(line: string): string | null {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let nonce: string | null = null;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === "\"") inString = false;
+      continue;
+    }
+    if (char === "\"") {
+      if (depth === 1 && line.startsWith("\"nonce\"", index)) {
+        let cursor = index + "\"nonce\"".length;
+        while (/\s/.test(line[cursor] ?? "")) cursor += 1;
+        if (line[cursor] === ":") {
+          cursor += 1;
+          while (/\s/.test(line[cursor] ?? "")) cursor += 1;
+          const start = cursor;
+          while (/\d/.test(line[cursor] ?? "")) cursor += 1;
+          if (cursor > start && /[\s,}]/.test(line[cursor] ?? "")) {
+            nonce = line.slice(start, cursor);
+          } else {
+            nonce = null;
+          }
+        }
+        index = cursor - 1;
+        continue;
+      }
+      inString = true;
+      continue;
+    }
+    if (char === "{") depth += 1;
+    else if (char === "}") depth -= 1;
+  }
+
+  return nonce;
+}
+
 /** Normalize one `?format=json` or `/export` message without discarding its exact line. */
 export function transcriptRecord(room: string, value: unknown): TranscriptRecord {
   if (!ROOM_NAME.test(room)) throw new Error(`tclk: invalid transcript room ${JSON.stringify(room)}`);
@@ -170,6 +212,16 @@ export function parseTranscriptExport(room: string, jsonl: string): TranscriptRe
       value = JSON.parse(line);
     } catch {
       throw new Error(`tclk: transcript export line ${index + 1} is not JSON`);
+    }
+    if (
+      value !== null && typeof value === "object" &&
+      typeof (value as { nonce?: unknown }).nonce === "number" &&
+      !Number.isSafeInteger((value as { nonce: number }).nonce)
+    ) {
+      const exactNonce = lastTopLevelNumericNonce(line);
+      if (exactNonce !== null) {
+        value = { ...(value as Record<string, unknown>), nonce: exactNonce };
+      }
     }
     try {
       records.push(transcriptRecord(room, value));

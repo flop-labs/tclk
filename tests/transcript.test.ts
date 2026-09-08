@@ -13,6 +13,7 @@ import {
   makeAccept,
   makeOffer,
   parseTranscriptExport,
+  tryDecodeFrame,
   type TranscriptRecord,
 } from "../src/index.js";
 
@@ -215,6 +216,119 @@ describe("trusted transcript records", () => {
     });
     expect(() => parseTranscriptExport(BOARD, withoutTimezone)).toThrow(/timezone-qualified/);
     expect(() => parseTranscriptExport(BOARD, localeTimestamp)).toThrow(/timezone-qualified/);
+  });
+
+  it("recovers unsafe numeric transport nonces from exact JSONL digits before verification", () => {
+    const { offer } = deal();
+    const line = encodeFrame(offer);
+    const unsafeNonce = "1788647316936602500";
+    const signed = {
+      room: BOARD,
+      seq: 245,
+      timestampMs: NOW,
+      sender: payer.did,
+      nonce: unsafeNonce,
+      signature: payer.sign(`${BOARD}|${unsafeNonce}|${line}`),
+      line,
+    };
+    const raw = JSON.stringify({
+      seq: signed.seq,
+      ts: new Date(signed.timestampMs).toISOString(),
+      from: signed.sender,
+      nonce: unsafeNonce,
+      sig: signed.signature,
+      text: signed.line,
+    }).replace(`"nonce":"${unsafeNonce}"`, `"nonce":${unsafeNonce}`);
+
+    const [parsed] = parseTranscriptExport(BOARD, `${raw}\n`);
+    expect(parsed).toEqual(signed);
+  });
+
+  it("recovers the effective unsafe numeric transport nonce from duplicate JSONL keys", () => {
+    const { offer } = deal();
+    const line = encodeFrame(offer);
+    const earlierNonce = "1788647316936602500";
+    const effectiveNonce = "1788647316936602601";
+    const signed = {
+      room: BOARD,
+      seq: 245,
+      timestampMs: NOW,
+      sender: payer.did,
+      nonce: effectiveNonce,
+      signature: payer.sign(`${BOARD}|${effectiveNonce}|${line}`),
+      line,
+    };
+    const raw = `{"seq":245,"ts":"${new Date(NOW).toISOString()}","from":"${payer.did}",` +
+      `"nonce":${earlierNonce},"nonce":${effectiveNonce},"sig":"${signed.signature}",` +
+      `"text":${JSON.stringify(line)}}`;
+
+    const [parsed] = parseTranscriptExport(BOARD, `${raw}\n`);
+    expect(parsed).toEqual(signed);
+  });
+
+  it("does not recover an earlier duplicate numeric nonce over an effective decimal-text nonce", () => {
+    const { offer } = deal();
+    const line = encodeFrame(offer);
+    const maliciousNonce = "1788647316936602500";
+    const effectiveNonce = "10007";
+    const signed = {
+      room: BOARD,
+      seq: 245,
+      timestampMs: NOW,
+      sender: payer.did,
+      nonce: effectiveNonce,
+      signature: payer.sign(`${BOARD}|${effectiveNonce}|${line}`),
+      line,
+    };
+    const raw = `{"seq":245,"ts":"${new Date(NOW).toISOString()}","from":"${payer.did}",` +
+      `"nonce":${maliciousNonce},"nonce":"${effectiveNonce}","sig":"${signed.signature}",` +
+      `"text":${JSON.stringify(line)}}`;
+
+    const [parsed] = parseTranscriptExport(BOARD, `${raw}\n`);
+    expect(parsed).toEqual(signed);
+  });
+
+  it("fails closed when an unsafe numeric transport nonce cannot be recovered as raw digits", () => {
+    const { offer } = deal();
+    const line = encodeFrame(offer);
+    const raw = `{"seq":245,"ts":"${new Date(NOW).toISOString()}","from":"${payer.did}",` +
+      `"nonce":1788647316936602500.5,"sig":"${payer.sign(`${BOARD}|1788647316936602500|${line}`)}",` +
+      `"text":${JSON.stringify(line)}}`;
+
+    expect(() => parseTranscriptExport(BOARD, `${raw}\n`)).toThrow(/nonce must be decimal text/);
+  });
+
+  it("fails closed when the effective duplicate unsafe numeric nonce is malformed", () => {
+    const { offer } = deal();
+    const line = encodeFrame(offer);
+    const raw = `{"seq":245,"ts":"${new Date(NOW).toISOString()}","from":"${payer.did}",` +
+      `"nonce":1788647316936602500,"nonce":1788647316936602601.5,` +
+      `"sig":"${payer.sign(`${BOARD}|1788647316936602601|${line}`)}",` +
+      `"text":${JSON.stringify(line)}}`;
+
+    expect(() => parseTranscriptExport(BOARD, `${raw}\n`)).toThrow(/nonce must be decimal text/);
+  });
+
+  it("leaves normal decimal-text transport nonces and TCLK frame nonces unchanged", () => {
+    const { offer } = deal();
+    const line = encodeFrame(offer);
+    const signed = record(BOARD, 7, NOW, payer, line);
+    const raw = JSON.stringify({
+      seq: signed.seq,
+      ts: new Date(signed.timestampMs).toISOString(),
+      from: signed.sender,
+      nonce: signed.nonce,
+      sig: signed.signature,
+      text: signed.line,
+    });
+
+    const [parsed] = parseTranscriptExport(BOARD, `${raw}\n`);
+    const parsedFrame = tryDecodeFrame(parsed.line);
+    expect(parsed.nonce).toBe(signed.nonce);
+    expect(parsedFrame?.type).toBe("offer");
+    if (parsedFrame?.type === "offer") {
+      expect(parsedFrame.nonce).toBe(offer.nonce);
+    }
   });
 
   it("never synthesizes offer-before-accept order while selecting a board handshake", () => {
