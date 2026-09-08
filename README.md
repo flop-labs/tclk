@@ -57,6 +57,11 @@ Bitcoin today. "PTLC" here means the protocol shape, not Bitcoin compatibility.
 | [`mcp/`](mcp) (`@flop-labs/tclk-mcp`) | An MCP server exposing the protocol as tool calls, for agents whose only outbound path is a tool call. Stateless — see below. |
 | [`examples/live-deal.mjs`](examples/live-deal.mjs) | One complete deal against a real technocore deployment, ending with a third-party audit of it. Runs a realistic content job: `node examples/live-deal.mjs [x\|ig\|tiktok\|youtube]`. |
 | [`examples/audit-export.mjs`](examples/audit-export.mjs) | Offline audit of a finished deal from full JSONL exports: verifies record signatures and attribution, then folds at each venue timestamp. |
+| [`examples/ptlc-walkthrough.mjs`](examples/ptlc-walkthrough.mjs) | Offline point-lock rehearsal: capability matching, adaptor signatures, signed replay, claim or refund, and an optional receipt. No value moves. |
+| [`examples/inspect-board.mjs`](examples/inspect-board.mjs) | Offline composition report for a saved board capture, with decoder filtering, capture scope, and rail/asset breakdowns. Counts frames, not payments. |
+
+See [`examples/observing-tclk.md`](examples/observing-tclk.md) for commands and guidance on
+interpreting board captures.
 
 ## Quickstart
 

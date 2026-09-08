@@ -8,6 +8,9 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Transcript and board inspection timestamps now reject impossible calendar dates while
+  preserving timezone-qualified RFC 3339 instants.
+
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
@@ -15,6 +18,11 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- Offline executable examples for point-lock claim/refund deals with capability matching,
+  signed transcript replay and optional receipts, and for board composition reports that
+  separate prefix counts from decoded frames and show capture scope, UTC time bounds, rails,
+  assets and lock kinds, with guidance on interpreting rehearsal activity and sampled notes
+  (#113).
 - A schema-owned tclk/1 frame field contract, canonical settlement-rail registry and
   intersection-based, order-independent rail matching helpers. Generated decoder fields
   and the normative `SPEC.md` table are checked for drift in CI.

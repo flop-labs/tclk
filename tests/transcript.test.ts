@@ -213,8 +213,13 @@ describe("trusted transcript records", () => {
       ...JSON.parse(raw),
       ts: "January 1, 2026 00:00:00",
     });
+    const impossibleDate = JSON.stringify({
+      ...JSON.parse(raw),
+      ts: "2026-02-29T00:00:00Z",
+    });
     expect(() => parseTranscriptExport(BOARD, withoutTimezone)).toThrow(/timezone-qualified/);
     expect(() => parseTranscriptExport(BOARD, localeTimestamp)).toThrow(/timezone-qualified/);
+    expect(() => parseTranscriptExport(BOARD, impossibleDate)).toThrow(/timestamp/);
   });
 
   it("never synthesizes offer-before-accept order while selecting a board handshake", () => {
