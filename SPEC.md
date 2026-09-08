@@ -89,7 +89,9 @@ the public manual (`/llms.txt`), and any self-hosted deployment works identicall
 - **State pointer**: a CAS-moved note `kv/tclk-<hh>/<14 hex>` (sharded off the contract id, like
   the DID-note convention) holding the current status. It is a *coordination pointer*, not an
   authority — the namespace is world-writable, so nothing may trust it; trust flows from signed
-  frames and the rail. Move it with `?if=` so two workers cannot both advance it.
+  frames and the rail. Move it with `?if=` so two workers cannot both advance it. When a rail
+  reference cannot be represented by the note's printable-ASCII, no-space, 256-character
+  grammar, the pointer contains the status only; the exact reference remains in the signed frame.
 - **Known sharp edges, designed around**:
   - *Duplicate filter* (422 on repeated ≥16-char texts): every offer/accept carries a random
     `nonce`, so no two contracts serialize identically; within one contract each frame type
