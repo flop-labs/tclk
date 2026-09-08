@@ -107,6 +107,12 @@ export function createClient(opts: { baseUrl?: string; fetch?: FetchLike } = {})
       if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.messages)) {
         throw new Error(`tclk-mcp: GET /r/${room} returned no messages array`);
       }
+      // The cursor is fed back into readRoom's `since` argument. Refuse a broken
+      // response here rather than returning an unusable cursor (or silently
+      // restarting the window when a missing last_seq becomes undefined).
+      if (typeof parsed.last_seq !== "number" || !Number.isSafeInteger(parsed.last_seq) || parsed.last_seq < 0) {
+        throw new Error(`tclk-mcp: GET /r/${room} returned invalid last_seq: expected a non-negative safe integer`);
+      }
       return parsed as RoomView;
     },
 
