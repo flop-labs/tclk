@@ -49,11 +49,11 @@ export function verifySecret(lock: LockKind, statement: string, secret: string |
 }
 
 /**
- * Payee-side deadline check before accepting an offer, fail-closed like
- * `validateTimelockStagger`: the claim window (now → claimByMs) must cover doing the
- * work and revealing, and the claim→refund gap must cover the rail observing the
- * reveal before the payer may refund. Both margins are the caller's risk tolerance —
- * there is no safe universal default, so none is supplied.
+ * Payee-side deadline check before accepting an offer, fail-closed: the claim window
+ * (now → claimByMs) must cover doing the work and revealing, and the claim→refund gap
+ * must cover the rail observing the reveal before the payer may refund. Both margins
+ * are the caller's risk tolerance — there is no safe universal default, so none is
+ * supplied.
  */
 export function validateDeadlines(
   offer: { claimByMs: number; refundAfterMs: number },
@@ -66,6 +66,14 @@ export function validateDeadlines(
   // directions, while subtracting -Infinity manufactures an infinite "safe" window.
   // Validate every operand before doing deadline arithmetic so malformed clocks and
   // hand-built offers fail closed rather than widening the caller's safety margin.
+  //
+  // Check the offer itself first. The parameter is typed, but an untyped caller reaches
+  // here with whatever it parsed, and `JSON.parse('{"offer":null}')` is an ordinary way
+  // to get null. Reading .claimByMs off that throws instead of returning false, which is
+  // the one input shape this guard was not closing.
+  if (offer === null || typeof (offer as unknown) !== "object") {
+    return false;
+  }
   if (
     !Number.isSafeInteger(offer.claimByMs) ||
     offer.claimByMs <= 0 ||
