@@ -424,6 +424,62 @@ describe("HTTP and JSON-RPC framing", () => {
     expect(badEnum.body.error.code).toBe(-32602);
   });
 
+  // Every generated schema but `tclk_whoami`'s (whose shape is empty) says
+  // `"additionalProperties": false`. The Worker has no zod to strip a key the schema does
+  // not name, and the tool handlers take their input by spread, so an unnamed key that got
+  // through would reach the frame — a `type` argument deciding the frame kind, or a
+  // misspelled optional argument passing as a successful call that quietly did something
+  // else. The boundary is where the advertised schema is either enforced or a claim.
+  it("-32602 on an argument the sealed schema does not name", async () => {
+    const stray = await rpc("tools/call", {
+      name: "tclk_decode",
+      arguments: { line: "tclk1 {}", type: "receipt" },
+    });
+    expect(stray.body.error.code).toBe(-32602);
+    expect(stray.body.error.message).toContain("unexpected argument `type`");
+
+    // A misspelled optional argument is named, not dropped.
+    const typo = await rpc("tools/call", {
+      name: "tclk_accept_offer",
+      arguments: { offer: "tclk1 {}", from: PAYEE_DID, paymentkey: "0x02" },
+    });
+    expect(typo.body.error.code).toBe(-32602);
+    expect(typo.body.error.message).toContain("unexpected argument `paymentkey`");
+
+    // `tclk_whoami` names no properties and seals nothing, so it stays as permissive as
+    // its schema is.
+    expect((await rpc("tools/call", { name: "tclk_whoami", arguments: { anything: 1 } })).body.error)
+      .toBeUndefined();
+  });
+
+  it("never lets a caller's `type` argument change the frame a builder returns", async () => {
+    // Before the boundary check and the builders' spread order were fixed, each of these
+    // came back as a well-formed frame of the WRONG kind: a receipt from the lock builder,
+    // a refund from the cancel builder, and a reveal — carrying the secret — from the
+    // refund builder.
+    const contract = `0x${"ab".repeat(32)}`;
+    const secret = `0x${"11".repeat(32)}`;
+
+    const asReceipt = await rpc("tools/call", {
+      name: "tclk_make_lock",
+      arguments: { from: PAYER_DID, contract, rail: "flop-htlc", ref: "escrow-7", type: "receipt", outcome: "claimed" },
+    });
+    expect(asReceipt.body.error.code).toBe(-32602);
+
+    const asRefund = await rpc("tools/call", {
+      name: "tclk_make_cancel",
+      arguments: { from: PAYER_DID, contract, reason: "done", type: "refund" },
+    });
+    expect(asRefund.body.error.code).toBe(-32602);
+
+    const asReveal = await rpc("tools/call", {
+      name: "tclk_make_refund",
+      arguments: { from: PAYER_DID, contract, ref: "escrow-7", type: "reveal", secret },
+    });
+    expect(asReveal.body.error.code).toBe(-32602);
+    expect(JSON.stringify(asReveal.body)).not.toContain("11".repeat(32));
+  });
+
   it("413s an oversized body", async () => {
     const response = await handleRequest(
       new Request(url, {
