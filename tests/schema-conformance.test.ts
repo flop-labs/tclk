@@ -7,7 +7,9 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { makeOffer, validateFrame, type JobRef } from "../src/index.js";
+import {
+  decodeFrame, encodeFrame, makeOffer, validateFrame, type JobRef, type TclkFrame,
+} from "../src/index.js";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
@@ -31,6 +33,21 @@ function schemaAdmits(definition: string, field: string, value: string): boolean
   if (leaf.type !== "string") throw new Error(`${definition}.${field} is not a string leaf`);
   if (leaf.minLength !== undefined && value.length < leaf.minLength) return false;
   return leaf.pattern === undefined || new RegExp(leaf.pattern).test(value);
+}
+
+/**
+ * Evaluate one schema `enum` leaf against a value. JSON Schema matches an enum by value
+ * equality, so only the listed strings satisfy it — a value that merely *stringifies* to
+ * one of them does not.
+ */
+function schemaEnumAdmits(definition: string, field: string, value: unknown): boolean {
+  const leaf = schema.$defs[definition].properties[field];
+  if (!Array.isArray(leaf.enum)) throw new Error(`${definition}.${field} is not an enum leaf`);
+  return (leaf.enum as unknown[]).includes(value);
+}
+
+function receiptWithOutcome(outcome: unknown) {
+  return { type: "receipt", from: PAYER_DID, contract: CONTRACT, outcome } as unknown as TclkFrame;
 }
 
 function offerWithJob(job: JobRef) {
@@ -80,6 +97,39 @@ describe("protocol schema", () => {
     for (const s of ["0x11", `0x${"a".repeat(64)}`]) {
       expect(schemaAdmits("presig", "s", s), `schema rejects presig.s ${s}`).toBe(true);
       expect(() => validateFrame(lockWithPresigScalar(s))).not.toThrow();
+    }
+  });
+
+  // `outcome` is the receipt's whole content — SPEC §3.5 makes it the line a
+  // reputation/spend-accounting layer consumes, and §4 the value `applyFrame` matches
+  // against the terminal status. The schema states it as an enum, so an independent
+  // implementation validating against the shipped file admits nothing but the three
+  // strings. The decoder tested it through `String(frame.outcome)`, which is a coercion,
+  // not a comparison: `["claimed"]` stringifies to `"claimed"`, so it decoded — and
+  // `encodeFrame` minted the same line back out. `role` and `lock` next to it compare
+  // strictly; this is asserted on both halves for the same values.
+  it("admits no receipt outcome the schema rejects", () => {
+    for (const outcome of [["claimed"], [["refunded"]], ["cancelled"]]) {
+      expect(
+        schemaEnumAdmits("receipt", "outcome", outcome),
+        `schema admits receipt.outcome ${JSON.stringify(outcome)}`,
+      ).toBe(false);
+      expect(() => validateFrame(receiptWithOutcome(outcome))).toThrow(/outcome must be/);
+      expect(() => encodeFrame(receiptWithOutcome(outcome))).toThrow(/outcome must be/);
+    }
+
+    // The untrusted entry point: a hostile room line, not a hand-built object.
+    const line =
+      `tclk1 {"contract":"${CONTRACT}","from":"${PAYER_DID}",` +
+      '"outcome":["claimed"],"type":"receipt"}';
+    expect(() => decodeFrame(line)).toThrow(/outcome must be/);
+
+    for (const outcome of ["claimed", "refunded", "cancelled"]) {
+      expect(
+        schemaEnumAdmits("receipt", "outcome", outcome),
+        `schema rejects receipt.outcome ${outcome}`,
+      ).toBe(true);
+      expect(() => validateFrame(receiptWithOutcome(outcome))).not.toThrow();
     }
   });
 
