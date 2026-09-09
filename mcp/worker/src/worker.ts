@@ -230,7 +230,8 @@ function typeMatches(expected: string, actual: string): boolean {
 
 /**
  * A shallow check of the arguments against the tool's generated JSON Schema: required
- * keys present, top-level types right, enums honoured. Returns the reason, or null.
+ * keys present, no key the sealed schema does not name, top-level types right, enums
+ * honoured. Returns the reason, or null.
  *
  * Deliberately shallow. The deep validation is the library's, one layer down, and it is
  * strict there for a reason — `applyFrame` and the frame decoders reject unknown keys and
@@ -281,10 +282,22 @@ function checkArguments(tool: ManifestTool, args: Record<string, unknown>): stri
     if (args[key] === undefined) return `missing required argument \`${key}\``;
   }
   const properties = isPlainObject(schema.properties) ? schema.properties : {};
+  // The generated schemas say `"additionalProperties": false`, so honour it rather than
+  // advertising a sealed object and then passing anything through. Skipping an unknown key
+  // is not harmless here: `tools.ts`'s builders take their input by spread, so a stray key
+  // reaches the frame, and the tool handlers are the same objects the stdio build calls —
+  // where zod strips the key before it ever arrives. Dropping it silently would also swallow
+  // a misspelled optional argument (`paymentkey`) as a successful call that quietly did
+  // something else. `tclk_whoami` carries no `additionalProperties` at all (its shape is
+  // empty), so it is left as permissive as it was.
+  const sealed = schema.additionalProperties === false;
   for (const [key, value] of Object.entries(args)) {
     if (value === undefined) continue;
     const property = properties[key];
-    if (!isPlainObject(property)) continue;
+    if (!isPlainObject(property)) {
+      if (sealed) return `unexpected argument \`${key}\``;
+      continue;
+    }
     const reason = checkProperty(key, property, value);
     if (reason !== null) return reason;
   }

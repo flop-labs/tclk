@@ -90,6 +90,51 @@ describe("thin builders", () => {
     roundTrip(h.tclk_make_heartbeat({ from: PAYEE_DID, contract, nonce: "0123456789abcdef" }));
   });
 
+  // The builders take their input by spread. If the spread landed on top of the `type`
+  // literal, a caller's own `type` key would decide the frame kind: `tclk_make_refund`
+  // would answer with a `reveal` line publishing the secret it was handed, and
+  // `tclk_make_cancel` with a `refund`. The stdio server's zod strips such a key before it
+  // arrives; the hosted Worker has no zod, and these handlers are the same objects it
+  // calls. So the tool's own name decides the frame, and every other stray key is left for
+  // `validateFrame` to refuse — a wrong-kind frame is never built, and never encoded.
+  it("builds the frame its own name says, whatever `type` the caller passes", () => {
+    // `extra` is what a client can send that the tool's own schema does not name: over
+    // stdio zod strips it, on the hosted Worker nothing does.
+    const extra = (o: Record<string, unknown>) => o as unknown as Record<string, never>;
+    const secret = `0x${"11".repeat(32)}`;
+
+    // Once answered with a well-formed settlement receipt. Now it is validated as the lock
+    // it is named, so the receipt-only field is an unknown one.
+    expect(() =>
+      h.tclk_make_lock({
+        from: PAYER_DID, contract, rail: "flop-htlc", ref: "escrow-7",
+        ...extra({ type: "receipt", outcome: "claimed" }),
+      }),
+    ).toThrow(/unknown field on lock: outcome/);
+
+    // Once answered with a refund.
+    expect(
+      h.tclk_make_cancel({ from: PAYER_DID, contract, reason: "done", ...extra({ type: "refund" }) }).frame,
+    ).toMatchObject({ type: "cancel" });
+
+    // Once answered with a reveal, publishing the secret it was handed. It must not build,
+    // and the secret must not reach the caller in a line.
+    expect(() =>
+      h.tclk_make_refund({
+        from: PAYER_DID, contract, ref: "escrow-7", ...extra({ type: "reveal", secret }),
+      }),
+    ).toThrow(/unknown field on refund: secret/);
+
+    // And where the stray `type` is the only extra key, the builder simply builds its own.
+    expect(
+      h.tclk_make_reveal({ from: PAYEE_DID, contract, ref: "escrow-7", secret, ...extra({ type: "cancel" }) })
+        .frame,
+    ).toMatchObject({ type: "reveal" });
+    expect(
+      h.tclk_make_receipt({ from: PAYEE_DID, contract, outcome: "claimed", ...extra({ type: "lock" }) }).frame,
+    ).toMatchObject({ type: "receipt" });
+  });
+
   it("fails closed on a malformed field rather than coercing it", () => {
     expect(() => h.tclk_make_lock({ from: PAYER_DID, contract: "0xdead", rail: "flop-htlc", ref: "r" })).toThrow(
       /contract is malformed/,
