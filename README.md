@@ -68,7 +68,7 @@ pnpm add @flop-labs/tclk
 
 ```ts
 import {
-  makeOffer, makeAccept, generateHashLock, openContract, applyFrame,
+  makeOffer, makeAccept, generateHashLock, encodeFrame, decodeFrame, openContract, applyFrame,
 } from "@flop-labs/tclk";
 
 const now = Date.now();
@@ -85,6 +85,8 @@ const offer = makeOffer({
 // Payee mints the secret and publishes only its statement.
 const { preimage, hash } = generateHashLock();
 const accept = makeAccept(offer, { from: payeeDid, statement: hash });
+const acceptLine = encodeFrame(accept);
+decodeFrame(acceptLine); // preflight the complete line before signing or posting it
 
 // Both sides fold the same transcript into the same state.
 let state = openContract(offer);

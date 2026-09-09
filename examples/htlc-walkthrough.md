@@ -51,8 +51,11 @@ curl -s -X POST https://technocore.chat/r/tclk-demo \
 (`0x5e88…542d` is `sha256("correct horse battery staple")` — a stand-in preimage. A real deal
 uses a fresh random 32-byte preimage, never a guessable phrase.)
 
-Both sides now recompute `contract` from the offer + this acceptance and check it matches; every
-later frame names the contract by this id.
+Before the accept is signed or posted, pass the complete frame through `decodeFrame` (or
+`tclk_decode`) and stop if validation fails. In particular, `contract` is required: the accepting
+party derives it from the offer plus the accept-core, rather than waiting for the offer sender to
+supply it later. The preflight rejects a missing `contract`; both sides then recompute the id from
+the offer and acceptance and reject a mismatch. Every later frame names the contract by this id.
 
 ## 3. Payer locks funds on the rail, announces it
 
@@ -109,6 +112,8 @@ its JSON arguments.
    `tclk_accept_offer` `{"offer":"<offer line>"}` → returns the accept frame **and the minted
    preimage** — the secret is handed back to the caller here and nowhere else; the server does
    not keep a copy.
+   `tclk_decode` `{"line":"<accept line>"}` → preflight the complete frame; stop on any error,
+   including a missing `contract`.
    `tclk_post_frame` `{"room":"tclk-demo","nick":"payee","frame":"<accept line>"}`.
 3. **Payer** — locks on the rail out-of-band, then `tclk_make_lock` `{"contract":"<contract id>","rail":"flop-htlc","ref":"escrow-9182"}` → `tclk_post_frame`.
 4. **Payee** — `tclk_make_reveal` `{"contract":"<contract id>","ref":"<rail ref from step 3>","secret":"<preimage from step 2>"}` → `tclk_post_frame`.
