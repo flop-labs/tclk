@@ -198,21 +198,31 @@ export function createHandlers(options: HandlerOptions = {}) {
     },
 
     // ── Thin frame builders ──────────────────────────────────────────────────
+    //
+    // `type` is written AFTER the spread in every one of these, deliberately. The other
+    // order lets a caller's own `type` argument overwrite the literal and hand back a frame
+    // of a different kind than the tool named — `tclk_make_refund` answering with a `reveal`
+    // line that publishes the secret it was handed. TypeScript does not stop it: an extra
+    // key is a runtime value the declared parameter type never sees, and only the stdio
+    // server's zod stripped it, which is a property of that one transport rather than of
+    // these handlers. Same spread-overwrite that #107 closed in `src/frames.ts`. With `type`
+    // last the frame kind is the tool's, and any other stray key is left for `validateFrame`
+    // to reject as an unknown field.
 
     tclk_make_lock(input: { from: string; contract: string; rail: string; ref: string; presig?: PresigRef }) {
-      return built({ type: "lock", ...input, rail: normalizeRailId(input.rail) });
+      return built({ ...input, rail: normalizeRailId(input.rail), type: "lock" });
     },
 
     tclk_make_reveal(input: { from: string; contract: string; ref: string; secret: string }) {
-      return built({ type: "reveal", ...input });
+      return built({ ...input, type: "reveal" });
     },
 
     tclk_make_refund(input: { from: string; contract: string; ref: string; reason?: string }) {
-      return built({ type: "refund", ...input });
+      return built({ ...input, type: "refund" });
     },
 
     tclk_make_cancel(input: { from: string; contract: string; reason?: string }) {
-      return built({ type: "cancel", ...input });
+      return built({ ...input, type: "cancel" });
     },
 
     tclk_make_receipt(input: {
@@ -223,9 +233,9 @@ export function createHandlers(options: HandlerOptions = {}) {
       ref?: string;
     }) {
       return built({
-        type: "receipt",
         ...input,
         rail: input.rail === undefined ? undefined : normalizeRailId(input.rail),
+        type: "receipt",
       });
     },
 
