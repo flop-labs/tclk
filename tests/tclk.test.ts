@@ -33,6 +33,7 @@ import {
   parseCapabilityToken,
   stateNote,
   stateNoteValue,
+  lossyStateNoteValue,
   tclkStatusToA2A,
   tclkStatusToAcpPhase,
   tryDecodeFrame,
@@ -583,6 +584,7 @@ describe("tclk venue binding", () => {
   it("state-note values round-trip and parse fail-closed", () => {
     const maxRailRef = "x".repeat(256);
     expect(stateNoteValue("locked", "escrow-7")).toBe("locked escrow-7");
+    expect(lossyStateNoteValue("locked", "escrow-7")).toBe("locked escrow-7");
     expect(parseStateNoteValue(stateNoteValue("locked", "escrow-7"))).toEqual({ status: "locked", railRef: "escrow-7" });
     expect(stateNoteValue("locked", maxRailRef)).toBe(`locked ${maxRailRef}`);
     expect(parseStateNoteValue(stateNoteValue("locked", maxRailRef))).toEqual({ status: "locked", railRef: maxRailRef });
@@ -600,9 +602,11 @@ describe("tclk venue binding", () => {
     ["overlong", "x".repeat(257)],
     ["non-ASCII", "café-7"],
     ["tab", "escrow\ttab"],
-  ])("degrades a state note with an unrepresentable %s ref to status-only", (_case, ref) => {
-    const lockedExpected = stateNoteValue("locked", ref);
-    const claimedNext = stateNoteValue("claimed", ref);
+  ])("degrades a state note with an unrepresentable %s ref only when explicitly requested", (_case, ref) => {
+    expect(() => stateNoteValue("locked", ref)).toThrow(/printable ASCII/);
+
+    const lockedExpected = lossyStateNoteValue("locked", ref);
+    const claimedNext = lossyStateNoteValue("claimed", ref);
 
     expect(lockedExpected).toBe("locked");
     expect(claimedNext).toBe("claimed");

@@ -56,7 +56,7 @@ export type { LockTerms, SettlementRail } from "./rail.js";
 
 export {
   OFFER_ROOM, capabilityToken, parseCapabilityToken,
-  dealRoom, stateNote, stateNoteValue, parseStateNoteValue,
+  dealRoom, stateNote, stateNoteValue, lossyStateNoteValue, parseStateNoteValue,
 } from "./technocore.js";
 
 export {

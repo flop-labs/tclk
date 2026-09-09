@@ -71,16 +71,23 @@ export function stateNote(contract: string): { ns: string; key: string } {
   return { ns: `tclk-${id.slice(2, 4)}`, key: id.slice(4, 18) };
 }
 
-/**
- * Serialize a status (plus optional rail ref) as the state-note value. Single line.
- * A ref that cannot fit the note grammar is omitted: this pointer is non-authoritative,
- * while the signed transcript and rail retain the exact ref.
- */
+/** Serialize a status (plus optional rail ref) as the state-note value. Single line. */
 export function stateNoteValue(status: TclkStatus, railRef?: string): string {
-  if (railRef !== undefined && RAIL_REF.test(railRef)) {
+  if (railRef !== undefined) {
+    if (!RAIL_REF.test(railRef)) {
+      throw new Error("tclk: rail ref must be printable ASCII without spaces (max 256 chars)");
+    }
     return `${status} ${railRef}`;
   }
   return status;
+}
+
+/**
+ * Serialize a state-note value, explicitly allowing an unrepresentable rail ref to be
+ * omitted. The signed transcript and rail must remain the authority for the exact ref.
+ */
+export function lossyStateNoteValue(status: TclkStatus, railRef: string): string {
+  return RAIL_REF.test(railRef) ? `${status} ${railRef}` : status;
 }
 
 /** Parse a state-note value. Null on anything malformed (world-writable input). */
