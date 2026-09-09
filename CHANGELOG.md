@@ -8,6 +8,15 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `validateFrame` no longer coerces a receipt's `outcome`. It tested
+  `String(frame.outcome)` against the three terminal outcomes, and `String(["claimed"])` is
+  `"claimed"`, so `{"outcome":["claimed"]}` decoded as a valid receipt and `encodeFrame`
+  minted the line back out — while `schema/tclk1-frames.schema.json` states `outcome` as an
+  `enum`, which JSON Schema matches by value equality. An independent implementation
+  validating against the shipped schema therefore rejected receipts this decoder emitted
+  and accepted. `outcome` is now compared strictly, like `role` and `lock` beside it. No
+  valid frame changes, and no wire byte or golden vector moves.
+
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
