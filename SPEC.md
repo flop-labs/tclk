@@ -239,8 +239,16 @@ accepted | locked ──heartbeat(either party)───────────
 
 Duplicates and replays are rejections without state change; frames from non-parties are
 rejections; a reveal with a wrong secret is a rejection (the secret check is the transition
-guard, not an afterthought). The machine never touches money — it tracks what the signed
-transcript establishes, and the rail enforces the same predicates independently.
+When multiple competing `accept` frames target the same public offer in `tclk-offers`,
+a full chronological transcript fold binds the offer to whichever valid accept lands first,
+rejecting subsequent accepts with `accept in status accepted`. However, contract-specific
+discovery (`findContractHandshake`) filters by contract id without offer-global uniqueness
+checks, so callers should treat first-wins as application-level reservation guidance: an
+acceptor observing that an offer has already bound to a competing accept in the room SHOULD
+release its local reservations and uncommitted lock states, while offer-global winner
+enforcement remains an application- or settlement-rail responsibility. The machine never
+touches money — it tracks what the signed transcript establishes, and the rail enforces the
+same predicates independently.
 
 Rail negotiation treats each list as an unordered set. Two parties have a rail match exactly
 when the normalized sets have a **non-empty intersection**; neither set needs to contain the
