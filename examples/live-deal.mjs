@@ -26,7 +26,7 @@ import { randomBytes } from "node:crypto";
 import {
   OFFER_ROOM, PaperRail, applyFrame, dealRoom, encodeFrame, findContractHandshake, foldTranscript,
   generateHashLock, lockTerms, makeAccept, makeOffer, openContract, paperNote,
-  parseTranscriptExport, stateNote, stateNoteValue, transcriptRecord,
+  lossyStateNoteValue, parseTranscriptExport, stateNote, stateNoteValue, transcriptRecord,
 } from "../dist/index.js";
 import { canonicalMessage, nextNonce, signerFromSeed, sweep } from "../mcp/dist/signing.js";
 
@@ -307,7 +307,7 @@ payeeView = applyFrame(payeeView, lockFrame, Date.now()).state;
 const held = await rail.verifyLock(lockTerms(payeeView), ref);
 log("", `payee checked the rail itself → verifyLock ${held}`);
 if (!held) throw new Error("rail does not hold the lock the frame claims");
-await notes.set(note.ns, note.key, stateNoteValue("locked", ref), { if: stateNoteValue("accepted") });
+await notes.set(note.ns, note.key, lossyStateNoteValue("locked", ref), { if: stateNoteValue("accepted") });
 
 // 4 — the payee claims by publishing the secret. Publishing it IS the claim.
 const revealFrame = {
@@ -316,8 +316,8 @@ const revealFrame = {
 await post(payee, room, revealFrame);
 await rail.claim(ref, lock.preimage);
 log(4, `reveal     secret published, rail record → claimed`);
-await notes.set(note.ns, note.key, stateNoteValue("claimed", ref), {
-  if: stateNoteValue("locked", ref),
+await notes.set(note.ns, note.key, lossyStateNoteValue("claimed", ref), {
+  if: lossyStateNoteValue("locked", ref),
 });
 
 // 5 — a third party, holding no secrets, reconstructs the deal from the venue alone.

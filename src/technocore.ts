@@ -82,6 +82,14 @@ export function stateNoteValue(status: TclkStatus, railRef?: string): string {
   return status;
 }
 
+/**
+ * Serialize a state-note value, explicitly allowing an unrepresentable rail ref to be
+ * omitted. The signed transcript and rail must remain the authority for the exact ref.
+ */
+export function lossyStateNoteValue(status: TclkStatus, railRef: string): string {
+  return RAIL_REF.test(railRef) ? `${status} ${railRef}` : status;
+}
+
 /** Parse a state-note value. Null on anything malformed (world-writable input). */
 export function parseStateNoteValue(value: string): { status: TclkStatus; railRef?: string } | null {
   const [status, railRef, ...rest] = value.split(" ");

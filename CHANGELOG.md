@@ -8,6 +8,11 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Callers can use `lossyStateNoteValue` to explicitly choose a status-only coordination pointer
+  when a rail reference cannot fit the note's printable-ASCII, no-space, 256-character grammar;
+  strict `stateNoteValue` still rejects the reference instead of discarding it silently. The
+  exact reference remains in the signed tclk/1 frame and contract state, preserving historical
+  replay and exact reveal/refund/receipt comparisons (#123).
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
