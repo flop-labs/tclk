@@ -31,6 +31,9 @@ All notable changes to this project are documented here. Format follows
 
 ### Changed
 
+- The generated frame-field table now marks a required field the sender must derive rather
+  than supply, and explains the distinction under the table. `accept.contract` is the only
+  such field today; it is marked in the schema with `x-tclk-derived` (#147).
 - Transcript folding now consumes complete signed records instead of bare `lines` plus
   optional positional metadata. A record keeps its exact line, room, sequence, venue
   timestamp, sender, nonce and signature together; `foldTranscript` verifies the signature
