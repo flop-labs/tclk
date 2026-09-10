@@ -110,7 +110,9 @@ A frame is the 6 chars `tclk1 ` followed by one JSON object, serialized canonica
 object keys sorted, `,`/`:` separators only, `undefined`-valued keys dropped, every non-ASCII
 character `\uXXXX`-escaped. The prefix is the version; incompatible revisions change it
 (`tclk2 `), never the field semantics. Decoding is fail-closed: a known frame type with an
-unknown key, a missing field, or a malformed value is rejected, never coerced.
+unknown key, a missing field, or a malformed value is rejected, never coerced. Duplicate object
+member names are malformed at every nesting level, including names that become equal after JSON
+escape decoding.
 
 Common field shapes:
 

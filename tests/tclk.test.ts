@@ -119,6 +119,38 @@ describe("tclk frames — wire codec", () => {
     expect(() => baseOffer({ rails: [] })).toThrow(/rails/);
   });
 
+  it("rejects duplicate object keys at every nesting level", () => {
+    const topLevel = encodeFrame(baseOffer()).replace(
+      '"amount":"1000000"',
+      '"amount":"1000000","amount":"2000000"',
+    );
+    expect(() => decodeFrame(topLevel)).toThrow(/duplicate object key: amount/);
+
+    const nested = encodeFrame(baseOffer({ job: a2aJob("task-3f", "ctx-1") })).replace(
+      '"id":"task-3f"',
+      '"id":"task-3f","\\u0069d":"task-4f"',
+    );
+    expect(() => decodeFrame(nested)).toThrow(/duplicate object key: id/);
+
+    const inArray = encodeFrame(baseOffer()).replace(
+      '"rails":["flop-htlc","x402"]',
+      '"rails":[{"id":"one","id":"two"}]',
+    );
+    expect(() => decodeFrame(inArray)).toThrow(/duplicate object key: id/);
+
+    const quoteEquivalent = encodeFrame(baseOffer()).replace(
+      '"rails":["flop-htlc","x402"]',
+      '"rails":[{"a\\"b":1,"a\\u0022b":2}]',
+    );
+    expect(() => decodeFrame(quoteEquivalent)).toThrow(/duplicate object key: a"b/);
+
+    const backslashEquivalent = encodeFrame(baseOffer()).replace(
+      '"rails":["flop-htlc","x402"]',
+      '"rails":[{"a\\\\b":1,"a\\u005cb":2}]',
+    );
+    expect(() => decodeFrame(backslashEquivalent)).toThrow(/duplicate object key: a\\b/);
+  });
+
   it("rejects odd-length pre-signature scalar encodings", () => {
     expect(() => encodeFrame({
       type: "lock",
