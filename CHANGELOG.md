@@ -8,6 +8,15 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `acpJob` refuses a numeric ACP job id that a double cannot carry exactly, instead of
+  rendering the rounded value. `acpJob(9007199254740993)` produced `job.id`
+  `"9007199254740992"`, and the offer id — then the contract id — committed to it, so the
+  payment leg was bound to a job nobody opened with every signature valid and no error
+  raised. Non-integral and non-finite numbers are refused for the same reason (`String()`
+  renders them `1.5`, `NaN`, `1e+21`, and the frame validator has no opinion on the contents
+  of `job.id`). The refusal names the remedy: pass the id as a decimal string, which is
+  exact at any width. Builder-side only — the decoder is unchanged, so a frame already
+  posted in a room keeps folding.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
