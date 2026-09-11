@@ -181,15 +181,29 @@ def apply_frame(state, frame, now_ms):
         return {**state, "status": "accepted", "payee": frame["from"],
                 "statement": frame["statement"], "contract": frame["contract"]}, "accepted"
 
+    # Every post-accept frame names the contract it belongs to, and the machine
+    # checks that FIRST — before who sent it or when — exactly as machine.ts
+    # does. Without this, a frame from another deal between the same two
+    # parties would advance this one.
     if kind == "lock" and status == "accepted":
+        if frame["contract"] != state["contract"]:
+            return state, "rejected: lock names a different contract"
         if frame["from"] != state["offer"]["from"]:
             return state, "rejected: only the payer locks"
+        if now_ms >= state["offer"]["refundAfterMs"]:
+            return state, "rejected: refund window is already open"
         if frame["rail"] not in state["offer"]["rails"]:
             return state, f"rejected: rail {frame['rail']} not offered"
         return {**state, "status": "locked", "rail": frame["rail"],
                 "railRef": frame["ref"]}, "locked"
 
     if kind == "reveal" and status == "locked":
+        if frame["contract"] != state["contract"]:
+            return state, "rejected: reveal names a different contract"
+        # `ref` is optional on reveal/refund; when present it must be the escrow
+        # the lock announced, or the frame is talking about a different escrow.
+        if frame.get("ref") is not None and frame["ref"] != state["railRef"]:
+            return state, "rejected: reveal names a different rail ref"
         if frame["from"] != state["payee"]:
             return state, "rejected: only the payee reveals"
         if now_ms >= state["offer"]["refundAfterMs"]:
@@ -199,6 +213,10 @@ def apply_frame(state, frame, now_ms):
         return {**state, "status": "claimed", "secret": frame["secret"]}, "claimed (terminal)"
 
     if kind == "refund" and status == "locked":
+        if frame["contract"] != state["contract"]:
+            return state, "rejected: refund names a different contract"
+        if frame.get("ref") is not None and frame["ref"] != state["railRef"]:
+            return state, "rejected: refund names a different rail ref"
         if frame["from"] != state["offer"]["from"]:
             return state, "rejected: only the payer refunds"
         if now_ms < state["offer"]["refundAfterMs"]:
@@ -206,6 +224,10 @@ def apply_frame(state, frame, now_ms):
         return {**state, "status": "refunded"}, "refunded (terminal)"
 
     if kind == "cancel" and status in ("proposed", "accepted"):
+        if status == "accepted" and frame["contract"] != state["contract"]:
+            return state, "rejected: cancel names a different contract"
+        if frame["from"] not in (state["offer"]["from"], state.get("payee")):
+            return state, "rejected: cancel from a non-party"
         return {**state, "status": "cancelled"}, "cancelled (terminal)"
 
     return state, f"rejected: {kind} in state {status}"
@@ -288,11 +310,79 @@ def check_golden_vectors():
     print(f"golden vectors: {len(checks)} ids + escape rule reproduced exactly\n")
 
 
-# ── 2. The walkthrough ───────────────────────────────────────────────────────
+# ── 2. State-machine guards (regression cases against machine.ts) ───────────
+#
+# machine.ts rejects a lock/reveal/refund that names a different contract, and a
+# reveal/refund whose `ref` is not the locked rail reference. An earlier revision
+# of this port skipped both checks, so a frame for ANOTHER contract advanced the
+# state — a protocol-behaviour mismatch, not a missing edge case. These run
+# before the walkthrough and, like the golden vectors, refuse to continue on
+# any divergence.
+
+
+def check_machine_guards():
+    now = 1756700000000
+    offer = make_offer(
+        frm=PAYER_DID, role="payer", amount="1", asset="FLOP", rails=["memory"],
+        claim_by_ms=now + 3_600_000, refund_after_ms=now + 7_200_000,
+        expires_ms=now + 1_800_000, nonce="0000000000000001",
+    )
+    preimage = "0x" + "11" * 32
+    accept = make_accept(offer, frm=PAYEE_DID, statement=statement_of(preimage),
+                         nonce="0000000000000002")
+    accepted, _ = apply_frame({"status": "proposed", "offer": offer}, accept, now)
+    other = "0x" + "ee" * 32          # a contract id this deal has never seen
+    mine = accepted["contract"]
+
+    def expect(state, frame, at, status, note_starts):
+        nxt, note = apply_frame(state, frame, at)
+        if nxt["status"] != status or not note.startswith(note_starts):
+            print(f"MACHINE GUARD MISMATCH — {frame['type']} {frame.get('contract', '')[:10]}…\n"
+                  f"  got  {nxt['status']} ({note})\n  want {status} ({note_starts}…)")
+            sys.exit(1)
+        return nxt
+
+    # lock: wrong contract is refused before anything else; the right one moves.
+    expect(accepted, make_frame("lock", frm=PAYER_DID, contract=other, rail="memory", ref="mem-1"),
+           now, "accepted", "rejected: lock names a different contract")
+    locked = expect(accepted, make_frame("lock", frm=PAYER_DID, contract=mine, rail="memory", ref="mem-1"),
+                    now, "locked", "locked")
+
+    # reveal: wrong contract, then wrong rail ref, then no ref at all (optional → allowed).
+    expect(locked, make_frame("reveal", frm=PAYEE_DID, contract=other, secret=preimage),
+           now, "locked", "rejected: reveal names a different contract")
+    expect(locked, make_frame("reveal", frm=PAYEE_DID, contract=mine, ref="mem-9", secret=preimage),
+           now, "locked", "rejected: reveal names a different rail ref")
+    expect(locked, make_frame("reveal", frm=PAYEE_DID, contract=mine, ref="mem-1", secret=preimage),
+           now, "claimed", "claimed")
+    expect(locked, make_frame("reveal", frm=PAYEE_DID, contract=mine, secret=preimage),
+           now, "claimed", "claimed")
+
+    # refund: same two guards, then the honest refund after the window opens.
+    late = offer["refundAfterMs"] + 1
+    expect(locked, make_frame("refund", frm=PAYER_DID, contract=other),
+           late, "locked", "rejected: refund names a different contract")
+    expect(locked, make_frame("refund", frm=PAYER_DID, contract=mine, ref="mem-9"),
+           late, "locked", "rejected: refund names a different rail ref")
+    expect(locked, make_frame("refund", frm=PAYER_DID, contract=mine, ref="mem-1"),
+           late, "refunded", "refunded")
+
+    # cancel after accept must name the contract too; a stranger cannot cancel.
+    expect(accepted, make_frame("cancel", frm=PAYER_DID, contract=other),
+           now, "accepted", "rejected: cancel names a different contract")
+    expect(accepted, make_frame("cancel", frm="did:key:z6Mk" + "h" * 44, contract=mine),
+           now, "accepted", "rejected: cancel from a non-party")
+    expect(accepted, make_frame("cancel", frm=PAYEE_DID, contract=mine),
+           now, "cancelled", "cancelled")
+    print("machine guards: 12 cases match machine.ts (contract + rail-ref refusals)\n")
+
+
+# ── 3. The walkthrough ───────────────────────────────────────────────────────
 
 
 def main():
     check_golden_vectors()
+    check_machine_guards()
 
     now = 1756700000000  # a fixed clock, so the transcript is reproducible
 
