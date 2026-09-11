@@ -114,6 +114,9 @@ export class PaperRail implements SettlementRail {
     if (this.clock() >= terms.refundAfterMs) {
       throw new Error("tclk: refusing to lock into an already-open refund window");
     }
+    if (!isValidStatement(terms.lock, terms.statement)) {
+      throw new Error(`tclk: statement does not fit its lock kind`);
+    }
     const { ns, key } = paperNote(terms.contract);
     const record: PaperRecord = {
       status: "locked",
@@ -144,7 +147,10 @@ export class PaperRail implements SettlementRail {
     if (!verifySecret(record.lock, record.statement, secret)) {
       throw new Error("tclk: secret does not open the statement");
     }
-    await this.advance(ref, current, { ...record, status: "claimed", secret });
+    // Canonicalize for storage: verifySecret accepts case-variant hex (it
+    // lowercases internally), but the record format requires canonical lowercase
+    // so decodePaperRecord can round-trip it.
+    await this.advance(ref, current, { ...record, status: "claimed", secret: secret.toLowerCase() });
   }
 
   async refund(ref: string): Promise<void> {
