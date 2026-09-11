@@ -206,4 +206,48 @@ describe("paper rail — reads are anonymous input", () => {
   it("rejects a malformed contract id rather than sharding garbage", () => {
     expect(() => paperNote("nonsense")).toThrow(/malformed contract id/);
   });
+
+  it("claim canonicalizes an uppercase secret so the record remains readable (#87)", async () => {
+    const { rail, notes } = railAt();
+    const deal = terms();
+    const ref = await rail.lock(deal.terms);
+
+    // verifySecret accepts case-variant hex digits (it lowercases internally),
+    // but the record format requires canonical lowercase so decodePaperRecord
+    // round-trips. Uppercase the hex digits while keeping the 0x prefix lowercase
+    // — isHex rejects 0X but accepts 0xABCDEF.
+    const upperSecret = "0x" + deal.secret.slice(2).toUpperCase();
+    await rail.claim(ref, upperSecret);
+
+    const record = await rail.read(ref);
+    expect(record).not.toBeNull();
+    expect(record!.status).toBe("claimed");
+    // The stored secret must be canonical lowercase, not the caller's casing.
+    expect(record!.secret).toBe(deal.secret.toLowerCase());
+
+    // The raw stored line must also carry lowercase.
+    const { ns, key } = paperNote(deal.terms.contract);
+    const raw = notes.raw(ns, key)!;
+    expect(raw).toContain(deal.secret.toLowerCase());
+    expect(raw).not.toContain(upperSecret);
+  });
+
+  it("lock rejects a non-canonical statement before writing (#87)", async () => {
+    const { rail, notes } = railAt();
+    const deal = terms();
+    const { ns, key } = paperNote(deal.terms.contract);
+
+    // An uppercase statement passes verifySecret (case-insensitive) but would
+    // make the record unreadable — decodePaperRecord rejects non-canonical hex.
+    const badTerms: LockTerms = {
+      ...deal.terms,
+      statement: deal.terms.statement.toUpperCase(),
+    };
+
+    await expect(rail.lock(badTerms)).rejects.toThrow(/statement does not fit its lock kind/);
+
+    // No record should have been written.
+    expect(await notes.get(ns, key)).toBeNull();
+    expect(await rail.verifyLock(badTerms, badTerms.contract)).toBe(false);
+  });
 });
