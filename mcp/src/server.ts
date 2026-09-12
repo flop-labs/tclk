@@ -5,6 +5,8 @@
 // nothing to test here, and a handler that only exists inside a server is a handler you
 // can only test through one.
 
+import { createRequire } from "node:module";
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -68,10 +70,21 @@ async function run<T>(fn: () => T | Promise<T>): Promise<CallToolResult> {
   }
 }
 
+/**
+ * The version `initialize` announces: `mcp/package.json`'s own, read rather than restated.
+ * A literal here is a copy no release step touches — `release.yml` compares the tag with the
+ * two manifests and nothing else — so it would publish a new version that introduces itself
+ * to every client as the previous one, and npm cannot take a published version back.
+ * `../package.json` is the package root from `src/` (tests) and `dist/` (build, tarball).
+ */
+const { version: SERVER_VERSION } = createRequire(import.meta.url)("../package.json") as {
+  version: string;
+};
+
 export function createServer(options: HandlerOptions = {}): McpServer {
   const h: Handlers = createHandlers(options);
   const server = new McpServer(
-    { name: "tclk-mcp", version: "0.1.0" },
+    { name: "tclk-mcp", version: SERVER_VERSION },
     {
       instructions:
         "Technocore Lock Protocol (tclk/1): HTLC/PTLC coordination frames for agents " +

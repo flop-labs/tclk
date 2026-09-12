@@ -12,6 +12,10 @@ All notable changes to this project are documented here. Format follows
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
   boundary rather than silently rounded.
+- The MCP server announced a hard-coded `0.1.0` as its `initialize` server version, over
+  stdio and, through the generated manifest, from the hosted Worker. It now reads
+  `mcp/package.json`, so bumping the manifests at release — the only version `release.yml`
+  checks — can no longer publish a server that reports the previous version.
 
 ### Added
 
