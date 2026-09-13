@@ -73,6 +73,9 @@ export function stateNote(contract: string): { ns: string; key: string } {
 
 /** Serialize a status (plus optional rail ref) as the state-note value. Single line. */
 export function stateNoteValue(status: TclkStatus, railRef?: string): string {
+  if (!STATUSES.has(status)) {
+    throw new Error("tclk: status must be proposed|accepted|locked|claimed|refunded|cancelled");
+  }
   if (railRef !== undefined) {
     if (!RAIL_REF.test(railRef)) {
       throw new Error("tclk: rail ref must be printable ASCII without spaces (max 256 chars)");
