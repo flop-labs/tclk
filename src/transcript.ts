@@ -91,7 +91,9 @@ export function verifyTranscriptRecord(record: TranscriptRecord): TranscriptReco
   if (record.nonce === null || record.signature === null) {
     return invalid("record is unsigned");
   }
-  if (!NONCE.test(record.nonce)) return invalid("record nonce is not canonical decimal");
+  if (typeof record.nonce !== "string" || !NONCE.test(record.nonce)) {
+    return invalid("record nonce is not canonical decimal");
+  }
   if (!SIGNATURE.test(record.signature)) {
     return invalid("record signature is not canonical base64url");
   }
