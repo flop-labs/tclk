@@ -56,7 +56,7 @@ Bitcoin today. "PTLC" here means the protocol shape, not Bitcoin compatibility.
 | [`src/`](src) (`@flop-labs/tclk`) | The core library: frames, contract ids, hash/point locks, the state machine, the `SettlementRail` interface, A2A/ACP mappings. No network calls. |
 | [`mcp/`](mcp) (`@flop-labs/tclk-mcp`) | An MCP server exposing the protocol as tool calls, for agents whose only outbound path is a tool call. Stateless — see below. |
 | [`examples/live-deal.mjs`](examples/live-deal.mjs) | One complete deal against a real technocore deployment, ending with a third-party audit of it. Runs a realistic content job: `node examples/live-deal.mjs [x\|ig\|tiktok\|youtube]`. |
-| [`examples/audit-export.mjs`](examples/audit-export.mjs) | Offline audit of a finished deal from full JSONL exports: verifies record signatures and attribution, then folds at each venue timestamp. |
+| [`examples/audit-export.mjs`](examples/audit-export.mjs) | Offline audit of a finished deal from full JSONL exports: verifies record signatures and attribution; deadline-dependent state requires an explicitly trusted time source rather than trusting export timestamps implicitly. |
 
 ## Quickstart
 
@@ -97,14 +97,25 @@ state = applyFrame(state, revealFrame, Date.now()).state;         // → claimed
 
 `applyFrame` is pure and fail-closed: it returns `{ state, ok, reason }`, and a frame that
 fails a guard (wrong party, wrong secret, out of turn, replayed) leaves the state untouched
-rather than throwing — so you can fold it over every line of a world-writable room.
+rather than throwing — so you can fold it over every line of a world-writable room. Its
+`nowMs` argument is supplied by the caller, so the caller owns the trust decision for that clock.
 
 For records read from a venue, use `foldTranscript(records)`. A `TranscriptRecord` keeps
 the exact line, room, sequence, venue timestamp, sender, nonce and signature together. The
-fold authenticates every record, requires `frame.from` to match its signed sender, and uses
-that record's timestamp for deadline guards; unsigned or malformed records get a verdict
-and cannot advance state. Technocore's timestamp and sequence are venue metadata rather than
-fields in the sender's signature, so an offline audit still trusts its export file for them.
+fold authenticates every record and requires `frame.from` to match its signed sender. Technocore's
+`timestampMs` and sequence are venue metadata rather than fields in the sender's signature, so
+default folding fails closed before any `accept`, `lock`, `reveal`, or `refund` whose validity
+would depend on that unsigned time. A caller that has independently established the venue clock
+as trusted may opt in explicitly:
+
+```ts
+foldTranscript(records, { venueTimeTrust: "trusted_by_caller" })
+```
+
+That opt-in is an external trust assertion, not cryptographic authentication of `timestampMs`.
+Malformed or unsigned records still get a verdict and cannot advance state. The public MCP
+`tclk_apply_transcript` surface does not expose the trusted-time opt-in, so caller-supplied
+transcripts there remain fail-closed by default.
 
 Exact frame shapes and field rules: [`SPEC.md` §3](SPEC.md#3-wire-format).
 
@@ -151,7 +162,7 @@ refuses outright. Prefer the local build wherever your runtime can run it;
 | `tclk_make_receipt` | Build a terminal `receipt` frame. |
 | `tclk_make_heartbeat` | Build a state-neutral liveness frame for an accepted/locked contract. |
 | `tclk_decode` | Parse and validate a raw `tclk1 …` frame line. |
-| `tclk_apply_transcript` | Authenticate complete room records, then fold them at their venue timestamps with a per-record verdict. |
+| `tclk_apply_transcript` | Authenticate complete room records and fold them fail-closed; unsigned venue timestamps cannot authorize deadline-dependent transitions. |
 | `tclk_verify_secret` | Check a preimage/witness against a hash or point statement. |
 | `tclk_adaptor_presign` / `_adapt` / `_extract` / `_verify` | The PTLC adaptor-signature primitives (§7 — unaudited reference crypto). |
 | `tclk_post_frame` | Post a frame line to a technocore room. Three tiers: a caller-supplied signature is passed through as-is; with no signature but `TECHNOCORE_SIGNING_KEY` set, the server signs locally; with neither, it returns the canonical signing challenge for the caller to sign itself. |

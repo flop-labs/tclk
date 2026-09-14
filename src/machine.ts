@@ -55,6 +55,15 @@ export interface StepResult {
   reason?: string;
 }
 
+export interface ApplyFrameOptions {
+  /**
+   * Whether `nowMs` comes from a clock the caller trusts for deadline decisions. Direct
+   * state-machine callers default to true because they supplied the clock themselves;
+   * transcript folding overrides this for unsigned venue metadata.
+   */
+  timeTrusted?: boolean;
+}
+
 /** Open the local view of a contract from a validated offer. Throws on a bad offer. */
 export function openContract(offer: OfferFrame): ContractState {
   validateFrame(offer);
@@ -93,14 +102,27 @@ function tclk1OfferIncludesRail(offered: readonly string[], selected: string): b
   });
 }
 
+function requireTrustedTime(state: ContractState, timeTrusted: boolean): StepResult | null {
+  return timeTrusted ? null : reject(state, "deadline evaluation requires trusted time");
+}
+
 /**
  * Apply one frame at wall-clock `nowMs`. Clock and structural validation run first
- * (bad input is rejected, not thrown on); then the transition guards.
+ * (bad input is rejected, not thrown on); then the transition guards. Direct callers
+ * trust their supplied clock by default. Set `timeTrusted: false` when `nowMs` is only
+ * unauthenticated metadata; structural guards still run, but an actual deadline check
+ * fails closed instead of consulting that clock.
  */
-export function applyFrame(state: ContractState, frame: TclkFrame, nowMs: number): StepResult {
+export function applyFrame(
+  state: ContractState,
+  frame: TclkFrame,
+  nowMs: number,
+  options: ApplyFrameOptions = {},
+): StepResult {
   if (!Number.isFinite(nowMs) || nowMs < 0) {
     return reject(state, "tclk: nowMs must be a finite non-negative number");
   }
+  const timeTrusted = options.timeTrusted ?? true;
 
   try {
     validateFrame(frame);
@@ -117,7 +139,6 @@ export function applyFrame(state: ContractState, frame: TclkFrame, nowMs: number
       if (state.status !== "proposed") return reject(state, `accept in status ${state.status}`);
       if (accept.ref !== state.offer.id) return reject(state, "accept.ref names a different offer");
       if (accept.from === state.offer.from) return reject(state, "cannot accept own offer");
-      if (nowMs >= state.offer.expiresMs) return reject(state, "offer has expired");
       const expected = contractId(state.offer, {
         from: accept.from,
         ref: accept.ref,
@@ -134,6 +155,9 @@ export function applyFrame(state: ContractState, frame: TclkFrame, nowMs: number
       if (!isValidStatement(state.offer.lock, accept.statement)) {
         return reject(state, `statement does not fit a ${state.offer.lock} lock`);
       }
+      const timeFailure = requireTrustedTime(state, timeTrusted);
+      if (timeFailure !== null) return timeFailure;
+      if (nowMs >= state.offer.expiresMs) return reject(state, "offer has expired");
       const acceptorIsPayer = state.offer.role === "payee";
       return {
         ok: true,
@@ -154,13 +178,15 @@ export function applyFrame(state: ContractState, frame: TclkFrame, nowMs: number
       if (state.status !== "accepted") return reject(state, `lock in status ${state.status}`);
       if (frame.contract !== state.contract) return reject(state, "lock names a different contract");
       if (frame.from !== state.payerDid) return reject(state, "only the payer locks");
-      if (nowMs >= state.offer.refundAfterMs) return reject(state, "refund window is already open");
       // Registered ids compare canonically. Historical custom ids retain the exact
       // membership rule they had before the registry, without poisoning known matches
       // when a legacy offer contains both kinds.
       if (!tclk1OfferIncludesRail(state.offer.rails, frame.rail)) {
         return reject(state, `rail ${frame.rail} was not offered`);
       }
+      const timeFailure = requireTrustedTime(state, timeTrusted);
+      if (timeFailure !== null) return timeFailure;
+      if (nowMs >= state.offer.refundAfterMs) return reject(state, "refund window is already open");
       return {
         ok: true,
         state: { ...state, status: "locked", rail: frame.rail, railRef: frame.ref, presig: frame.presig },
@@ -174,10 +200,12 @@ export function applyFrame(state: ContractState, frame: TclkFrame, nowMs: number
         return reject(state, "reveal names a different rail ref");
       }
       if (frame.from !== state.payeeDid) return reject(state, "only the payee reveals");
-      if (nowMs >= state.offer.refundAfterMs) return reject(state, "refund window is open");
       if (!verifySecret(state.offer.lock, state.statement!, frame.secret)) {
         return reject(state, "secret does not open the statement");
       }
+      const timeFailure = requireTrustedTime(state, timeTrusted);
+      if (timeFailure !== null) return timeFailure;
+      if (nowMs >= state.offer.refundAfterMs) return reject(state, "refund window is open");
       return { ok: true, state: { ...state, status: "claimed", secret: frame.secret } };
     }
 
@@ -188,6 +216,8 @@ export function applyFrame(state: ContractState, frame: TclkFrame, nowMs: number
         return reject(state, "refund names a different rail ref");
       }
       if (frame.from !== state.payerDid) return reject(state, "only the payer refunds");
+      const timeFailure = requireTrustedTime(state, timeTrusted);
+      if (timeFailure !== null) return timeFailure;
       if (nowMs < state.offer.refundAfterMs) return reject(state, "refund window not open yet");
       return { ok: true, state: { ...state, status: "refunded" } };
     }

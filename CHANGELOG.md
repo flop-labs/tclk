@@ -8,6 +8,11 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Transcript folding no longer lets unsigned venue/export timestamps decide deadline-sensitive
+  money-state. `foldTranscript` now fails closed by default before `accept`, `lock`, `reveal`,
+  or `refund` can rely on `timestampMs`; callers with an independently trusted venue clock may
+  opt in explicitly with `venueTimeTrust: "trusted_by_caller"`. The MCP surface does not expose
+  that opt-in and therefore remains fail-closed for caller-supplied transcripts (#96).
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
@@ -34,12 +39,11 @@ All notable changes to this project are documented here. Format follows
 - Transcript folding now consumes complete signed records instead of bare `lines` plus
   optional positional metadata. A record keeps its exact line, room, sequence, venue
   timestamp, sender, nonce and signature together; `foldTranscript` verifies the signature
-  and sender binding and applies each frame at that record's timestamp. The MCP
-  `tclk_read_room` tool returns this shape directly and supports `full: true` for strict,
-  byte-exact `/export` history, while `tclk_apply_transcript` accepts only `records` and has
-  no fallback clock. `examples/audit-export.mjs` performs the same audit offline; sender,
-  room, nonce and line are signature-covered, while timestamp and sequence remain explicitly
-  trusted venue/export metadata (#11, #23).
+  and sender binding. Sender, room, nonce and line are signature-covered; timestamp and
+  sequence are venue/export metadata. Deadline-sensitive transitions no longer trust that
+  timestamp implicitly: default folding fails closed, while explicit trusted-clock callers
+  may opt in. The MCP `tclk_read_room` tool returns the complete record shape directly and
+  `tclk_apply_transcript` keeps the safe default with no fallback clock (#11, #23, #96).
 
 ### Fixed
 
