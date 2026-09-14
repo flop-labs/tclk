@@ -169,9 +169,9 @@ function fail(msg: string): never {
   throw new Error(`tclk: ${msg}`);
 }
 
-function requireString(v: unknown, name: string, re?: RegExp): string {
+function requireString(v: unknown, name: string, re?: RegExp, secret = false): string {
   if (typeof v !== "string" || v.length === 0) fail(`${name} must be a non-empty string`);
-  if (re && !re.test(v)) fail(`${name} is malformed: ${v}`);
+  if (re && !re.test(v)) fail(secret ? `${name} is malformed` : `${name} is malformed: ${v}`);
   return v;
 }
 
@@ -340,7 +340,7 @@ export function validateFrame(value: unknown): TclkFrame {
     case "reveal": {
       requireString(frame.contract, "contract", HEX32);
       if (frame.ref !== undefined) requireString(frame.ref, "ref");
-      requireString(frame.secret, "secret", HEX32);
+      requireString(frame.secret, "secret", HEX32, true);
       break;
     }
     case "refund": {
