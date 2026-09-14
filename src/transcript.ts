@@ -18,12 +18,22 @@ const SIGNATURE = /^[A-Za-z0-9_-]{85}[AQgw]$/;
 const TIMESTAMP = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
 const DID_PREFIX = "did:key:z";
 
+export type VenueTimeTrust = "untrusted" | "trusted_by_caller";
+
+export interface TranscriptFoldOptions {
+  /**
+   * Technocore `ts` is venue metadata and is not covered by the record signature. A fold
+   * therefore fails closed on deadline-dependent frames unless the caller explicitly accepts
+   * that venue/export timestamp as a trusted clock source.
+   */
+  venueTimeTrust?: VenueTimeTrust;
+}
+
 /**
  * One normalized technocore record. `line` is the exact stored text; `sender`, `nonce`
  * and `signature` authenticate it for `room`. `timestampMs` and `seq` are venue metadata,
- * not fields covered by the sender's signature; an offline auditor must trust the export
- * file for those two values. Missing signature fields represent an unsigned-lane record
- * and are rejected by a fold.
+ * not fields covered by the sender's signature. Missing signature fields represent an
+ * unsigned-lane record and are rejected by a fold.
  */
 export interface TranscriptRecord {
   room: string;
@@ -230,11 +240,20 @@ export function findContractHandshake(
 /**
  * Authenticate and fold records in the supplied order. Every record gets a verdict;
  * invalid signatures, forged `from` fields, wrong rooms, malformed lines and bad
- * transitions are rejected without changing state. Deadline guards use that record's
- * venue timestamp.
+ * transitions are rejected without changing state.
+ *
+ * Venue `timestampMs` is not sender-authenticated. By default, actual deadline checks fail
+ * closed instead of letting unsigned venue metadata choose money-state. Structural guards
+ * still run first, so an invalid frame keeps its structural verdict. A caller that has
+ * independently decided to trust the venue/export clock can opt in with
+ * `{ venueTimeTrust: "trusted_by_caller" }`.
  */
-export function foldTranscript(records: readonly TranscriptRecord[]): TranscriptFoldResult {
+export function foldTranscript(
+  records: readonly TranscriptRecord[],
+  options: TranscriptFoldOptions = {},
+): TranscriptFoldResult {
   const steps: TranscriptStep[] = [];
+  const venueTimeTrusted = options.venueTimeTrust === "trusted_by_caller";
   let state: ContractState | null = null;
 
   records.forEach((record, index) => {
@@ -305,7 +324,12 @@ export function foldTranscript(records: readonly TranscriptRecord[]): Transcript
       return;
     }
 
-    const result = applyFrame(state, frame, record.timestampMs);
+    const result = applyFrame(
+      state,
+      frame,
+      record.timestampMs,
+      { timeTrusted: venueTimeTrusted },
+    );
     state = result.state;
     steps.push({ ...base, type: frame.type, ok: result.ok, reason: result.reason });
   });

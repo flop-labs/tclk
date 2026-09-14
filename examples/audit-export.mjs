@@ -2,8 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Reproduce a deal from two byte-exact technocore exports, with no network access.
+// Export timestamps are venue metadata outside the signed preimage, so deadline-dependent
+// replay fails closed unless the auditor explicitly accepts that trust boundary.
 //
 //   node examples/audit-export.mjs offers.jsonl deal.jsonl 0x<contract-id>
+//   node examples/audit-export.mjs offers.jsonl deal.jsonl 0x<contract-id> --trust-venue-time
 
 import { readFileSync } from "node:fs";
 
@@ -15,9 +18,15 @@ import {
   parseTranscriptExport,
 } from "../dist/index.js";
 
-const [offersFile, dealFile, contract] = process.argv.slice(2);
+const [offersFile, dealFile, contract, trustFlag] = process.argv.slice(2);
 if (!offersFile || !dealFile || !/^0x[0-9a-f]{64}$/.test(contract ?? "")) {
-  console.error("usage: audit-export.mjs <offers.jsonl> <deal.jsonl> <0x contract id>");
+  console.error(
+    "usage: audit-export.mjs <offers.jsonl> <deal.jsonl> <0x contract id> [--trust-venue-time]",
+  );
+  process.exit(2);
+}
+if (trustFlag !== undefined && trustFlag !== "--trust-venue-time") {
+  console.error(`unknown option ${trustFlag}`);
   process.exit(2);
 }
 
@@ -37,7 +46,10 @@ if (handshake === null) {
   process.exit(1);
 }
 
-const folded = foldTranscript([handshake.offer, handshake.accept, ...deal]);
+const foldOptions = trustFlag === "--trust-venue-time"
+  ? { venueTimeTrust: "trusted_by_caller" }
+  : undefined;
+const folded = foldTranscript([handshake.offer, handshake.accept, ...deal], foldOptions);
 for (const step of folded.steps) {
   const verdict = step.ok ? "ok " : "BAD";
   console.log(`${verdict} ${step.room}#${step.seq} ${step.type ?? "record"}${step.reason ? ` — ${step.reason}` : ""}`);
@@ -50,4 +62,10 @@ if (folded.state === null) {
 
 const terminal = ["claimed", "refunded", "cancelled"].includes(folded.state.status);
 console.log(`\nfold → ${folded.state.status}${terminal ? "" : " (not terminal)"}`);
+if (!terminal && trustFlag !== "--trust-venue-time") {
+  console.error(
+    "deadline-dependent replay is fail-closed because export timestamps are unsigned venue metadata; " +
+      "pass --trust-venue-time only if you independently accept the export clock as trusted",
+  );
+}
 process.exit(terminal ? 0 : 1);

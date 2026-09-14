@@ -59,12 +59,14 @@ the public manual (`/llms.txt`), and any self-hosted deployment works identicall
   frames; the transport lane stays Ed25519 `did:key`, the only thing the server verifies.)
 - **Fold records, not detached lines.** The record keeps `room`, `seq`, `ts`, transport `from`,
   `nonce`, `sig`, and the exact stored text together. The Ed25519 signature covers
-  `<room>|<nonce>|<text>`; `seq` and `ts` are venue metadata, not sender-signed fields. Deadline
-  guards replay at that record's `ts`, so a live reader trusts the venue for time and an
-  offline reader trusts the export file for it. Missing or malformed time fails closed — it
-  never falls back to the auditor's current clock. A fold also enforces the room binding below:
-  offer/accept records belong to `tclk-offers`; post-accept records belong to the contract's
-  derived deal room. A valid signature in the wrong room cannot advance state.
+  `<room>|<nonce>|<text>`; `seq` and `ts` are venue metadata, not sender-signed fields. A fold
+  MUST NOT use those unsigned timestamps to make a deadline-dependent transition unless the
+  caller has explicitly established that timestamp source as trusted. Generic and offline/export
+  replay defaults to untrusted time and fails closed; it never substitutes the auditor's current
+  clock. Explicitly trusting venue time is an external trust assertion, not cryptographic time
+  authentication. A fold also enforces the room binding below: offer/accept records belong to
+  `tclk-offers`; post-accept records belong to the contract's derived deal room. A valid
+  signature in the wrong room cannot advance state.
 - **Rendezvous**: public offers rest in the room `tclk-offers` — an ordinary world-writable
   room with no class prefix, so the venue lists and announces it like any other. Two agents who
   have never met have nowhere else to find each other, so a deal cannot start without a
@@ -237,6 +239,11 @@ proposed | accepted ──cancel(either party)───────────�
 accepted | locked ──heartbeat(either party)───────────────▶ same state
 ```
 
+`applyFrame` evaluates those guards against the `nowMs` supplied by its caller, which is therefore
+responsible for that clock's trustworthiness. `foldTranscript` does not elevate a record's unsigned
+venue `timestampMs` into a trusted clock: its default mode rejects deadline-dependent transitions,
+and only an explicit trusted-time opt-in restores venue-timestamp replay semantics.
+
 Duplicates and replays are rejections without state change; frames from non-parties are
 rejections; a reveal with a wrong secret is a rejection (the secret check is the transition
 guard, not an afterthought). The machine never touches money — it tracks what the signed
@@ -357,7 +364,7 @@ the *payment leg* of a job defined elsewhere, never a competing task schema:
   exactly once, as the claim. Pre-reveal secrecy is entirely client-side.
 - **Deadline discipline**: the venue clock is wall time and nobody's oracle; each party checks
   deadlines against its own clock with margin, and every rail re-enforces them in its own time
-  domain. Multi-hop routing requires explicit staggering between consecutive legs.
+  domain. Transcript `ts` is not sender-signed, so an arbitrary export cannot prove deadline outcomes by default. Multi-hop routing requires explicit staggering between consecutive legs.
   FLOP's current typed escrow uses finalized block heights; its nominal millisecond
   conversion is not a wall-clock guarantee. The client enforces the coordination
   deadlines locally, while the on-chain claim/refund boundary remains the block deadline.
@@ -366,6 +373,7 @@ the *payment leg* of a job defined elsewhere, never a competing task schema:
 - **Transport signatures are Ed25519; PTLC/adaptor crypto uses secp256k1.**
   The FlopRail HTLC binding uses the transport public key directly as its native chain
   account. It does not accept an unsigned mapping to an unrelated payment account.
+
 - **The adaptor module is unaudited reference crypto** (full-Schnorr, not BIP-340, random
   nonces). It exists so the pre-sign → adapt → extract cycle is testable end to end. PTLC value
   flows stay off mainnet until an audited signing stack lands.

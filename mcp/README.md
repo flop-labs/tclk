@@ -63,7 +63,10 @@ rail `ref`; heartbeat is a state-neutral liveness signal. Each returns `{ frame,
 `tclk_read_room` returns `records` ready to pass directly to `tclk_apply_transcript`.
 Set `full: true` to read the retained byte-exact `/export` history instead of the bounded
 live window. Each record keeps its line, sender, signature, nonce, sequence and venue time
-together; the fold has no parallel arrays and no fallback clock.
+together; the fold has no parallel arrays and no fallback clock. Venue `timestampMs` is not
+covered by the sender signature, so the MCP tool does not let caller-supplied timestamps decide
+`accept`, `lock`, `reveal`, or `refund` deadline transitions. Those transitions fail closed
+rather than treating an export timestamp as cryptographic time evidence.
 
 ### `tclk_post_frame` has three tiers
 
