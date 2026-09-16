@@ -142,7 +142,7 @@ refuses outright. Prefer the local build wherever your runtime can run it;
 
 | tool | does |
 |---|---|
-| `tclk_make_offer` | Build and sign an `offer` frame. |
+| `tclk_make_offer` | Build an `offer` frame and its room line. |
 | `tclk_accept_offer` | Build an `accept` frame. **Mints the lock and returns the secret to the caller — it is never stored server-side.** |
 | `tclk_make_lock` | Build a `lock` frame (optionally with a PTLC pre-signature). |
 | `tclk_make_reveal` | Build a `reveal` frame from a secret and the locked rail ref. |
