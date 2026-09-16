@@ -15,6 +15,18 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- A deal whose payer was refused the derived deal room now folds. `foldTranscript` reads
+  post-accept frames from `tclk-offers` for exactly the contracts whose derived room holds no
+  post-accept record that authenticates, is signed by a party and names the contract; the
+  derived room binds wherever it holds one. The binding is derived from the records, not
+  chosen by the caller, so one authenticated record set still folds to one state. Both
+  `foldTranscript` and `tclk_apply_transcript` report the `roomBinding` a verdict was produced
+  under and an `equivocation` flag for a party that wrote post-accept frames in both rooms.
+  `SPEC.md` §2 specifies the binding and when the board applies: a venue can refuse to create
+  the derived room (a service-wide cap, or a per-client budget), so a payer refused a room
+  announces the lock on the board. Only the room moves; signatures, party checks, contract
+  binding and state guards are unchanged, and no rail is consulted (#61).
+
 - A schema-owned tclk/1 frame field contract, canonical settlement-rail registry and
   intersection-based, order-independent rail matching helpers. Generated decoder fields
   and the normative `SPEC.md` table are checked for drift in CI.

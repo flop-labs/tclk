@@ -256,7 +256,7 @@ export const TOOLS: readonly ManifestTool[] = [
   },
   {
     "name": "tclk_apply_transcript",
-    "description": "Authenticate and fold complete room records into one contract view. Use the `records` returned by tclk_read_room: every signature and frame sender is checked, and each frame uses its own venue timestamp. Reports only WHETHER a secret was revealed, never its value.",
+    "description": "Authenticate and fold complete room records into one contract view. Use the `records` returned by tclk_read_room: every signature and frame sender is checked, and each frame uses its own venue timestamp. Post-accept frames are read from one room, derived from the records and reported as `roomBinding`: the contract's derived deal room, or `tclk-offers` when the derived room holds no party-signed post-accept record (a payer the venue refused a new room announces the lock on the board). `equivocation` is true when a party wrote post-accept frames in both. Reports only WHETHER a secret was revealed, never its value.",
     "inputSchema": {
       "type": "object",
       "properties": {

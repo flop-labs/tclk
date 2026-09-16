@@ -284,6 +284,11 @@ export function createHandlers(options: HandlerOptions = {}) {
         // The revealed secret is deliberately NOT echoed: it is in the transcript the
         // caller already holds, and this server never republishes secret material.
         secretRevealed: open.secret !== undefined,
+        // Which room the post-accept frames were read from, derived from these records and
+        // never selected by the caller, plus whether a party wrote post-accept frames in
+        // both rooms. A verdict without its binding is not auditable.
+        roomBinding: folded.roomBinding,
+        equivocation: folded.equivocation,
         steps: folded.steps,
       };
     },

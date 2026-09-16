@@ -49,9 +49,47 @@ export interface TranscriptStep {
   reason?: string;
 }
 
+/**
+ * Which single room a fold read post-accept frames from. Exactly one — admitting both rooms
+ * would leave the result depending on how the caller interleaved two independent streams
+ * (per-room `seq`, millisecond timestamps that can tie), so signed evidence would no longer
+ * determine one state.
+ *
+ * - `"strict"` — SPEC §2 as first written: post-accept frames in the contract's derived deal
+ *   room.
+ * - `"offer-room"` — post-accept frames in `tclk-offers`. For deals whose payer could not open
+ *   the derived room — a venue can refuse a new room outright (service-wide cap, `400`) or per
+ *   client (`rate_rooms_per_day`, `429`) — and so announced the lock on the board instead.
+ *
+ * A fold DERIVES this from the records and reports it; it is not a caller option. A mode
+ * chosen after the records are known would let a party or an auditor pick whichever terminal
+ * state suited them out of the same authenticated set. The rule is fixed: the derived deal
+ * room binds whenever a party of this contract signed a post-accept record in it, so the
+ * board binds only where the derived room holds none.
+ *
+ * Neither binding relaxes anything but the room: the frame still has to be signed by a party,
+ * name this contract, and pass the state guards. Neither consults a settlement rail — a fold
+ * says what the signed transcript establishes, not that anything was funded. And the board
+ * is a ~10 MiB ring: a deal kept there stops being verifiable from the venue within hours,
+ * so `"offer-room"` restores visibility, not durability.
+ */
+export type RoomBinding = "strict" | "offer-room";
+
 export interface TranscriptFoldResult {
   state: ContractState | null;
   steps: TranscriptStep[];
+  /**
+   * The room this fold read post-accept frames from, derived from the records (see
+   * RoomBinding). Reported so a verdict carries the binding it was produced under.
+   */
+  roomBinding: RoomBinding;
+  /**
+   * True when parties of this contract signed post-accept records in BOTH rooms. The
+   * precedence above still yields exactly one verdict — nobody gets to choose — but a party
+   * writing post-accept frames in two rooms is equivocating, and a reader that settles value
+   * on this fold should treat the flag as a reason to stop and look.
+   */
+  equivocation: boolean;
 }
 
 export interface ContractHandshake {
@@ -228,14 +266,56 @@ export function findContractHandshake(
 }
 
 /**
+ * Which room post-accept frames bind to for this contract, decided by the records alone.
+ * A record counts as evidence only if it authenticates, is signed by a party of this
+ * contract, decodes to a post-accept frame and names this contract — so a stranger cannot
+ * move the binding by writing in either room, and neither can an unsigned line.
+ *
+ * The derived deal room wins whenever it holds such a record. The alternative — refusing a
+ * verdict when both rooms do — would hand either party a veto over every deal they are
+ * losing: post one contradicting frame in the other room and no fold can ever conclude.
+ * Precedence keeps the verdict, and `equivocation` reports the misbehaviour.
+ */
+function deriveRoomBinding(
+  records: readonly TranscriptRecord[],
+  contract: string,
+  parties: readonly (string | undefined)[],
+): { roomBinding: RoomBinding; equivocation: boolean } {
+  const derived = dealRoom(contract);
+  const party = new Set(parties.filter((did): did is string => did !== undefined));
+  let inDerivedRoom = false;
+  let onBoard = false;
+
+  for (const record of records) {
+    if (record.room !== derived && record.room !== OFFER_ROOM) continue;
+    if (!party.has(record.sender) || !verifyTranscriptRecord(record).ok) continue;
+    const frame = tryDecodeFrame(record.line);
+    if (frame === null || frame.from !== record.sender) continue;
+    if (frame.type === "offer" || frame.type === "accept" || frame.contract !== contract) continue;
+    if (record.room === derived) inDerivedRoom = true;
+    else onBoard = true;
+  }
+
+  return {
+    roomBinding: inDerivedRoom || !onBoard ? "strict" : "offer-room",
+    equivocation: inDerivedRoom && onBoard,
+  };
+}
+
+/**
  * Authenticate and fold records in the supplied order. Every record gets a verdict;
  * invalid signatures, forged `from` fields, wrong rooms, malformed lines and bad
  * transitions are rejected without changing state. Deadline guards use that record's
- * venue timestamp.
+ * venue timestamp. The room post-accept frames are read from is derived from the records
+ * once the contract opens and reported on the result (see RoomBinding); no caller option
+ * selects it.
  */
 export function foldTranscript(records: readonly TranscriptRecord[]): TranscriptFoldResult {
   const steps: TranscriptStep[] = [];
   let state: ContractState | null = null;
+  let roomBinding: RoomBinding = "strict";
+  let equivocation = false;
+  let bound = false;
 
   records.forEach((record, index) => {
     const base = { index, room: record?.room ?? "", seq: record?.seq ?? -1 };
@@ -288,19 +368,27 @@ export function foldTranscript(records: readonly TranscriptRecord[]): Transcript
       return;
     }
 
+    // Offer/accept always belong to the board; post-accept frames belong to exactly one
+    // room, the one the records bound above. A frame anywhere else is rejected.
     const expectedRoom =
       frame.type === "offer" || frame.type === "accept" || state.contract === undefined
         ? OFFER_ROOM
-        : dealRoom(state.contract);
+        : roomBinding === "offer-room"
+          ? OFFER_ROOM
+          : dealRoom(state.contract);
     if (record.room !== expectedRoom) {
       const where = expectedRoom === OFFER_ROOM
         ? OFFER_ROOM
         : `the derived deal room ${expectedRoom}`;
+      const also = equivocation && record.room === OFFER_ROOM
+        ? " (this contract has party-signed post-accept records in both rooms; the derived" +
+          " deal room binds)"
+        : "";
       steps.push({
         ...base,
         type: frame.type,
         ok: false,
-        reason: `${frame.type} must be posted in ${where}`,
+        reason: `${frame.type} must be posted in ${where}${also}`,
       });
       return;
     }
@@ -308,7 +396,17 @@ export function foldTranscript(records: readonly TranscriptRecord[]): Transcript
     const result = applyFrame(state, frame, record.timestampMs);
     state = result.state;
     steps.push({ ...base, type: frame.type, ok: result.ok, reason: result.reason });
+
+    // The contract id first exists at the accept, and it is what the post-accept evidence
+    // is bound to. Derive the binding the moment it does, from the whole record set, so it
+    // is fixed before the first post-accept record is judged.
+    if (!bound && state.contract !== undefined) {
+      const binding = deriveRoomBinding(records, state.contract, [state.payerDid, state.payeeDid]);
+      roomBinding = binding.roomBinding;
+      equivocation = binding.equivocation;
+      bound = true;
+    }
   });
 
-  return { state, steps };
+  return { state, steps, roomBinding, equivocation };
 }
