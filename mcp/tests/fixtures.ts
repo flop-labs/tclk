@@ -17,6 +17,10 @@ export const PAYEE_SEED = "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf
 export const PAYER_DID = signerFromSeed(hexToBytes(PAYER_SEED)).did;
 export const PAYEE_DID = signerFromSeed(hexToBytes(PAYEE_SEED)).did;
 
+/** A third identity, party to no deal: forges frame.from claims in the security tests. */
+export const ATTACKER_SEED = "c5ecb3a7e8ce950cced3ebb5d358cfd6f6ce090c3f2127d7221669820a591aca";
+export const ATTACKER_DID = signerFromSeed(hexToBytes(ATTACKER_SEED)).did;
+
 /** A 32-byte secp256k1 scalar, valid for `TCLK_PAYMENT_KEY`. */
 export const PAYMENT_KEY = "1111111111111111111111111111111111111111111111111111111111111111";
 

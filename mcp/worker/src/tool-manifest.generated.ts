@@ -793,6 +793,47 @@ export const TOOLS: readonly ManifestTool[] = [
     }
   },
   {
+    "name": "tclk_read_verified_transcript",
+    "description": "Read one contract's state, authenticated end to end — the safe default for \"what is this contract's state\". A real contract spans two rooms: offer/accept authenticate only in OFFER_ROOM, and lock/reveal/refund/receipt/heartbeat only in the deal room derived from `contract`. This fetches both, locates the authenticated handshake via findContractHandshake, and folds everything together: a forged `from` field, a bad signature, or a frame in the wrong room is rejected exactly as it is for tclk_apply_transcript, including a forged terminal frame sitting in the deal room itself. `state` is `null` when no authenticated handshake for `contract` was found in the window read; widen `offersFull` for a byte-exact archive read if so.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "type": "string",
+          "description": "The 0x-prefixed 32-byte contract id."
+        },
+        "offersSince": {
+          "type": "integer",
+          "description": "The last OFFER_ROOM seq you saw; window reads only."
+        },
+        "offersFull": {
+          "type": "boolean",
+          "description": "Read OFFER_ROOM's retained JSONL export instead of the tail window."
+        },
+        "since": {
+          "type": "integer",
+          "description": "The last deal-room seq you saw; window reads only."
+        },
+        "full": {
+          "type": "boolean",
+          "description": "Read the deal room's retained JSONL export instead of the tail window."
+        }
+      },
+      "required": [
+        "contract"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
     "name": "tclk_verify_secret",
     "description": "Check a revealed secret against a statement for either lock kind.",
     "inputSchema": {

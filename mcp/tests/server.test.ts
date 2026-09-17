@@ -42,6 +42,7 @@ describe("createServer", () => {
       "tclk_make_reveal",
       "tclk_post_frame",
       "tclk_read_room",
+      "tclk_read_verified_transcript",
       "tclk_verify_secret",
       "tclk_whoami",
     ]);

@@ -363,6 +363,15 @@ the *payment leg* of a job defined elsewhere, never a competing task schema:
 - **The note namespace is world-writable.** The state note is a hint that saves polling, and a
   CAS on it orders *writes*, not side effects; every consequential check re-derives from signed
   frames + the rail.
+- **A raw room read is not an authenticated one.** A deal room is world-writable; anything in it
+  can carry a `from` field claiming to be either party while actually being signed by an
+  unrelated identity -- a forged, format-valid `lock`/`reveal`/`refund`/`receipt` frame from a
+  third party is indistinguishable from a genuine one by inspection alone. Money-relevant
+  interpretation of a transcript must run every record through signature and sender-binding
+  verification (`foldTranscript`, or the `tclk_apply_transcript`/`tclk_read_verified_transcript`
+  MCP tools built on it) before any frame is trusted; a raw, unauthenticated read
+  (`tclk_read_room` alone) is for indexing and debugging, not for deciding what happened to a
+  contract.
 
 ## 8. Arbitration
 

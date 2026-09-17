@@ -16,6 +16,7 @@ import {
   decodeFrame,
   dealRoom,
   encodeFrame,
+  findContractHandshake,
   foldTranscript,
   generateHashLock,
   generatePointLock,
@@ -23,6 +24,7 @@ import {
   makeHeartbeat,
   makeOffer,
   normalizeRailId,
+  OFFER_ROOM,
   schnorrAdaptor,
   stateNote,
   transcriptRecord,
@@ -469,6 +471,81 @@ export function createHandlers(options: HandlerOptions = {}) {
         malformed,
         count: records.length,
         lastSeq: view.last_seq,
+      };
+    },
+
+    /**
+     * Read one contract's state, authenticated end to end. A real contract's frames
+     * split across two rooms -- offer/accept only authenticate in OFFER_ROOM, and
+     * lock/reveal/refund/receipt/heartbeat only authenticate in the deal room derived
+     * from the contract id -- so this fetches both, locates the authenticated
+     * handshake for `contract` in OFFER_ROOM via findContractHandshake, and folds it
+     * together with the deal room's own records in one call. A forged `from` field, a
+     * bad signature, or a frame posted in the wrong room is rejected by
+     * `foldTranscript` exactly as it is for `tclk_apply_transcript`, and never
+     * advances `state` -- including a forged terminal frame (lock/reveal/refund/
+     * receipt) sitting in the deal room itself, which a single-room read could never
+     * see authenticated context for.
+     *
+     * `state` is `null` when no authenticated handshake for `contract` was found in
+     * OFFER_ROOM (wrong contract id, or the offer/accept have rotated out of the
+     * window read -- widen `offersFull` for a byte-exact archive read if so). That is
+     * a normal read outcome here, not a failure: this tool answers "what, if
+     * anything, has actually been authenticated for this contract so far", not an
+     * assertion that one already exists.
+     */
+    async tclk_read_verified_transcript(input: {
+      contract: string;
+      offersSince?: number;
+      offersFull?: boolean;
+      since?: number;
+      full?: boolean;
+    }) {
+      const deal = dealRoom(input.contract);
+      const offers = await this.tclk_read_room({
+        room: OFFER_ROOM,
+        since: input.offersSince,
+        full: input.offersFull,
+      });
+      const handshake = findContractHandshake(offers.records, input.contract);
+      const dealRead = await this.tclk_read_room({ room: deal, since: input.since, full: input.full });
+
+      const records =
+        handshake === null ? dealRead.records : [handshake.offer, handshake.accept, ...dealRead.records];
+      const folded = foldTranscript(records);
+      const open = folded.state;
+      const offersMalformed = offers.malformed ?? [];
+      const dealMalformed = dealRead.malformed ?? [];
+      return {
+        contract: input.contract,
+        offerRoom: OFFER_ROOM,
+        dealRoom: deal,
+        handshakeFound: handshake !== null,
+        count: offers.count + dealRead.count,
+        offersLastSeq: offers.lastSeq,
+        dealLastSeq: dealRead.lastSeq,
+        malformed: [...offersMalformed, ...dealMalformed],
+        state:
+          open === null
+            ? null
+            : {
+                status: open.status,
+                contract: open.contract ?? null,
+                offerId: open.offer.id,
+                parties: {
+                  payer: open.payerDid ?? null,
+                  payee: open.payeeDid ?? null,
+                  payerKey: open.payerKey ?? null,
+                  payeeKey: open.payeeKey ?? null,
+                },
+                statement: open.statement ?? null,
+                rail: open.rail ?? null,
+                railRef: open.railRef ?? null,
+                // Deliberately not echoed, same reasoning as tclk_apply_transcript.
+                secretRevealed: open.secret !== undefined,
+              },
+        steps: folded.steps,
+        rejectedCount: folded.steps.filter((step) => !step.ok).length,
       };
     },
 

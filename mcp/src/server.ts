@@ -364,6 +364,38 @@ export function createServer(options: HandlerOptions = {}): McpServer {
   );
 
   server.registerTool(
+    "tclk_read_verified_transcript",
+    {
+      description:
+        "Read one contract's state, authenticated end to end \u2014 the safe default for " +
+        "\"what is this contract's state\". A real contract spans two rooms: offer/accept " +
+        "authenticate only in OFFER_ROOM, and lock/reveal/refund/receipt/heartbeat only in " +
+        "the deal room derived from `contract`. This fetches both, locates the authenticated " +
+        "handshake via findContractHandshake, and folds everything together: a forged `from` " +
+        "field, a bad signature, or a frame in the wrong room is rejected exactly as it is " +
+        "for tclk_apply_transcript, including a forged terminal frame sitting in the deal " +
+        "room itself. `state` is `null` when no authenticated handshake for `contract` was " +
+        "found in the window read; widen `offersFull` for a byte-exact archive read if so.",
+      annotations: NETWORK_READS,
+      inputSchema: {
+        contract,
+        offersSince: z
+          .number()
+          .int()
+          .optional()
+          .describe("The last OFFER_ROOM seq you saw; window reads only."),
+        offersFull: z
+          .boolean()
+          .optional()
+          .describe("Read OFFER_ROOM's retained JSONL export instead of the tail window."),
+        since: z.number().int().optional().describe("The last deal-room seq you saw; window reads only."),
+        full: z.boolean().optional().describe("Read the deal room's retained JSONL export instead of the tail window."),
+      },
+    },
+    (args) => run(() => h.tclk_read_verified_transcript(args)),
+  );
+
+  server.registerTool(
     "tclk_whoami",
     {
       description:
