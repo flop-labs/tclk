@@ -56,6 +56,38 @@ export interface SettlementRail {
   refund(ref: string): Promise<void>;
 }
 
+/**
+ * What a rail holds at a ref, judged against the terms it was asked about.
+ *
+ * - `absent`: nothing is held at the ref.
+ * - `mismatch`: something is held, but not under exactly these terms. A rail never reports a
+ *   status for a lock it cannot match to the terms.
+ * - `locked` | `claimed` | `refunded`: a lock under exactly these terms, in that state.
+ * - `unknown`: the rail could not say (the read failed, or it cannot see terminal states).
+ */
+export type RailObservation =
+  | "absent"
+  | "mismatch"
+  | "locked"
+  | "claimed"
+  | "refunded"
+  | "unknown";
+
+/**
+ * Optional read side of a rail. `verifyLock` answers one question: is there a live lock
+ * under these terms. It goes false the moment the lock is claimed or refunded, so it cannot
+ * tell "paid" from "returned" from "never funded". `observe` can, and it is what a
+ * settlement view (`./settlement.ts`) needs to assert a terminal money state.
+ *
+ * It sits beside `SettlementRail` rather than inside it so that no existing rail breaks.
+ * The invariant every implementation keeps: `verifyLock(terms, ref)` is true exactly when
+ * `observe(terms, ref)` is `"locked"`.
+ */
+export interface RailObserver {
+  /** Fail-closed: anything that does not match `terms` exactly is `mismatch`, never a status. */
+  observe(terms: LockTerms, ref: string): Promise<RailObservation>;
+}
+
 type MemoryLockStatus = "locked" | "claimed" | "refunded";
 
 interface MemoryLock {
@@ -70,7 +102,7 @@ interface MemoryLock {
  * refundAfterMs, refund only at/after it, and both only from the "locked" state.
  * All violations throw (fail closed).
  */
-export class MemoryRail implements SettlementRail {
+export class MemoryRail implements SettlementRail, RailObserver {
   readonly id: CanonicalRailId;
   private readonly locks = new Map<string, MemoryLock>();
   private readonly clock: () => number;
@@ -117,6 +149,13 @@ export class MemoryRail implements SettlementRail {
       throw new Error("tclk: refund before refundAfterMs");
     }
     this.locks.set(ref, { ...held, status: "refunded" });
+  }
+
+  async observe(terms: LockTerms, ref: string): Promise<RailObservation> {
+    const held = this.locks.get(ref);
+    if (held === undefined) return "absent";
+    if (canonicalJson(held.terms) !== canonicalJson(terms)) return "mismatch";
+    return held.status;
   }
 
   /** Test/inspection helper: the rail's view of one lock. */
