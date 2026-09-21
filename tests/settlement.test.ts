@@ -106,6 +106,30 @@ describe("settlement view: a frame is not money", () => {
     expect(settlementToAcpPhase(view)).toBe("negotiation");
   });
 
+  it("keeps a complete room lifecycle at unverified while nobody has asked the rail", () => {
+    // lock -> reveal -> claimed receipt, all well-formed and party-signed, and no observer
+    // anywhere: what a read-only board watcher sees today. The room is terminal; the
+    // money state is not established in either direction.
+    const { state, preimage } = accepted();
+    const claimed = announceReveal(announceLock(state, "flop-htlc", "flop-rail-tx-7f3a"), preimage);
+    const receipted = must(
+      claimed,
+      { type: "receipt", from: PAYEE_DID, contract: claimed.contract!, outcome: "claimed" },
+      T0 + 2,
+    );
+
+    const view = settlementView(receipted);
+    expect(view).toMatchObject({
+      coordination: "claimed",
+      money: "unverified",
+      witnessKnown: true,
+      diverged: false,
+    });
+    expect(tclkStatusToA2A(receipted.status)).toBe("completed");
+    expect(settlementToA2A(view)).toBe("unknown");
+    expect(settlementToAcpPhase(view)).toBe("negotiation");
+  });
+
   it("is funded only when the rail holds a live lock under exactly these terms", async () => {
     const { state } = accepted();
     const { rail } = memoryRail();
@@ -268,6 +292,21 @@ describe("settlement view: what counts as evidence", () => {
     expect(settlementView(locked, { rail: "evm-htlc", ref: "escrow-42", observation: "claimed" }).money).toBe("unverified");
     expect(settlementView(locked, { rail: "flop-htlc", ref: "escrow-43", observation: "claimed" }).money).toBe("unverified");
     expect(settlementView(locked, { rail: "flop-htlc", ref: "escrow-42", observation: "claimed" }).money).toBe("claimed");
+  });
+
+  it("treats the ref as an opaque identifier and binds it byte for byte", () => {
+    // Live lock frames carry refs of more than one shape (a rail's own tx-style id, or the
+    // bare contract id). The view reads no meaning into either and compares exactly.
+    const { state } = accepted();
+    for (const ref of ["flop-rail-tx-7f3a", state.contract!]) {
+      const locked = announceLock(state, "flop-htlc", ref);
+      const money = (evidenceRef: string) =>
+        settlementView(locked, { rail: "flop-htlc", ref: evidenceRef, observation: "locked" }).money;
+
+      expect(money(ref)).toBe("funded");
+      expect(money(ref.toUpperCase())).toBe("unverified");
+      expect(money(`${ref} `)).toBe("unverified");
+    }
   });
 
   it("does not ask a rail that is not the contract's own", async () => {
