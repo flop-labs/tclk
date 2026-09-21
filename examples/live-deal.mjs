@@ -18,7 +18,7 @@
 //     PowerShell  $env:TECHNOCORE_URL = "http://localhost:8080"; node examples/live-deal.mjs
 //     cmd.exe     set TECHNOCORE_URL=http://localhost:8080 && node examples/live-deal.mjs
 //
-// Writes six messages and three notes. The venue's write budget is per-IP per-minute and
+// Writes four messages and three notes. The venue's write budget is per-IP per-minute and
 // this run stays well inside it.
 
 import { randomBytes } from "node:crypto";
