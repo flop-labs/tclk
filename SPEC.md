@@ -325,6 +325,49 @@ layer:
   hash escrow, an EVM point escrow verifying `t·G == Y`, a NEAR HTLC, a taproot adaptor spend.
   One revealed witness completes every leg, which is the point of PTLC.
 
+### 5.1 Settlement view
+
+The status of §4 is **coordination state**. A payer-signed `lock` is enough for `locked` and a
+payee-signed `reveal` is enough for `claimed`; the machine consults no rail, on purpose. A
+consumer that needs to know whether money moved MUST NOT read that status as the answer. It
+reads a *settlement view*: the folded contract combined with what the contract's own rail
+reports for the announced `lock.ref`.
+
+The view is local and derived. It is not a frame, it is never signed or posted, and it changes
+the fold of no transcript. Each party, and any third reader with access to the rail, derives it
+independently.
+
+| money state | meaning | carries rail evidence |
+|---|---|---|
+| `none` | no lock has been announced | no |
+| `unverified` | the room asserts a lock, a claim or a refund, and no rail has confirmed or denied it | no |
+| `unfunded` | the rail was asked and holds nothing under these terms at the announced ref | yes |
+| `funded` | the rail holds a live lock under exactly these terms | yes |
+| `claimed` | the rail paid the payee | yes |
+| `refunded` | the rail returned the funds to the payer | yes |
+
+- Evidence counts only when it names the contract's own rail (compared as §4 compares it: the
+  exact spelling, or the same registered id) and the contract's own `lock.ref`. Anything else
+  leaves the view at `unverified`.
+- The rail is the source of truth for value (§1). Where room and rail reach opposite terminal
+  states, the money state is the rail's and the view flags the divergence. So does a room that
+  announces a lock the rail does not hold. A room that is merely ahead of its rail (the witness
+  is public, the claim has not landed) or behind it is not divergence.
+- A secret in the room is *witness known*. It is never `claimed` on its own.
+- A rail that can only answer `verifyLock` can establish `funded` and nothing else, because
+  `false` there is also what a claimed, a refunded and a never-funded lock answer. To establish
+  a terminal money state a rail implements the optional reading `observe(terms, ref)`, one of
+  `absent | mismatch | locked | claimed | refunded | unknown`, fail-closed like `verifyLock`:
+  a lock that does not match the terms exactly is `mismatch`, never a status. `verifyLock` is
+  true exactly when `observe` is `locked`. The reading sits beside `SettlementRail`, so a rail
+  without it stays conforming.
+- `paper` and `memory` are marked as not value-backed: their money states describe a rehearsal.
+  A rail id the registry does not know is treated as value-bearing, so that it is held to the
+  evidence standard rather than excused from it.
+
+The reference implementation is `settlementView` and `observeSettlement`; `MemoryRail` and
+`PaperRail` both implement `observe`.
+
 ## 6. A2A and Virtuals ACP compatibility
 
 The protocol deliberately reuses the job vocabulary agents already speak, so a tclk contract is
@@ -341,6 +384,12 @@ the *payment leg* of a job defined elsewhere, never a competing task schema:
   evaluator accepting delivery is the payee's cue to reveal (or, with `Sig`-augmented policies
   on a rail that supports them, the evaluator is the co-signer). An ACP state transition is
   never treated as execution proof — the lock and reveal evidence is what a consumer trusts.
+- **Room status or money state**: both mappings above are over room status, where a signed
+  `reveal` is enough for `completed`. Where the mapped state is read as "was this job paid",
+  drive it from the settlement view (§5.1) instead: `working`, `completed` and `failed` (ACP:
+  `transaction`, `completed`, and `rejected` after a lock) then each require rail evidence. An
+  assertion the rail has not confirmed stays `submitted` while the room is open and becomes A2A
+  `unknown` once the room is terminal; ACP has no such phase and stays at `negotiation`.
 - **x402 / A2A-x402 extension**: an agent advertising the x402 rail in `rails` is advertising
   the same rail its Agent Card already lists; nothing new to declare.
 

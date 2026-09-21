@@ -7,6 +7,7 @@
 
 import type { JobRef } from "./frames.js";
 import type { TclkStatus } from "./machine.js";
+import type { SettlementView } from "./settlement.js";
 
 /** The A2A task states, as the A2A spec defines them. */
 export type A2ATaskState =
@@ -55,6 +56,46 @@ export function tclkStatusToAcpPhase(status: TclkStatus): AcpPhase {
     case "claimed": return "completed";
     case "refunded": return "rejected";
     case "cancelled": return "rejected";
+  }
+}
+
+/**
+ * The same two lifecycles, driven from a settlement view instead of from room status.
+ *
+ * `tclkStatusToA2A` and `tclkStatusToAcpPhase` report what the room says: a signed `reveal`
+ * is enough for `completed`. These two report what a rail confirmed. `working`,
+ * `completed` and `failed` (ACP: `transaction`, `completed`, and `rejected` after a lock)
+ * each require rail evidence, so a consumer that pays attention to a job's state cannot be
+ * moved by a frame alone. Use them wherever the answer is read as "was this job paid".
+ *
+ * A room assertion the rail has not confirmed never becomes progress: a non-terminal room
+ * stays `submitted` (ACP: `negotiation`), and a terminal claim nobody could check is
+ * `unknown` in A2A. ACP has no such phase, so it stays `negotiation` there too.
+ */
+export function settlementToA2A(view: SettlementView): A2ATaskState {
+  switch (view.money) {
+    case "funded": return "working";
+    case "claimed": return "completed";
+    case "refunded": return "failed";
+    case "none": return view.coordination === "cancelled" ? "canceled" : "submitted";
+    case "unverified":
+    case "unfunded":
+      return view.coordination === "locked" ? "submitted" : "unknown";
+  }
+}
+
+/** See `settlementToA2A`. */
+export function settlementToAcpPhase(view: SettlementView): AcpPhase {
+  switch (view.money) {
+    case "funded": return "transaction";
+    case "claimed": return "completed";
+    case "refunded": return "rejected";
+    case "none":
+      if (view.coordination === "cancelled") return "rejected";
+      return view.coordination === "proposed" ? "request" : "negotiation";
+    case "unverified":
+    case "unfunded":
+      return "negotiation";
   }
 }
 
