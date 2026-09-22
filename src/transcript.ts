@@ -122,7 +122,8 @@ try {
 
 /**
  * Parse a technocore record line or view payload to JSON while preserving exact
- * decimal digit strings for numeric nonces above Number.MAX_SAFE_INTEGER (up to 19 digits).
+ * numeric nonce source text, including values above Number.MAX_SAFE_INTEGER.
+ * Canonical decimal nonce validation remains the verifier's responsibility.
  */
 export function parseRecordJson(text: string): unknown {
   if (supportsReviverContext) {
@@ -133,7 +134,16 @@ export function parseRecordJson(text: string): unknown {
       return value;
     }) as any);
   }
-  const safe = text.replace(/(^|[{,]\s*)"nonce"\s*:\s*([0-9]{1,19})\s*([,}])/g, '$1"nonce":"$2"$3');
+  // Validate first: rewriting must never repair invalid JSON (e.g. leading zeroes).
+  JSON.parse(text);
+  // Consume whole strings so JSON-looking signed text cannot be rewritten. Decode
+  // member names, and preserve the complete number token just like context.source.
+  const safe = text.replace(
+    /("(?:\\.|[^"\\])*")([ \t\r\n]*:[ \t\r\n]*)(-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)|"(?:\\.|[^"\\])*"/g,
+    (token, key: string | undefined, colon: string, raw: string) =>
+      key !== undefined && JSON.parse(key) === "nonce"
+        ? `${key}${colon}${JSON.stringify(raw)}` : token,
+  );
   return JSON.parse(safe);
 }
 

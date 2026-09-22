@@ -8,6 +8,9 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Transcript JSON readers on runtimes without reviver source context now preserve
+  escaped nonce keys and complete numeric tokens without accepting invalid JSON or
+  changing signed text. Noncanonical nonce tokens remain rejected by verification.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
