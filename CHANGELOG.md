@@ -6,6 +6,26 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `SPEC.md` §9 now names FLOP's yellow paper §10 as the document the future FLOP-network rail
+  binding satisfies, and says which of its requirements land on the rail adapter rather than on
+  tclk/1. The scope was already stated; the external document it points at was not, so its
+  absence read as an oversight.
+- `SPEC.md` §5 no longer describes the `flop-htlc` escrow as carrying a `Point(Y)` policy leaf.
+  The yellow paper's §10 specifies a hash-and-timeout lock and nothing else, and its §6.1
+  predicate list is sig, hash, timelock and threshold, so the hash encoding is byte-identical as
+  claimed and the point encoding matches nothing published. It is now stated as the encoding this
+  library would use if such a leaf lands rather than as a compatibility claim, and the rail
+  registry row and §9 say the same. Naming the source document in §9 is what made the claim
+  checkable; @Qwealzy checked it.
+- `SPEC.md` §9 now states **R10.2**'s margin as parametric rather than as a relationship a rail
+  could check from its own `T_lock` alone: the requirement needs the counter-chain's duration and
+  three live FLOP chain parameters, so lock-time chain state is what evaluates it. The **R10.5**
+  note is sharpened from "`amount` is fixed on the offer" to the stronger fact — `amount` occurs
+  once in the whole frame schema and no post-offer frame carries one, so a settled actual cannot
+  be recorded even after the fact.
+
 ### Fixed
 
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
@@ -28,6 +48,10 @@ All notable changes to this project are documented here. Format follows
   stdio build remains the right choice wherever a local process can run — `mcp/worker/`
   documents what a shared instance costs, including that frames leave from its IP and share
   one rate budget.
+- `SPEC.md` §9 adds a consumer rule for the R10.2/R10.5 gap it already named: treat a tclk/1
+  offer `amount` as a coordination ceiling only, never as measured `G_n` or as proof a FLOP
+  inference session settled, since completion is `pallet_compute_channel`'s fact alone. Prompted
+  by @boomelant's read of the yellow paper's §12.1 settlement path on #132.
 
 ### Changed
 
