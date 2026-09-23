@@ -14,7 +14,7 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { FRAME_FIELDS, TCLK1_RAIL_PATTERN } from "./frame-fields.generated.js";
 import { randomU8a, stringToU8a, u8aToHex } from "./hex.js";
-import { isValidPointStatement } from "./points.js";
+import { isValidPointStatement, SECP256K1_N } from "./points.js";
 import {
   normalizeRailId,
   normalizeRailIds,
@@ -332,8 +332,13 @@ export function validateFrame(value: unknown): TclkFrame {
         const presig = frame.presig as Record<string, unknown>;
         if (!presig || typeof presig !== "object" || Array.isArray(presig)) fail("presig must be an object");
         requireKeys({ ...presig, type: "presig" }, new Set(["type", "nonce", "s"]), ["nonce", "s"]);
-        requireString(presig.nonce, "presig.nonce", HEX33);
-        requireString(presig.s, "presig.s", SCALAR_HEX);
+        const nonce = requireString(presig.nonce, "presig.nonce", HEX33);
+        if (!isValidPointStatement(nonce)) fail("presig.nonce is not a valid secp256k1 point");
+        const scalar = requireString(presig.s, "presig.s", SCALAR_HEX);
+        const scalarValue = BigInt(scalar);
+        if (scalarValue === 0n || scalarValue >= SECP256K1_N) {
+          fail("presig.s is not a scalar in [1, n)");
+        }
       }
       break;
     }

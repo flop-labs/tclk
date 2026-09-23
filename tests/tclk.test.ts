@@ -130,6 +130,75 @@ describe("tclk frames — wire codec", () => {
     })).toThrow(/presig\.s/);
   });
 
+  it("rejects pre-signature points and scalars the adaptor cannot use", () => {
+    const base = {
+      type: "lock" as const,
+      from: PAYER_DID,
+      contract: "0x" + "11".repeat(32),
+      rail: "flop-htlc",
+      ref: "escrow-42",
+    };
+    const validNonce = schnorrAdaptor.getPublicKey("0x" + "11".repeat(32))!;
+    const offCurveNonce =
+      "0x02fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f";
+    const curveOrder =
+      "0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141";
+
+    expect(() => encodeFrame({
+      ...base,
+      presig: { nonce: offCurveNonce, s: "0x01" },
+    })).toThrow(/presig\.nonce is not a valid secp256k1 point/);
+
+    expect(() => encodeFrame({
+      ...base,
+      presig: { nonce: validNonce, s: "0x00" },
+    })).toThrow(/presig\.s is not a scalar/);
+
+    expect(() => encodeFrame({
+      ...base,
+      presig: { nonce: validNonce, s: curveOrder },
+    })).toThrow(/presig\.s is not a scalar/);
+  });
+
+  it("keeps accepted pre-signatures structurally usable by the public adaptor", () => {
+    const base = {
+      type: "lock" as const,
+      from: PAYER_DID,
+      contract: "0x" + "11".repeat(32),
+      rail: "flop-htlc",
+      ref: "escrow-42",
+    };
+    const validNonce = schnorrAdaptor.getPublicKey("0x" + "11".repeat(32))!;
+    const offCurveNonce =
+      "0x02fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f";
+    const curveOrder =
+      "0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141";
+    const maxScalar =
+      "0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140";
+    const witness = "0x" + "00".repeat(31) + "02";
+
+    const candidates = [
+      { nonce: validNonce, s: "0x01" },
+      { nonce: validNonce, s: maxScalar },
+      { nonce: offCurveNonce, s: "0x01" },
+      { nonce: validNonce, s: "0x00" },
+      { nonce: validNonce, s: curveOrder },
+      { nonce: validNonce, s: "0xabc" },
+    ];
+
+    for (const presig of candidates) {
+      let accepted = true;
+      try {
+        encodeFrame({ ...base, presig });
+      } catch {
+        accepted = false;
+      }
+      if (accepted) {
+        expect(schnorrAdaptor.adapt(presig, witness), JSON.stringify(presig)).not.toBeNull();
+      }
+    }
+  });
+
   it("tryDecodeFrame skips foreign and hostile lines instead of throwing", () => {
     expect(tryDecodeFrame("hello from ~alice")).toBeNull();
     expect(tryDecodeFrame('tclk1 {"type":"offer"}')).toBeNull();

@@ -124,7 +124,10 @@ Common field shapes:
 
 The allowed and required fields below are generated from
 [`schema/tclk1-frames.schema.json`](schema/tclk1-frames.schema.json), the same artifact the
-decoder uses. `type` is shown explicitly because it is part of every signed frame.
+decoder uses for field sets and portable lexical shapes. Semantic cryptographic predicates that
+JSON Schema cannot express without duplicating the implementation — such as secp256k1 on-curve
+membership and scalar range — are marked with `x-tclk-runtimeConstraint` and enforced by the
+runtime decoder. `type` is shown explicitly because it is part of every signed frame.
 
 <!-- BEGIN GENERATED FRAME FIELDS -->
 | frame | required fields | optional fields |
