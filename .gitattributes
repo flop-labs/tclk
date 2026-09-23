@@ -1,0 +1,6 @@
+# EOL policy: text files are stored and checked out as LF.
+# This machine clones with core.autocrlf=true, which rewrote SPEC.md to mixed line endings
+# and kept SPEC.md / src/frame-fields.generated.ts permanently "modified" with an empty
+# content diff plus LF/CRLF warnings on every git add. LF-everywhere matches what is
+# already committed in the index, so no renormalization diff results.
+* text=auto eol=lf
