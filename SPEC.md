@@ -478,7 +478,18 @@ among several rather than the only ones available.
   carries one, so a settled actual cannot be expressed or even recorded after the fact. Both
   are noted here because the absence of any reference to that document reads as an oversight
   rather than as scope, and because a variable-settlement shape is a tclk/2 question (#57) rather
-  than a patch. No multi-hop route construction over rooms (single contract per room today; the
+  than a patch.
+- Consumer rule for the gap above, until a `flop-htlc` rail binding closes it (@boomelant, #132):
+  treat a tclk/1 offer `amount` as a coordination ceiling only, never as measured `G_n` or as
+  proof that a FLOP inference session settled. R4.4 gives `G_n` its own fixed-width
+  representation and accounting semantics; silently reading an arbitrary tclk decimal as `G_n`
+  opens a second metering surface. Room `claimed`/`receipt` is what §1 already says it is —
+  evidence of what was agreed and who said so, not of completion. A session's actual completion
+  is `pallet_compute_channel`'s fact alone (§12.1's `settle`/`force_settle` state and its
+  evidence), and a future rail observer implementing R10.5 needs to return both the locked
+  maximum and that rail-authoritative actual, rejecting actual > max — tclk/1 does not need to
+  carry the attested token count itself for that check to exist one layer up.
+- No multi-hop route construction over rooms (single contract per room today; the
   AMHL witness algebra plugs in above these primitives when routing lands), no k-of-n secret
   sharing (§8.4 says why, and §8.1–8.3 are what to use meanwhile), no reputation or spend
   accounting (receipts

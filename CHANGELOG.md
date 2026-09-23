@@ -48,6 +48,10 @@ All notable changes to this project are documented here. Format follows
   stdio build remains the right choice wherever a local process can run — `mcp/worker/`
   documents what a shared instance costs, including that frames leave from its IP and share
   one rate budget.
+- `SPEC.md` §9 adds a consumer rule for the R10.2/R10.5 gap it already named: treat a tclk/1
+  offer `amount` as a coordination ceiling only, never as measured `G_n` or as proof a FLOP
+  inference session settled, since completion is `pallet_compute_channel`'s fact alone. Prompted
+  by @boomelant's read of the yellow paper's §12.1 settlement path on #132.
 
 ### Changed
 
