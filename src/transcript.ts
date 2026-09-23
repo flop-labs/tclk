@@ -9,7 +9,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { base58, base64urlnopad } from "@scure/base";
 
 import { decodeFrame, tryDecodeFrame } from "./frames.js";
-import { applyFrame, openContract, type ContractState } from "./machine.js";
+import { applyFrame, openContract, TCLK_TERMINAL_STATUSES, type ContractState } from "./machine.js";
 import { dealRoom, OFFER_ROOM } from "./technocore.js";
 
 const ROOM_NAME = /^[a-z0-9][a-z0-9_-]{0,47}$/;
@@ -49,9 +49,45 @@ export interface TranscriptStep {
   reason?: string;
 }
 
+/**
+ * Trust boundary for `state`, alongside the state itself. A caller reads this, not
+ * `state.status`, to learn how far the folded transcript alone can be trusted.
+ *
+ * - `"coordination-only"`: the transcript state is useful for protocol coordination,
+ *   watching a room or deciding the next frame, and is NOT sufficient on its own for
+ *   settlement, reputation, spend or reward decisions.
+ * - `"rail-required"`: the outcome is terminal and a consumer must confirm it against
+ *   authoritative rail evidence before treating it as settled.
+ */
+export type TerminalEvidence = "coordination-only" | "rail-required";
+
 export interface TranscriptFoldResult {
   state: ContractState | null;
   steps: TranscriptStep[];
+  /**
+   * The trust boundary for `state`, computed by construction from the folded status.
+   *
+   * tclk's fold has no rail-authoritative input. A terminal verdict is decided from the
+   * signed transcript plus the record's unsigned venue timestamp, never from a settlement
+   * confirmation on the rail, so the fold cannot and does not certify settlement. This
+   * field states how far the transcript alone carries.
+   *
+   * - `"coordination-only"` when `state` is null or a non-terminal status (`proposed`,
+   *   `accepted`, `locked`). A consumer may use it to coordinate. A consumer may NOT read
+   *   it as settlement, reputation, spend or reward truth. Note a non-terminal status such
+   *   as `accepted` or `locked` was still reached by gating on unsigned venue time, so a
+   *   clean fold, strict-mode or not, is not proof those deadlines held on trusted time.
+   * - `"rail-required"` when `state` is a terminal status (`claimed`, `refunded`,
+   *   `cancelled`). A consumer must confirm the outcome against the authoritative rail
+   *   before treating it as settled. Terminal state alone never upgrades this value,
+   *   because the fold has no rail-authoritative input to upgrade it with. If tclk later
+   *   gains a rail-authoritative input to the fold, that is where an upgrade would be
+   *   proven, never from `state.status`.
+   *
+   * Load-bearing: a caller must NOT infer settlement trust from `state.status` or from a
+   * clean strict-mode fold. Read this field for the boundary.
+   */
+  terminalEvidence: TerminalEvidence;
 }
 
 export interface ContractHandshake {
@@ -233,7 +269,45 @@ export function findContractHandshake(
  * transitions are rejected without changing state. Deadline guards use that record's
  * venue timestamp.
  */
-export function foldTranscript(records: readonly TranscriptRecord[]): TranscriptFoldResult {
+export interface FoldOptions {
+  /**
+   * Refuse to certify a terminal verdict that turns on unsigned venue time (#96).
+   *
+   * A reveal claims and a refund refunds only by comparing `nowMs` to the offer's
+   * `refundAfterMs`, and `nowMs` here is the record's `timestampMs`. The signature
+   * covers `room|nonce|line` only, so `timestampMs` is venue metadata a file supplier
+   * can rewrite without breaking any signature. Editing it flips claimed and refunded
+   * with every signature still valid. Under this flag the fold declines to advance into
+   * `claimed` or `refunded`, marking the step refused and leaving the state at `locked`,
+   * so a strict reader learns the settled state is not provable from signed bytes and has
+   * to confirm it on the rail. Off by default: the plain fold keeps trusting venue time,
+   * which is what a live reader watching the room in real time already does.
+   *
+   * The scope is exactly the reveal and refund verdicts. `accept` and `lock` also gate on
+   * this same unsigned timestamp (`offer.expiresMs` and `offer.refundAfterMs`), so this flag
+   * does not make every deadline-dependent transition strict. A caller must not read a clean
+   * accept or lock step as proof those deadlines held on trusted time.
+   */
+  strictDeadlines?: boolean;
+}
+
+/**
+ * Classify the folded `state` into its trust boundary. Fail-closed: the fold has no
+ * rail-authoritative input, so a terminal status rests on the transcript plus unsigned
+ * venue time alone and is always "rail-required"; null or a non-terminal status is
+ * "coordination-only". By construction a terminal state cannot classify as settlement
+ * without a rail-authoritative input that today does not exist.
+ */
+function classifyTerminalEvidence(state: ContractState | null): TerminalEvidence {
+  if (state !== null && TCLK_TERMINAL_STATUSES.has(state.status)) return "rail-required";
+  return "coordination-only";
+}
+
+export function foldTranscript(
+  records: readonly TranscriptRecord[],
+  options: FoldOptions = {},
+): TranscriptFoldResult {
+  const strictDeadlines = options.strictDeadlines ?? false;
   const steps: TranscriptStep[] = [];
   let state: ContractState | null = null;
 
@@ -306,9 +380,29 @@ export function foldTranscript(records: readonly TranscriptRecord[]): Transcript
     }
 
     const result = applyFrame(state, frame, record.timestampMs);
+
+    if (strictDeadlines && result.ok && (frame.type === "reveal" || frame.type === "refund")) {
+      // The reveal and refund guards both turn on nowMs against refundAfterMs, and nowMs is
+      // the unsigned record.timestampMs. So a verdict of claimed or refunded rests on time a
+      // file supplier can rewrite, which is #96. Decline to advance, mark the step refused and
+      // hold the state at locked, rather than certify a terminal state the signatures do not
+      // cover. The refund window is the only deadline that decides a terminal state, so accept
+      // and lock (gated on expiresMs and refundAfterMs to reach locked at all) are left alone.
+      steps.push({
+        ...base,
+        type: frame.type,
+        ok: false,
+        reason: "terminal verdict rests on unsigned venue timestamp (#96)",
+      });
+      return;
+    }
+
     state = result.state;
     steps.push({ ...base, type: frame.type, ok: result.ok, reason: result.reason });
   });
 
-  return { state, steps };
+  // Fail-closed classification. See classifyTerminalEvidence: with no rail-authoritative
+  // input, a terminal status is always "rail-required" and everything else is
+  // "coordination-only", so terminal state alone can never read as settlement-grade.
+  return { state, steps, terminalEvidence: classifyTerminalEvidence(state) };
 }
