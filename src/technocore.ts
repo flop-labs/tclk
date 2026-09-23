@@ -89,4 +89,3 @@ export function parseStateNoteValue(value: string): { status: TclkStatus; railRe
   if (railRef === undefined) return { status: status as TclkStatus };
   return RAIL_REF.test(railRef) ? { status: status as TclkStatus, railRef } : null;
 }
-
