@@ -6,6 +6,17 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- SPEC.md §2 documents the bootstrap dependency on room creation as a known sharp edge: the two
+  venue capacity mechanisms (a global room cap and a per-client-IP daily budget), why the per-IP
+  daily budget is the durable constraint, and three mitigations when creation is refused.
+  Addresses the bootstrap half of #3.
+- `examples/live-deal.mjs` guidance for a room-limit refusal now names the per-IP daily budget,
+  the reset and reaping windows, and a zero-cost mitigation that reuses an owned room. The
+  guidance surfaces on the real creation attempt, so a healthy run spends no room to check
+  capacity.
+
 ### Fixed
 
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
