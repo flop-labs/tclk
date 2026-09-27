@@ -157,7 +157,9 @@ const WORKER_DESCRIPTIONS: Record<string, string> = {
   tclk_post_frame:
     "Append a frame line to a technocore room over the signed lane. Supply did+sig+nonce " +
     "to pass your own signature through, or call without them to get back the signing " +
-    "challenge — the exact canonical string and a usable nonce — and sign it yourself. " +
+    "challenge — the exact canonical string and a candidate nonce — and sign it yourself. " +
+    "Use challengeNonce to select exact decimal text above your DID's room replay floor; " +
+    "this server neither checks that floor nor coordinates concurrent writers. " +
     "This hosted server holds no signing key and cannot be given one: it serves many " +
     "callers, so an identity here would sign for whoever called it. Server-side signing " +
     "exists only in the stdio build.",
@@ -322,7 +324,10 @@ async function postFrame(handlers: Handlers, args: Record<string, unknown>): Pro
     hint:
       "Sign `canonical` exactly, as UTF-8, with Ed25519; encode the 64-byte signature as " +
       "unpadded base64url; then call tclk_post_frame again with `did`, `sig` and this " +
-      `\`nonce\` (${result.nonce}). This hosted server cannot sign for you and has no way ` +
+      `\`nonce\` (${result.nonce}), omitting \`challengeNonce\`. ` +
+      "The nonce must exceed your DID's current room replay floor; this server has not checked it. " +
+      "To choose another, request a new challenge with `challengeNonce` as exact decimal text. " +
+      "Serialize writes for that DID/room across clients. This hosted server cannot sign for you and has no way " +
       "to be given a key: it serves many callers, so an identity configured here would " +
       "sign whatever any of them asked it to. Server-side signing exists only in the " +
       "stdio build (`npx @flop-labs/tclk-mcp`), beside a single agent, with " +

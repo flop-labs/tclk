@@ -709,7 +709,7 @@ export const TOOLS: readonly ManifestTool[] = [
   },
   {
     "name": "tclk_post_frame",
-    "description": "Append a frame line to a technocore room over the signed lane. Supply did+sig+nonce to pass your own signature through, or let this server sign with TECHNOCORE_SIGNING_KEY. With neither, the reply is the signing challenge: the exact canonical string and a usable nonce.",
+    "description": "Append a frame line to a technocore room over the signed lane. Supply did+sig+nonce to pass your own signature through, or let this server sign with TECHNOCORE_SIGNING_KEY. With neither, the reply is the signing challenge: the exact canonical string and a candidate nonce. In the no-key challenge tier, challengeNonce lets the external signer select exact decimal text above its current room replay floor; the server does not check that floor.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -742,6 +742,11 @@ export const TOOLS: readonly ManifestTool[] = [
             }
           ],
           "description": "Signed-lane nonce; safe integer or 1-19 decimal digit string."
+        },
+        "challengeNonce": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]{0,18})(?![\\s\\S])",
+          "description": "No-key challenge only: caller-selected canonical decimal nonce (1-19 digits). Cannot accompany did, sig or nonce, or a configured signing key. Choose above your DID's room replay floor and coordinate concurrent writers."
         }
       },
       "required": [

@@ -37,7 +37,7 @@ import {
   type TranscriptRecord,
 } from "@flop-labs/tclk";
 
-import { canonicalMessage, loadSigner, nextNonce, sweep, type Signer } from "./signing.js";
+import { canonicalMessage, CHALLENGE_NONCE, loadSigner, nextNonce, sweep, type Signer } from "./signing.js";
 import {
   createClient,
   DEFAULT_TECHNOCORE_URL,
@@ -114,6 +114,8 @@ export interface PostFrameInput {
   did?: string;
   sig?: string;
   nonce?: number | string;
+  /** Caller-selected nonce for the no-key challenge tier only; never signs or posts. */
+  challengeNonce?: string;
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
@@ -362,7 +364,7 @@ export function createHandlers(options: HandlerOptions = {}) {
      * Post a frame to a room. Three tiers, decided in one place (mirroring
      * technocore-mcp's `_resolve_signature`): externally supplied did+sig+nonce pass
      * through; otherwise a configured signing key signs here; otherwise the reply IS the
-     * signing challenge — the exact canonical string and a usable nonce — because a tool
+     * signing challenge — the exact canonical string and a candidate nonce — because a tool
      * call that cannot sign is a request for a signature, not an empty failure.
      */
     async tclk_post_frame(input: PostFrameInput) {
@@ -373,6 +375,14 @@ export function createHandlers(options: HandlerOptions = {}) {
       if (text !== input.line) fail("frame line does not survive the single-line sweep");
 
       const supplied = [input.did, input.sig, input.nonce].filter((v) => v !== undefined).length;
+      if (input.challengeNonce !== undefined) {
+        if (typeof input.challengeNonce !== "string" || !CHALLENGE_NONCE.test(input.challengeNonce)) {
+          fail("`challengeNonce` must be canonical decimal text with 1-19 digits");
+        }
+        if (supplied > 0 || signer !== null) {
+          fail("`challengeNonce` requires no signing identity and no `did`, `sig` or `nonce`");
+        }
+      }
       if (supplied > 0 && supplied < 3) {
         fail("pass all three of `did`, `sig` and `nonce`, or none of them");
       }
@@ -395,7 +405,7 @@ export function createHandlers(options: HandlerOptions = {}) {
         return { posted: true as const, tier: "caller-signed", room: input.room, did: input.did!, nonce: input.nonce!, response };
       }
 
-      const nonce = nextNonce();
+      const nonce = input.challengeNonce ?? nextNonce();
       if (signer !== null) {
         const response = await client.postSigned(input.room, {
           did: signer.did,
@@ -416,7 +426,10 @@ export function createHandlers(options: HandlerOptions = {}) {
         hint:
           "Sign `canonical` exactly, as UTF-8, with Ed25519; encode the 64-byte signature " +
           "as unpadded base64url; then call tclk_post_frame again with `did`, `sig` and " +
-          `this \`nonce\` (${nonce}). Or set TECHNOCORE_SIGNING_KEY on this server.`,
+          `this \`nonce\` (${nonce}), omitting \`challengeNonce\`. ` +
+          "The nonce must exceed your DID's current room replay floor; this server has not checked it. " +
+          "To choose another, request a new challenge with `challengeNonce` as exact decimal text. " +
+          "Serialize writes for that DID/room across clients. Or set TECHNOCORE_SIGNING_KEY on this server.",
       };
     },
 
