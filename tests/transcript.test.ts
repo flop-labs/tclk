@@ -215,6 +215,23 @@ describe("trusted transcript records", () => {
     });
     expect(() => parseTranscriptExport(BOARD, withoutTimezone)).toThrow(/timezone-qualified/);
     expect(() => parseTranscriptExport(BOARD, localeTimestamp)).toThrow(/timezone-qualified/);
+
+
+    for (const ts of [
+      "2026-02-29T00:00:00Z",
+      "2026-02-31T00:00:00Z",
+      "2026-04-31T00:00:00+01:00",
+    ]) {
+      const impossibleDate = JSON.stringify({ ...JSON.parse(raw), ts });
+      expect(() => parseTranscriptExport(BOARD, impossibleDate)).toThrow(/invalid calendar date/);
+    }
+
+    const leapDay = JSON.stringify({
+      ...JSON.parse(raw),
+      ts: "2024-02-29T03:04:05.123+02:30",
+    });
+    expect(parseTranscriptExport(BOARD, leapDay)[0]?.timestampMs)
+      .toBe(Date.parse("2024-02-29T03:04:05.123+02:30"));
   });
 
   it("never synthesizes offer-before-accept order while selecting a board handshake", () => {

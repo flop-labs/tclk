@@ -18,6 +18,17 @@ const SIGNATURE = /^[A-Za-z0-9_-]{85}[AQgw]$/;
 const TIMESTAMP = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
 const DID_PREFIX = "did:key:z";
 
+function hasValidCalendarDate(timestamp: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T/.exec(timestamp);
+  if (match === null) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const monthDays = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day <= monthDays[month - 1]!;
+}
+
 /**
  * One normalized technocore record. `line` is the exact stored text; `sender`, `nonce`
  * and `signature` authenticate it for `room`. `timestampMs` and `seq` are venue metadata,
@@ -127,6 +138,9 @@ export function transcriptRecord(room: string, value: unknown): TranscriptRecord
   if (typeof message.ts !== "string") throw new Error("tclk: transcript message has no timestamp");
   if (!TIMESTAMP.test(message.ts)) {
     throw new Error("tclk: transcript message timestamp must be timezone-qualified RFC 3339");
+  }
+  if (!hasValidCalendarDate(message.ts)) {
+    throw new Error("tclk: transcript message timestamp has an invalid calendar date");
   }
   const timestampMs = Date.parse(message.ts);
   if (!Number.isSafeInteger(timestampMs) || timestampMs < 0) {

@@ -8,6 +8,10 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Transcript parsing now rejects calendar-impossible RFC 3339 timestamps instead of
+  letting JavaScript normalize values such as 2026-02-31 into March before deadline
+  guards see them; valid leap days, offsets and fractional seconds remain accepted (#188).
+
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
