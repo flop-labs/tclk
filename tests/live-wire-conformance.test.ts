@@ -17,6 +17,7 @@ import {
   matchingRails,
   MAX_FRAME_CHARS,
   offerId,
+  validateFrame,
   openContract,
   parseCapabilityToken,
   railSetsMatch,
@@ -102,6 +103,19 @@ describe("live-wire conformance gaps", () => {
     expect(() => encodeFrame({ ...aliased, id: offerId(aliased) })).toThrow(
       /non-canonical rail id.*use paper/,
     );
+  });
+
+  it("refuses to emit an offer whose canonical rails are not in lexical order", () => {
+    // SPEC section 5: builders emit rails in lexical order before computing the id, so two
+    // conforming implementations agree on the offer id. validateEmissionRails deduplicated
+    // but did not sort, so a hand-built offer with canonical, deduplicated, unsorted rails
+    // emitted a line whose id commits to the wire order, while a builder that sorts derives a
+    // different id for the same set. Decode preserves historical order, so this is emission only.
+    const { id: _id, ...fields } = offer(["flop-htlc", "x402"]);
+    const unsorted = { ...fields, rails: ["x402", "flop-htlc"] };
+    const frame = { ...unsorted, id: offerId(unsorted) };
+    expect(() => validateFrame(frame)).not.toThrow();
+    expect(() => encodeFrame(frame)).toThrow(/lexical order/);
   });
 
   it("rejects an unknown rail id loudly", () => {
