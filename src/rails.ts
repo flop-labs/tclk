@@ -42,7 +42,8 @@ export function normalizeRailIds(values: readonly string[]): CanonicalRailId[] {
   if (!Array.isArray(values) || values.length === 0) {
     throw new Error("tclk: rails must be a non-empty array");
   }
-  return [...new Set(values.map(normalizeRailId))].sort();
+  // Array.map skips holes; Array.from visits them as undefined so validation rejects them.
+  return [...new Set(Array.from(values, normalizeRailId))].sort();
 }
 
 /** True when two rail sets have any canonical rail in common; unknown ids throw. */
