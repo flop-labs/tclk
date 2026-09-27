@@ -8,6 +8,11 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Transcript verification now enforces Technocore's canonical 1–19 digit signed-nonce
+  width instead of accepting arbitrarily long decimal strings that the venue could never
+  have stored, while preserving exact valid 19-digit nonces above JavaScript's safe range
+  (#187).
+
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema

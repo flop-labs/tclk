@@ -13,7 +13,7 @@ import { applyFrame, openContract, type ContractState } from "./machine.js";
 import { dealRoom, OFFER_ROOM } from "./technocore.js";
 
 const ROOM_NAME = /^[a-z0-9][a-z0-9_-]{0,47}$/;
-const NONCE = /^(?:0|[1-9][0-9]*)$/;
+const NONCE = /^(?:0|[1-9][0-9]{0,18})$/;
 const SIGNATURE = /^[A-Za-z0-9_-]{85}[AQgw]$/;
 const TIMESTAMP = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
 const DID_PREFIX = "did:key:z";
