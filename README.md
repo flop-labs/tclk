@@ -42,7 +42,10 @@ and backs it with nothing at all. It exists so the whole choreography can be reh
 infrastructure — `examples/live-deal.mjs` runs a complete deal end to end — before a rail that
 holds value exists. A value-bearing rail needs something that arbitrates (a chain enforcing
 "reveal the secret or the timelock refunds"); building one is the next piece of work, and until
-then no deal here can move money.
+then no deal here can move money. A first step toward one is in the tree: `FlopHtlcRail` binds the
+`flop-htlc` rail to the FLOP network HTLC (yellow paper §10) through a pluggable chain client,
+with a deterministic mock for tests and an RPC stub that is not yet wired to a node — see
+`examples/flop-htlc-rail-design.md`. It has not touched a chain and is not audited.
 
 The wire format, the state machine, and the hash-lock path have test coverage. The point-lock /
 adaptor-signature path is **unaudited reference crypto**: full-Schnorr with random nonces, *not*

@@ -15,6 +15,22 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- A `flop-htlc` rail binding (`FlopHtlcRail`, `src/flop-htlc-rail.ts`) of the `SettlementRail`
+  interface to the FLOP network HTLC named in `SPEC.md` §5 and specified in the yellow paper
+  v0.5.0 §10 — hash locks only. It is written against a `FlopChainClient` seam
+  (`src/flop-chain.ts`) the way `PaperRail` takes a `NoteStore`: `MockFlopChain` is a
+  deterministic, block-stepped in-memory chain that enforces the §10 state machine (at most one
+  of redeem/refund, both gated on the finalized head), and `FlopRpcChainClient` names the
+  method surface a live client needs and throws until a public node exists. The rail projects
+  `refundAfterMs` onto a block-height `T_lock` at one block per second, admits a claim strictly
+  below it and a refund at/after it, both on the finalized head and never the tip (R2.2, R10.3;
+  a finality stall freezes both deadlines), and enforces the R10.2 timelock-symmetry margin from
+  `claimByMs` — the check issue #132 noted had no home — refusing to lock, and refusing to vouch
+  in `verifyLock`, when the refund window is short.
+  `FLOP_HTLC_PARAMS_V050` carries the Appendix A values under an explicit name; no default is
+  supplied. Fail-closed on every operand (deadlines, heads, params, hash, amount, asset,
+  parties). Testnet only, not audited, has not touched a chain. Design notes with citations in
+  `examples/flop-htlc-rail-design.md`.
 - A schema-owned tclk/1 frame field contract, canonical settlement-rail registry and
   intersection-based, order-independent rail matching helpers. Generated decoder fields
   and the normative `SPEC.md` table are checked for drift in CI.

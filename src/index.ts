@@ -52,6 +52,20 @@ export {
   encodePaperRecord, decodePaperRecord, paperNote,
 } from "./paper-rail.js";
 export type { NoteStore, PaperStatus, PaperRecord } from "./paper-rail.js";
+
+// The flop-htlc rail: SettlementRail bound to the FLOP network HTLC (yellow paper §10)
+// through a pluggable chain client. Ships a deterministic mock and an unwired RPC stub.
+// Testnet only; not audited; has not touched a chain.
+export {
+  FlopHtlcRail, blocksUntil, timelockSymmetryMinimum, flopHtlcTimelock,
+} from "./flop-htlc-rail.js";
+export type { FlopHtlcRailOptions, FlopHtlcTimelock } from "./flop-htlc-rail.js";
+export {
+  MockFlopChain, FlopRpcChainClient, FLOP_HTLC_PARAMS_V050, isValidHead, isValidParams,
+} from "./flop-chain.js";
+export type {
+  FlopChainClient, FlopChainHead, FlopHtlcParams, FlopHtlcRecord, FlopHtlcStatus, FlopCreateHtlc,
+} from "./flop-chain.js";
 export type { LockTerms, SettlementRail } from "./rail.js";
 
 export {

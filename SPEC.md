@@ -318,7 +318,11 @@ layer:
   `And[Hash(h), Before(T)]` or `Point(Y)` policy leaf. The statement encodings here are chosen to
   be byte-identical to that escrow's: a 32-byte sha256 digest for `Hash`, a 33-byte
   SEC1-compressed point for `Point`. Block deadlines derive from the ms deadlines with a
-  timelock-symmetry margin.
+  timelock-symmetry margin. The library ships `FlopHtlcRail`, a binding of this rail against a
+  pluggable `FlopChainClient` (a deterministic mock, and an RPC stub that is not yet wired to a
+  node) that projects `refundAfterMs` onto a block-height `T_lock` at one block per second, gates
+  both claim and refund on the finalized head, and enforces the yellow paper §10 R10.2 symmetry
+  margin from `claimByMs`; hash locks only for now — see `examples/flop-htlc-rail-design.md`.
 - **`x402`** — the lock statement rides the existing `X-Payment-Hash-Lock` /
   `X-Payment-Timeout-Blocks` headers; `ref` is the payment id.
 - **`evm-htlc` / `near-htlc` / BTC** — counterparty escrow contracts on other chains: an EVM
