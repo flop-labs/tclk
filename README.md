@@ -187,7 +187,9 @@ Bug reports, tests, spec questions and rail bindings are welcome — [`CONTRIBUT
 for setup and the pull-request shape, [`AGENTS.md`](AGENTS.md) for the rules a change here can
 quietly break. Anything exploitable goes privately through
 [`SECURITY.md`](SECURITY.md), never a public issue.
+> **Refund timing:** refunds are valid only after the deal is locked and `refundAfterMs` has passed.
 
+> **State flow:** `offer → accept → lock → reveal/refund`.
 ## License
 
 [Apache-2.0](LICENSE) © FLOP Labs.
