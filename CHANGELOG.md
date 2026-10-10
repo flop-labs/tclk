@@ -6,6 +6,31 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `SPEC.md` §9 now names FLOP's yellow paper §10 as the document the future FLOP-network rail
+  binding satisfies, and says which of its requirements land on the rail adapter rather than on
+  tclk/1. The scope was already stated; the external document it points at was not, so its
+  absence read as an oversight.
+- `SPEC.md` §5 no longer describes the `flop-htlc` escrow as carrying a `Point(Y)` policy leaf.
+  The yellow paper's §10 specifies a hash-and-timeout lock and nothing else, and its §6.1
+  predicate list is sig, hash, timelock and threshold, so the hash encoding is byte-identical as
+  claimed and the point encoding matches nothing published. It is now stated as the encoding this
+  library would use if such a leaf lands rather than as a compatibility claim, and the rail
+  registry row and §9 say the same. Naming the source document in §9 is what made the claim
+  checkable; @Qwealzy checked it.
+- `SPEC.md` §9 now states **R10.2**'s margin as parametric rather than as a relationship a rail
+  could check from its own `T_lock` alone: the requirement needs the counter-chain's duration and
+  three live FLOP chain parameters, so lock-time chain state is what evaluates it. The **R10.5**
+  note is sharpened from "`amount` is fixed on the offer" to the stronger fact — `amount` occurs
+  once in the whole frame schema and no post-offer frame carries one, so a settled actual cannot
+  be recorded even after the fact.
+- `SPEC.md` §8.6 no longer claims FLOP's typed escrow "is exactly" the policy shape (hash, point,
+  signature and time combined with and/or/k-of-n) this section describes. §5's point-leaf
+  correction above left that claim standing in §8.6, contradicting it — @Minh3132 (bug-hunter)
+  caught the two sections asserting incompatible things about the same rail. §8.6 now says what
+  §5 says: a hash-and-timeout lock today, with the richer policy still hypothetical.
+
 ### Fixed
 
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
