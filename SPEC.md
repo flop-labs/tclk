@@ -456,8 +456,11 @@ them without a vote.
 
 A rail whose escrow evaluates a *policy* — hash, point, signature and time conditions combined
 with and / or / k-of-n — moves the count from custody to enforcement: k named signers, checked by
-the settlement layer, with no secret for anyone to hold or leak. The FLOP network's typed escrow
-is exactly that shape, which is why §5 names it.
+the settlement layer, with no secret for anyone to hold or leak. §5 is why this section exists at
+all, not a claim that FLOP's published escrow already has this shape: today it evaluates a
+hash-and-timeout lock, and the paper it's specified in carries none of the point, signature or
+k-of-n conditions a policy rail would need. This section describes where that richer rail would
+plug in once one exists, on FLOP's network or elsewhere.
 
 Nothing in §3–§5 changes when it lands. The frames, the ids and the state machine are identical;
 the rail simply gains a richer release condition, and the conventions above become one option

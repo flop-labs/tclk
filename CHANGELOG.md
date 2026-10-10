@@ -25,6 +25,11 @@ All notable changes to this project are documented here. Format follows
   note is sharpened from "`amount` is fixed on the offer" to the stronger fact — `amount` occurs
   once in the whole frame schema and no post-offer frame carries one, so a settled actual cannot
   be recorded even after the fact.
+- `SPEC.md` §8.6 no longer claims FLOP's typed escrow "is exactly" the policy shape (hash, point,
+  signature and time combined with and/or/k-of-n) this section describes. §5's point-leaf
+  correction above left that claim standing in §8.6, contradicting it — @Minh3132 (bug-hunter)
+  caught the two sections asserting incompatible things about the same rail. §8.6 now says what
+  §5 says: a hash-and-timeout lock today, with the richer policy still hypothetical.
 
 ### Fixed
 
