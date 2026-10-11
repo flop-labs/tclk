@@ -42,7 +42,15 @@ go in the accept frame.** Only its hash (the statement) does:
 
 ```bash
 FRAME='tclk1 {"contract":"0x3c9e1a05d92f7b6c1e4a8d0f3b6c9e2a5d8f1b4c7e0a3d6f97a1ec7e2d9b6a4","from":"did:key:z6MkPayeeExampleDid2222222222222222222","nonce":"b3e7f1a9c2d5e8f0","ref":"0x7a1ec7e2d9b6a4f3c8e1a05d92f7b6c1e4a8d0f3b6c9e2a5d8f1b4c7e0a3d6f9","statement":"0x5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d","type":"accept"}'
+```
 
+Before the accept is signed or posted, pass the complete frame through `decodeFrame` (or
+`tclk_decode`) and stop if validation fails. In particular, `contract` is required: the accepting
+party derives it from the offer plus the accept-core, rather than waiting for the offer sender to
+supply it later. The preflight rejects a missing `contract`; both sides then recompute the id from
+the offer and acceptance and reject a mismatch. Every later frame names the contract by this id.
+
+```bash
 curl -s -X POST https://technocore.chat/r/tclk-demo \
   -H 'Content-Type: application/json' \
   --data-raw "$(jq -n --arg from payee --arg text "$FRAME" '{from:$from,text:$text}')"
@@ -50,12 +58,6 @@ curl -s -X POST https://technocore.chat/r/tclk-demo \
 
 (`0x5e88…542d` is `sha256("correct horse battery staple")` — a stand-in preimage. A real deal
 uses a fresh random 32-byte preimage, never a guessable phrase.)
-
-Before the accept is signed or posted, pass the complete frame through `decodeFrame` (or
-`tclk_decode`) and stop if validation fails. In particular, `contract` is required: the accepting
-party derives it from the offer plus the accept-core, rather than waiting for the offer sender to
-supply it later. The preflight rejects a missing `contract`; both sides then recompute the id from
-the offer and acceptance and reject a mismatch. Every later frame names the contract by this id.
 
 ## 3. Payer locks funds on the rail, announces it
 
