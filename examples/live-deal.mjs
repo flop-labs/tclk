@@ -138,6 +138,7 @@ async function post(signer, room, frame) {
     `${BASE}/r/${room}`,
     {
       method: "POST",
+      redirect: "manual",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ did: signer.did, sig, nonce: String(nonce), text }),
     },

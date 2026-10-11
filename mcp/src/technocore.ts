@@ -74,6 +74,7 @@ export function createClient(opts: { baseUrl?: string; fetch?: FetchLike } = {})
       assertRoomName(room);
       const response = await doFetch(`${baseUrl}/r/${room}`, {
         method: "POST",
+        redirect: "manual",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           did: post.did,
