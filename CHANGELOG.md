@@ -8,6 +8,7 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- The shipped tclk/1 JSON Schema now gives `paymentKey` its SEC1-compressed lexical shape and explicitly marks the secp256k1 on-curve check as a runtime constraint, matching the reference decoder and SPEC without pretending JSON Schema regex validation proves curve membership (#182).
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
