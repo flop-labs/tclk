@@ -21,6 +21,9 @@ importers:
       '@types/node':
         specifier: ^22.10.2
         version: 22.20.1
+      ajv:
+        specifier: 8.20.0
+        version: 8.20.0
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
