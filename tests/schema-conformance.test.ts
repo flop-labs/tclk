@@ -91,6 +91,7 @@ describe("protocol schema", () => {
     expect(paymentKey["x-tclk-runtimeConstraint"]).toBe("secp256k1-compressed-point-on-curve");
     expect(schemaAdmits("accept", "paymentKey", OFF_CURVE_PAYMENT_KEY)).toBe(true);
     expect(schemaAdmits("accept", "paymentKey", INVALID_COMPRESSED_PAYMENT_KEY)).toBe(false);
+    expect(schemaAdmits("offer", "paymentKey", INVALID_COMPRESSED_PAYMENT_KEY)).toBe(false);
 
     expect(() => validateFrame({
       type: "accept",
