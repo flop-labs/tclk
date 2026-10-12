@@ -7,7 +7,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 
 import { canonicalMessage, signerFromSeed } from "../src/signing.js";
 import { createHandlers } from "../src/tools.js";
-import { HASH_OFFER, PAYER_SEED, fakeFetch, hexToBytes } from "./fixtures.js";
+import { HASH_OFFER, PAYEE_SEED, PAYER_SEED, fakeFetch, hexToBytes } from "./fixtures.js";
 
 const ROOM = "mb-p-tclk-deadbeefdeadbeef";
 const signer = signerFromSeed(hexToBytes(PAYER_SEED));
@@ -89,6 +89,33 @@ describe("tclk_post_frame — tier 2, server-signed", () => {
     });
     expect(result.posted && result.tier).toBe("caller-signed");
     expect(JSON.parse(String(calls[0].init?.body))).toMatchObject({ did: signer.did, nonce: "7", text: line });
+  });
+
+  it("refuses a server-signed post when frame.from does not match the configured signer", async () => {
+    const { calls, fetchLike } = fakeFetch([]);
+    const h = createHandlers({ env: { TECHNOCORE_SIGNING_KEY: PAYEE_SEED }, fetch: fetchLike });
+
+    await expect(h.tclk_post_frame({ room: ROOM, line: offerLine() })).rejects.toThrow(
+      /frame\.from must match the signing DID/,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  it("refuses a caller-signed post when frame.from does not match the supplied DID", async () => {
+    const otherSigner = signerFromSeed(hexToBytes(PAYEE_SEED));
+    const { calls, fetchLike } = fakeFetch([]);
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+    const line = offerLine();
+    const nonce = 8;
+
+    await expect(h.tclk_post_frame({
+      room: ROOM,
+      line,
+      did: otherSigner.did,
+      sig: otherSigner.sign(canonicalMessage(ROOM, nonce, line)),
+      nonce,
+    })).rejects.toThrow(/frame\.from must match the signing DID/);
+    expect(calls).toHaveLength(0);
   });
 
   it("passes a caller's legal 19-digit string nonce straight through without precision loss", async () => {

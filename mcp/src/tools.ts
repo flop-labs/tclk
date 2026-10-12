@@ -368,7 +368,7 @@ export function createHandlers(options: HandlerOptions = {}) {
     async tclk_post_frame(input: PostFrameInput) {
       // A frame that does not decode must never reach the room: rooms are the shared
       // transcript, and a malformed line there is a permanent record no one can fold.
-      decodeFrame(input.line);
+      const frame = decodeFrame(input.line);
       const text = sweep(input.line);
       if (text !== input.line) fail("frame line does not survive the single-line sweep");
 
@@ -386,6 +386,7 @@ export function createHandlers(options: HandlerOptions = {}) {
       }
 
       if (supplied === 3) {
+        if (frame.from !== input.did) fail("frame.from must match the signing DID");
         const response = await client.postSigned(input.room, {
           did: input.did!,
           sig: input.sig!,
@@ -397,6 +398,7 @@ export function createHandlers(options: HandlerOptions = {}) {
 
       const nonce = nextNonce();
       if (signer !== null) {
+        if (frame.from !== signer.did) fail("frame.from must match the signing DID");
         const response = await client.postSigned(input.room, {
           did: signer.did,
           sig: signer.sign(canonicalMessage(input.room, nonce, text)),
