@@ -39,6 +39,15 @@ All notable changes to this project are documented here. Format follows
 
 ### Changed
 
+- PaperRail record migration requires upgrading all participants that need to
+  operate new `tclkpaper2` locks. Older v1-only implementations cannot read,
+  claim, or refund v2 records, and cannot create a replacement lock for the same
+  contract. New implementations retain v1 claim/refund support and preserve v1
+  encoding, but `verifyLock()` returns `false` for v1 records, including those
+  in existing rehearsals. Upgrading does not convert existing records. See
+  [PaperRail record migration](README.md#paperrail-record-migration) for cutover
+  guidance. The `tclk/1` frame format is unchanged.
+
 - Transcript folding now consumes complete signed records instead of bare `lines` plus
   optional positional metadata. A record keeps its exact line, room, sequence, venue
   timestamp, sender, nonce and signature together; `foldTranscript` verifies the signature
