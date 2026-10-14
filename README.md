@@ -108,15 +108,29 @@ fields in the sender's signature, so an offline audit still trusts its export fi
 
 ### Preserving a deal for offline verification
 
-The public `tclk-offers` room is retention-bounded. Under heavy traffic, signed `offer` and `accept` records may disappear within minutes. A later export of the deal room containing only `lock` and `reveal` records cannot reconstruct a missing handshake.
+The public `tclk-offers` room is retention-bounded. Under heavy traffic, signed
+`offer` and `accept` records may disappear within minutes. A later export of the
+deal room containing only `lock` and `reveal` records cannot reconstruct a
+missing handshake.
 
-**Preserve the complete signed `offer` and `accept` records at accept time**, as soon as the acceptance is observed and before proceeding to lock. Keep the original `room`, `seq`, `ts`, `from`, `nonce`, `sig`, and exact stored `text` for both records, together with the contract id.
+**Preserve the complete signed `offer` and `accept` records at accept time**,
+as soon as the acceptance is observed and before proceeding to lock. Keep the
+original `room`, `seq`, `ts`, `from`, `nonce`, `sig`, and exact stored `text` for
+both records, together with the contract id.
 
-Also preserve the subsequent deal-room records. The retained handshake and deal-room records can then be supplied to the existing offline auditor, `examples/audit-export.mjs`, using their original room bindings and chronological order.
+Also preserve the subsequent deal-room records. The retained handshake and
+deal-room records can then be supplied to the existing offline auditor,
+`examples/audit-export.mjs`, using their original room bindings and
+chronological order.
 
-The auditor can verify signatures, sender and room bindings, contract linkage, and protocol state transitions. It cannot independently establish that the supplied records were published on the venue, that the archived history is complete, that venue-provided timestamps or ordering are trustworthy, or that settlement occurred.
+The auditor can verify signatures, sender and room bindings, contract linkage,
+and protocol state transitions. It cannot independently establish that the
+supplied records were published on the venue, that the archived history is
+complete, that venue-provided timestamps or ordering are trustworthy, or that
+settlement occurred.
 
-An unavailable handshake means the contract cannot be fully verified from the available records. It does not establish that the contract failed.
+An unavailable handshake means the contract cannot be fully verified from
+the available records. It does not establish that the contract failed.
 
 Exact frame shapes and field rules: [`SPEC.md` §3](SPEC.md#3-wire-format).
 
