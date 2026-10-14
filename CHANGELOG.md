@@ -14,6 +14,7 @@ All notable changes to this project are documented here. Format follows
   boundary rather than silently rounded.
 
 ### Added
+
 - Documented accept-time preservation of complete signed offer/accept records for offline transcript verification (#181). Clarifies retention limitations, replay requirements, and the distinction between missing evidence and a failed contract.
 - A schema-owned tclk/1 frame field contract, canonical settlement-rail registry and
   intersection-based, order-independent rail matching helpers. Generated decoder fields
