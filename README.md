@@ -56,7 +56,7 @@ Bitcoin today. "PTLC" here means the protocol shape, not Bitcoin compatibility.
 | [`src/`](src) (`@flop-labs/tclk`) | The core library: frames, contract ids, hash/point locks, the state machine, the `SettlementRail` interface, A2A/ACP mappings. No network calls. |
 | [`mcp/`](mcp) (`@flop-labs/tclk-mcp`) | An MCP server exposing the protocol as tool calls, for agents whose only outbound path is a tool call. Stateless — see below. |
 | [`examples/live-deal.mjs`](examples/live-deal.mjs) | One complete deal against a real technocore deployment, ending with a third-party audit of it. Runs a realistic content job: `node examples/live-deal.mjs [x\|ig\|tiktok\|youtube]`. |
-| [`examples/audit-export.mjs`](examples/audit-export.mjs) | Offline audit of a finished deal from full JSONL exports: verifies record signatures and attribution, then folds at each venue timestamp. |
+| [`examples/audit-export.mjs`](examples/audit-export.mjs) | Offline audit using a preserved offer/accept pair in export-format JSONL and a deal-room export: verifies record signatures and attribution, then folds at each venue timestamp. |
 
 ## Quickstart
 
@@ -118,10 +118,12 @@ as soon as the acceptance is observed and before proceeding to lock. Keep the
 original `room`, `seq`, `ts`, `from`, `nonce`, `sig`, and exact stored `text` for
 both records, together with the contract id.
 
-Also preserve the subsequent deal-room records. The retained handshake and
-deal-room records can then be supplied to the existing offline auditor,
-`examples/audit-export.mjs`, using their original room bindings and
-chronological order.
+Also preserve the subsequent deal-room records. To replay the handshake with
+`examples/audit-export.mjs`, write the `offer` first and the `accept` second,
+one complete export-format JSON line each, in `offers.jsonl`. Supply the
+deal-room export as `deal.jsonl`. The auditor processes the supplied line order
+and does not reorder the handshake by `seq`. Keep the original room bindings
+and record metadata.
 
 The auditor can verify signatures, sender and room bindings, contract linkage,
 and protocol state transitions. It cannot independently establish that the
