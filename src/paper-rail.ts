@@ -162,6 +162,8 @@ export function decodePaperRecord(value: string): PaperRecord | null {
     if (!AMOUNT.test(amount) || !ASSET.test(asset)) return null;
     if (!DID.test(payer) || !DID.test(payee)) return null;
 
+    if (!/^[1-9][0-9]*$/.test(claimBy) || !/^[1-9][0-9]*$/.test(refundAfter)) return null;
+
     const claimByMs = Number(claimBy);
     const refundAfterMs = Number(refundAfter);
 

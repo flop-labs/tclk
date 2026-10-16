@@ -8,6 +8,9 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Reject noncanonical decimal timestamp spellings in `tclkpaper2` records before
+  numeric conversion, preserving legacy `tclkpaper1` decoding behavior.
+
 - `PaperRail` now emits versioned `tclkpaper2` records that persist the complete
   lock terms needed for exact verification. `verifyLock()` therefore rejects
   mismatches in `amount`, `asset`, `payer`, `payee`, and `claimByMs` instead of

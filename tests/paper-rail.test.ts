@@ -168,6 +168,51 @@ describe("paper rail — reads are anonymous input", () => {
     }
   });
 
+  it("accepts canonical v2 timestamps and verifies the exact lock", async () => {
+    const { rail, notes } = railAt();
+    const deal = terms();
+    const { ns, key } = paperNote(deal.terms.contract);
+    const line = encodePaperRecord({ ...deal.terms, status: "locked" });
+
+    expect(decodePaperRecord(line)).toMatchObject({
+      claimByMs: deal.terms.claimByMs,
+      refundAfterMs: deal.terms.refundAfterMs,
+    });
+    await notes.set(ns, key, line);
+    expect(await rail.verifyLock(deal.terms, deal.terms.contract)).toBe(true);
+  });
+
+  for (const [field, index] of [["claimBy", 8], ["refundAfter", 9]] as const) {
+    for (const form of ["decimal", "exponent", "leading zero", "plus prefix"] as const) {
+      it(`rejects v2 ${field} with ${form} spelling`, async () => {
+        const { rail, notes } = railAt();
+        const deal = terms();
+        const { ns, key } = paperNote(deal.terms.contract);
+        const parts = encodePaperRecord({ ...deal.terms, status: "locked" }).split(" ");
+        const canonical = parts[index];
+        parts[index] = form === "decimal" ? `${canonical}.0`
+          : form === "exponent" ? `${canonical}e0`
+          : form === "leading zero" ? `0${canonical}` : `+${canonical}`;
+        // Every variant denotes the same number; rejection must concern its spelling.
+        expect(Number(parts[index])).toBe(Number(canonical));
+        const line = parts.join(" ");
+
+        expect(decodePaperRecord(line)).toBeNull();
+        await notes.set(ns, key, line);
+        expect(await rail.read(deal.terms.contract)).toBeNull();
+        expect(await rail.verifyLock(deal.terms, deal.terms.contract)).toBe(false);
+      });
+    }
+  }
+
+  it("preserves legacy v1 numeric timestamp spellings", () => {
+    const statement = "0x" + "ab".repeat(32);
+    for (const raw of [`${REFUND_AFTER}.0`, `${REFUND_AFTER}e0`, `0${REFUND_AFTER}`, `+${REFUND_AFTER}`]) {
+      expect(decodePaperRecord(`${PAPER_RECORD_PREFIX} locked hash ${statement} ${raw}`))
+        .toEqual({ status: "locked", lock: "hash", statement, refundAfterMs: REFUND_AFTER });
+    }
+  });
+
   it("rejects statements that do not fit their declared lock kind", () => {
     for (const malformed of [
       `tclkpaper1 locked hash 0x${"ab".repeat(33)} ${REFUND_AFTER}`,
