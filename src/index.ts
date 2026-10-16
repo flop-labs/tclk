@@ -48,7 +48,7 @@ export { lockTerms, MemoryRail } from "./rail.js";
 // The paper rail: records the lifecycle, backs it with NOTHING. For rehearsing the
 // choreography on the real venue before a rail that holds value exists.
 export {
-  PaperRail, MemoryNoteStore, PAPER_RECORD_PREFIX,
+  PaperRail, MemoryNoteStore, PAPER_RECORD_PREFIX, PAPER_RECORD_PREFIX_V2,
   encodePaperRecord, decodePaperRecord, paperNote,
 } from "./paper-rail.js";
 export type { NoteStore, PaperStatus, PaperRecord } from "./paper-rail.js";
