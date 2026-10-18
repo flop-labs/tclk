@@ -115,14 +115,14 @@ missing handshake.
 
 **Preserve the complete signed `offer` and `accept` records at accept time**,
 as soon as the acceptance is observed and before proceeding to lock. Keep the
-original `room`, `seq`, `ts`, `from`, `nonce`, `sig`, and exact stored `text` for
-both records, together with the contract id.
+original `seq`, `ts`, `from`, `nonce`, `sig`, and exact stored `text` for both
+records, together with the contract id.
 
 Also preserve the subsequent deal-room records. To replay the handshake with
 `examples/audit-export.mjs`, write the `offer` first and the `accept` second,
 one complete export-format JSON line each, in `offers.jsonl`. Supply the
 deal-room export as `deal.jsonl`. The auditor processes the supplied line order
-and does not reorder the handshake by `seq`. Keep each record's `seq`, `ts`, 
+and does not reorder the handshake by `seq`. Keep each record's `seq`, `ts`,
 `from`, `nonce`, `sig` and exact `text`.
 The auditor takes a record's room from the file it is supplied in
 (`offers.jsonl` → `tclk-offers`, `deal.jsonl` → the deal room) and verifies
