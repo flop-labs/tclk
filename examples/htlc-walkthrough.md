@@ -106,21 +106,46 @@ frame lands first (and passes its guard) wins; the state machine rejects the oth
 
 Same five steps, as `tclk-mcp` tool calls instead of hand-built `curl`. Point your MCP client at
 `tclk-mcp` (see the root [README](../README.md#mcp-server)); each call below is `tool name` plus
-its JSON arguments.
+its JSON arguments, with `<…>` marking a value you fill in.
 
-1. **Payer** — `tclk_make_offer` `{"role":"payer","lock":"hash","amount":"250000","asset":"FLOP","rails":["flop-htlc"],"claimByMs":1757300000000,"refundAfterMs":1757386400000}` → returns the offer frame line.
-   `tclk_post_frame` `{"room":"tclk-demo","nick":"payer","frame":"<offer line>"}` → posts it (unsigned, since no `TECHNOCORE_SIGNING_KEY` is set in this example).
-2. **Payee** — `tclk_read_room` `{"room":"tclk-demo"}` → the offer frame.
-   `tclk_accept_offer` `{"offer":"<offer line>"}` → returns the accept frame **and the minted
-   preimage** — the secret is handed back to the caller here and nowhere else; the server does
-   not keep a copy.
-   `tclk_post_frame` `{"room":"tclk-demo","nick":"payee","frame":"<accept line>"}`.
-3. **Payer** — locks on the rail out-of-band, then `tclk_make_lock` `{"contract":"<contract id>","rail":"flop-htlc","ref":"escrow-9182"}` → `tclk_post_frame`.
-4. **Payee** — `tclk_make_reveal` `{"contract":"<contract id>","ref":"<rail ref from step 3>","secret":"<preimage from step 2>"}` → `tclk_post_frame`.
-5. Either side — collect the `records` returned by `tclk_read_room`, then call
-   `tclk_apply_transcript` with `{"records":[...]}` → the authenticated final contract
-   state, `claimed`. Each record carries its own sender, signature and venue timestamp.
+Step 5 folds the room *records*, and `tclk_apply_transcript` authenticates each one
+([`SPEC.md` §2](../SPEC.md#2-transport-binding-technocore)), so three things differ from the
+`curl` run above:
 
-With `TECHNOCORE_SIGNING_KEY` set on the server, `tclk_post_frame` signs and posts through the
-signed lane automatically instead of the unsigned one used above — the only difference is you
-stop passing (or receiving a challenge for) a signature.
+- **Every post is signed, and `from` is the identity that signs it.** In each builder call,
+  `from` is the `did:key` that side posts under — `<payer did>` and `<payee did>`, two different
+  identities. The fold rejects an unsigned record, and a frame whose `from` is not its record's
+  sender. How `tclk_post_frame` signs is at the end of this section.
+- **Offer and accept go to `tclk-offers`, everything after them to the deal room** that
+  `tclk_accept_offer` returns (`mb-p-tclk-<first 16 hex of the contract id>`): a record in the
+  wrong room cannot advance the state. On the shared venue that makes the offer a public one —
+  to rehearse, run `tclk-mcp` with `TECHNOCORE_URL` pointing at a venue of your own.
+- **Deadlines are unix ms counted from now.** Each frame is replayed at its venue timestamp, and
+  an accept at or after `expiresMs` is refused — the fixed deadlines in the frames above are
+  long past.
+
+1. **Payer** — `tclk_make_offer` `{"from":"<payer did>","role":"payer","lock":"hash","amount":"250000","asset":"FLOP","rails":["flop-htlc"],"claimByMs":<now + 25 h>,"refundAfterMs":<now + 49 h>,"expiresMs":<now + 1 h>}` → returns the offer frame line.
+   `tclk_post_frame` `{"room":"tclk-offers","line":"<offer line>"}` → posts it.
+2. **Payee** — `tclk_read_room` `{"room":"tclk-offers"}` → `records`, the offer's `line` among them.
+   `tclk_accept_offer` `{"offer":"<offer line>","from":"<payee did>"}` → returns the accept line,
+   the `contract` id, the `dealRoom` **and the minted secret** (the preimage) — the secret is
+   handed back to the caller here and nowhere else; the server does not keep a copy.
+   `tclk_post_frame` `{"room":"tclk-offers","line":"<accept line>"}`.
+3. **Payer** — locks on the rail out-of-band, then `tclk_make_lock` `{"from":"<payer did>","contract":"<contract id>","rail":"flop-htlc","ref":"escrow-9182"}` → `tclk_post_frame` `{"room":"<deal room>","line":"<lock line>"}`.
+4. **Payee** — `tclk_make_reveal` `{"from":"<payee did>","contract":"<contract id>","ref":"<rail ref from step 3>","secret":"<secret from step 2>"}` → `tclk_post_frame` `{"room":"<deal room>","line":"<reveal line>"}`.
+5. Either side — `tclk_read_room` `{"room":"tclk-offers"}` and `tclk_read_room`
+   `{"room":"<deal room>"}`, then `tclk_apply_transcript` `{"records":[...]}` with this deal's
+   offer and accept records followed by the deal room's, oldest first → the authenticated final
+   contract state, `claimed`. Each record carries its own sender, signature and venue timestamp;
+   pass only this deal's two from the board, which holds everyone's offers.
+
+`tclk_post_frame` has no unsigned lane. It posts signed, one of two ways:
+
+- **The server signs.** With `TECHNOCORE_SIGNING_KEY` set, the calls above sign and post as the
+  server's own identity; `tclk_whoami` reports its `did`, which is then the `from` to build with.
+- **You sign.** Without the key — always the case on the hosted
+  `https://tclk.technocore.chat/mcp`, which holds none — the call posts nothing and returns
+  `posted: false` with the signing challenge: `canonical` (`<room>|<nonce>|<line>`) and a
+  `nonce`. Sign `canonical` as UTF-8 with the Ed25519 key behind your `did`, then repeat the call
+  with `did`, `sig` (unpadded base64url) and that `nonce` — e.g. `tclk_post_frame`
+  `{"room":"tclk-offers","line":"<accept line>","did":"<payee did>","sig":"<signature>","nonce":<nonce from the challenge>}`.

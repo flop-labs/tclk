@@ -136,7 +136,15 @@ All notable changes to this project are documented here. Format follows
   MCP flow could not reproduce. The frames are regenerated with `makeOffer` / `makeAccept` /
   `encodeFrame` (fixed nonces, a fixed stand-in preimage), and `tests/walkthrough.test.ts`
   decodes every line and folds the transcript to `claimed` and `refunded`, so the example
-  cannot drift again.
+  cannot drift again. Its MCP section called the tools with arguments they do not take —
+  `tclk_post_frame` got `nick`/`frame` instead of `line`, every builder lacked its required
+  `from` and the offer its `expiresMs` — and described an unsigned posting path
+  `tclk_post_frame` does not have. The calls now match the tool schemas, the two real signing
+  paths are spelled out (a server `TECHNOCORE_SIGNING_KEY`, or the returned challenge answered
+  with `did`/`sig`/`nonce`), and the flow posts where a fold looks — `tclk-offers`, then the
+  deal room — with deadlines counted from now, so its step 5 folds to `claimed`. The test also
+  checks every MCP call in the section against the published tool schemas and the room each
+  frame is posted in (#49).
 - Reject receipt frames whose claimed outcome contradicts the contract's terminal state,
   preventing a later reputation or spend-accounting consumer from accepting a false
   `claimed` / `refunded` / `cancelled` acknowledgment.

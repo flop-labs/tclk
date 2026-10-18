@@ -2,13 +2,16 @@
  * The frames in examples/htlc-walkthrough.md are real, not illustrative: every
  * `FRAME='tclk1 …'` line decodes, the ids are the ones the library computes, and the
  * transcript folds to `claimed` on the reveal path and `refunded` on the alternative.
- * Pinning that here keeps the walkthrough from drifting from the code it demonstrates.
+ * Its MCP section calls each tool with the arguments that tool's schema takes, and posts
+ * each frame in the room a fold expects it in. Pinning that here keeps the walkthrough
+ * from drifting from the code it demonstrates.
  */
 
 import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 
 import {
+  OFFER_ROOM,
   applyFrame,
   decodeFrame,
   hashLockFromPreimage,
@@ -19,11 +22,21 @@ import {
   type RefundFrame,
   type RevealFrame,
 } from "../src/index.js";
+// The tool catalogue exactly as an MCP client is served it, generated from mcp/src/server.ts;
+// mcp/worker/tests/manifest.test.ts fails if the two drift.
+import { TOOLS } from "../mcp/worker/src/tool-manifest.generated.js";
 
 const WALKTHROUGH = new URL("../examples/htlc-walkthrough.md", import.meta.url);
-const lines = [...readFileSync(WALKTHROUGH, "utf8").matchAll(/^FRAME='(tclk1 [^']*)'$/gm)].map(
-  (m) => m[1],
-);
+const markdown = readFileSync(WALKTHROUGH, "utf8");
+const lines = [...markdown.matchAll(/^FRAME='(tclk1 [^']*)'$/gm)].map((m) => m[1]);
+
+// The MCP section writes each call as `tool` `{…}`, with `<…>` for a value the reader fills
+// in. Only argument names are checked, so a bare placeholder (a number) and the elided
+// `[...]` get stand-ins; a quoted placeholder is already a JSON string.
+const mcpCalls = [...markdown.matchAll(/`(tclk_[a-z_]+)`\s+`(\{[^`]*\})`/g)].map((m) => {
+  const json = m[2].replace(/:<[^<>"]*>/g, ":0").replace(/\[\.\.\.\]/g, "[]");
+  return { tool: m[1], args: JSON.parse(json) as Record<string, unknown> };
+});
 
 describe("examples/htlc-walkthrough.md", () => {
   it("carries five frames that all decode, in walkthrough order", () => {
@@ -64,5 +77,41 @@ describe("examples/htlc-walkthrough.md", () => {
     const lock = hashLockFromPreimage(padded);
     expect(reveal.secret).toBe(lock.preimage);
     expect(accept.statement).toBe(lock.hash);
+  });
+
+  it("calls every MCP tool with exactly the arguments its schema takes", () => {
+    expect(mcpCalls.map((call) => call.tool)).toEqual(
+      expect.arrayContaining([
+        "tclk_make_offer", "tclk_post_frame", "tclk_read_room", "tclk_accept_offer",
+        "tclk_make_lock", "tclk_make_reveal", "tclk_apply_transcript",
+      ]),
+    );
+    for (const { tool, args } of mcpCalls) {
+      const schema = TOOLS.find((t) => t.name === tool)?.inputSchema as
+        | { properties?: Record<string, unknown>; required?: string[] }
+        | undefined;
+      expect(schema, `${tool} is not a tclk-mcp tool`).toBeDefined();
+      const given = Object.keys(args);
+      const known = Object.keys(schema?.properties ?? {});
+      expect(given.filter((name) => !known.includes(name)), `${tool}: unknown arguments`).toEqual([]);
+      expect(
+        (schema?.required ?? []).filter((name) => !given.includes(name)),
+        `${tool}: missing required arguments`,
+      ).toEqual([]);
+    }
+  });
+
+  it("posts offer and accept to the offer board and the rest to the deal room (SPEC §2)", () => {
+    const roomFor: Record<string, string> = {
+      "<offer line>": OFFER_ROOM,
+      "<accept line>": OFFER_ROOM,
+      "<lock line>": "<deal room>",
+      "<reveal line>": "<deal room>",
+    };
+    const posts = mcpCalls.filter((call) => call.tool === "tclk_post_frame").map((call) => call.args);
+    expect(new Set(posts.map((post) => post.line))).toEqual(new Set(Object.keys(roomFor)));
+    for (const post of posts) {
+      expect(post.room, `room for ${String(post.line)}`).toBe(roomFor[String(post.line)]);
+    }
   });
 });
