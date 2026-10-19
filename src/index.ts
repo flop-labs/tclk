@@ -45,6 +45,11 @@ export type {
 
 export { lockTerms, MemoryRail } from "./rail.js";
 
+// What a consumer may read as money state: a folded contract plus what its rail reports.
+// `TclkStatus` is what the room says; this is what a rail confirmed.
+export { settlementView, observeSettlement } from "./settlement.js";
+export type { MoneyState, RailEvidence, SettlementView } from "./settlement.js";
+
 // The paper rail: records the lifecycle, backs it with NOTHING. For rehearsing the
 // choreography on the real venue before a rail that holds value exists.
 export {
@@ -52,7 +57,7 @@ export {
   encodePaperRecord, decodePaperRecord, paperNote,
 } from "./paper-rail.js";
 export type { NoteStore, PaperStatus, PaperRecord } from "./paper-rail.js";
-export type { LockTerms, SettlementRail } from "./rail.js";
+export type { LockTerms, RailObservation, RailObserver, SettlementRail } from "./rail.js";
 
 export {
   OFFER_ROOM, capabilityToken, parseCapabilityToken,
@@ -64,7 +69,9 @@ export {
   splitSecret, combineSecret, splitWitness, combineWitness,
 } from "./commitments.js";
 
-export { tclkStatusToA2A, tclkStatusToAcpPhase, a2aJob, acpJob } from "./interop.js";
+export {
+  tclkStatusToA2A, tclkStatusToAcpPhase, settlementToA2A, settlementToAcpPhase, a2aJob, acpJob,
+} from "./interop.js";
 export type { AcpPhase, A2ATaskState } from "./interop.js";
 
 // The point-lock half of the protocol (byte-identical to the on-chain

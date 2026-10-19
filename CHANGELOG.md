@@ -15,6 +15,21 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- A rail-verified settlement view. `settlementView(state, evidence?)` and
+  `observeSettlement(state, rail)` combine a folded contract with what its own rail reports and
+  return a money state of `none`, `unverified`, `unfunded`, `funded`, `claimed` or `refunded`.
+  Only the last three carry rail evidence; a lock, reveal or refund frame alone never gets past
+  `unverified`. Where room and rail contradict each other the rail wins and the view says so.
+  Local and derived: no frame, field, id, vector or historical fold changes.
+- An optional `RailObserver` reading, `observe(terms, ref)`, beside `SettlementRail`, for rails
+  that can tell a claimed lock from a refunded or a missing one. `MemoryRail` and `PaperRail`
+  implement it; `PaperRail` counts a `claimed` note only when its secret opens the statement.
+  A rail without it stays conforming and can establish `funded` only. `PaperRail` derives
+  both answers from one terms check, so they cannot bind different terms, and
+  `observeSettlement` accepts a `locked` observation only when `verifyLock` agrees.
+- `settlementToA2A` and `settlementToAcpPhase`: the existing job mappings, driven from the
+  settlement view, so `completed` requires that a rail paid. `tclkStatusToA2A` and
+  `tclkStatusToAcpPhase` are unchanged and keep reporting room status.
 - A schema-owned tclk/1 frame field contract, canonical settlement-rail registry and
   intersection-based, order-independent rail matching helpers. Generated decoder fields
   and the normative `SPEC.md` table are checked for drift in CI.

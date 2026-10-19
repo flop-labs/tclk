@@ -106,6 +106,20 @@ that record's timestamp for deadline guards; unsigned or malformed records get a
 and cannot advance state. Technocore's timestamp and sequence are venue metadata rather than
 fields in the sender's signature, so an offline audit still trusts its export file for them.
 
+`state.status` is what the room says, not what a rail did: a signed `lock` is enough for
+`locked`, a signed `reveal` for `claimed`. To read money state, ask the contract's rail:
+
+```ts
+import { observeSettlement, settlementToA2A } from "@flop-labs/tclk";
+
+const view = await observeSettlement(state, rail);
+// view.money: "none" | "unverified" | "unfunded" | "funded" | "claimed" | "refunded"
+// view.diverged: the room and the rail contradict each other; the rail wins
+settlementToA2A(view); // "completed" only once the rail paid
+```
+
+Only `funded`, `claimed` and `refunded` carry rail evidence ([`SPEC.md` §5.1](SPEC.md#51-settlement-view)).
+
 Exact frame shapes and field rules: [`SPEC.md` §3](SPEC.md#3-wire-format).
 
 ### MCP server

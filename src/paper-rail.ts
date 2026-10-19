@@ -21,7 +21,7 @@
 
 import { isValidStatement, type LockKind } from "./frames.js";
 import { verifySecret } from "./locks.js";
-import type { LockTerms, SettlementRail } from "./rail.js";
+import type { LockTerms, RailObservation, RailObserver, SettlementRail } from "./rail.js";
 
 /** The record version, so a later shape cannot be mistaken for this one. */
 export const PAPER_RECORD_PREFIX = "tclkpaper1" as const;
@@ -100,7 +100,21 @@ export function paperNote(contract: string): { ns: string; key: string } {
  * it cannot do is make any of that binding on a counterparty, because no value is at
  * stake and the record is world-writable.
  */
-export class PaperRail implements SettlementRail {
+/**
+ * The one terms check behind both `verifyLock` and `observe`. Keeping it in one place is what
+ * holds the rail invariant (`verifyLock` true exactly when `observe` is `"locked"`): a record
+ * version that binds more terms extends this function, and the read side follows the verify
+ * side in every state instead of drifting from it.
+ */
+function recordMatchesTerms(record: PaperRecord, terms: LockTerms): boolean {
+  return (
+    record.lock === terms.lock &&
+    record.statement === terms.statement &&
+    record.refundAfterMs === terms.refundAfterMs
+  );
+}
+
+export class PaperRail implements SettlementRail, RailObserver {
   readonly id = "paper";
   private readonly notes: NoteStore;
   private readonly clock: () => number;
@@ -129,13 +143,7 @@ export class PaperRail implements SettlementRail {
   async verifyLock(terms: LockTerms, ref: string): Promise<boolean> {
     if (ref !== terms.contract) return false;
     const record = await this.read(ref);
-    return (
-      record !== null &&
-      record.status === "locked" &&
-      record.lock === terms.lock &&
-      record.statement === terms.statement &&
-      record.refundAfterMs === terms.refundAfterMs
-    );
+    return record !== null && record.status === "locked" && recordMatchesTerms(record, terms);
   }
 
   async claim(ref: string, secret: string): Promise<void> {
@@ -151,6 +159,39 @@ export class PaperRail implements SettlementRail {
     const { current, record } = await this.requireLocked(ref, "refund");
     if (this.clock() < record.refundAfterMs) throw new Error("tclk: refund before refundAfterMs");
     await this.advance(ref, current, { ...record, status: "refunded" });
+  }
+
+  /**
+   * What the note holds, judged against `terms`. Every branch is a read of a world-writable
+   * namespace, so nothing here trusts the record: a line that does not parse, or parses to
+   * other terms, is `mismatch`, and a `claimed` line only counts when the secret beside it
+   * opens the statement. A stranger can still write a well-formed record; what this rail
+   * cannot give anyone is value, and `observe` does not pretend otherwise.
+   */
+  async observe(terms: LockTerms, ref: string): Promise<RailObservation> {
+    if (ref !== terms.contract) return "mismatch";
+    let note: { ns: string; key: string };
+    try {
+      note = paperNote(ref);
+    } catch {
+      return "mismatch";
+    }
+    let value: string | null;
+    try {
+      value = await this.notes.get(note.ns, note.key);
+    } catch {
+      return "unknown";
+    }
+    if (value === null) return "absent";
+    const record = decodePaperRecord(value);
+    if (record === null || !recordMatchesTerms(record, terms)) return "mismatch";
+    if (
+      record.status === "claimed" &&
+      (record.secret === undefined || !verifySecret(record.lock, record.statement, record.secret))
+    ) {
+      return "mismatch";
+    }
+    return record.status;
   }
 
   /** The record as it stands, or null when absent or unparseable. */
