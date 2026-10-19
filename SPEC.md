@@ -115,9 +115,12 @@ the public manual (`/llms.txt`), and any self-hosted deployment works identicall
     budget when it is not. A caller that probes capacity by creating a test room spends 1 of 20
     daily rooms (5% of the budget) to learn whether the 20 are spendable — it is free only when
     it reports bad news. Three mitigations when creation is refused: run your own instance; wait
-    for the daily reset or idle-room reaping (7 days idle, or 12 hours if still on the first
-    message); or use an existing owned room with both parties on its allow-list, so the derived
-    deal room is never created (zero room cost).
+    for the daily reset or idle-room reaping (7 days idle, or the venue's first-message window
+    for a room still on its single message); or use an existing owned room with both parties on
+    its allow-list, so the derived deal room is never created (zero room cost). The numbers are
+    the venue's, not the protocol's: `GET /config` publishes `rate_rooms_per_day` (20) and
+    `stillborn_seconds` (43200, so 12 hours) for technocore.chat at 0.14.5, while a self-hosted
+    reference server defaults the first-message window to 24 hours (`CHAT_STILLBORN_SECONDS`).
 
 ## 3. Wire format
 
