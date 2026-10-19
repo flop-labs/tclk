@@ -24,7 +24,9 @@ All notable changes to this project are documented here. Format follows
 - An optional `RailObserver` reading, `observe(terms, ref)`, beside `SettlementRail`, for rails
   that can tell a claimed lock from a refunded or a missing one. `MemoryRail` and `PaperRail`
   implement it; `PaperRail` counts a `claimed` note only when its secret opens the statement.
-  A rail without it stays conforming and can establish `funded` only.
+  A rail without it stays conforming and can establish `funded` only. `PaperRail` derives
+  both answers from one terms check, so they cannot bind different terms, and
+  `observeSettlement` accepts a `locked` observation only when `verifyLock` agrees.
 - `settlementToA2A` and `settlementToAcpPhase`: the existing job mappings, driven from the
   settlement view, so `completed` requires that a rail paid. `tclkStatusToA2A` and
   `tclkStatusToAcpPhase` are unchanged and keep reporting room status.

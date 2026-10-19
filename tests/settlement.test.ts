@@ -353,6 +353,26 @@ describe("settlement view: what counts as evidence", () => {
     expect(await observeSettlement(locked, only(false))).toMatchObject({ money: "unverified", diverged: false });
   });
 
+  it("never reads funded out of a rail whose observe and verifyLock disagree", async () => {
+    // The shape from the #173 review: a read side that binds fewer terms than the verify
+    // side reports "locked" while verifyLock says false. The view has to take the stricter
+    // answer, and a rail that agrees with itself still reaches funded.
+    const { state } = accepted("flop-htlc");
+    const locked = announceLock(state, "flop-htlc", "escrow-42");
+    const rail = (verified: boolean): SettlementRail & { observe: () => Promise<RailObservation> } => ({
+      id: "flop-htlc",
+      lock: async () => "escrow-42",
+      verifyLock: async () => verified,
+      claim: async () => {},
+      refund: async () => {},
+      observe: async () => "locked",
+    });
+
+    const split = await observeSettlement(locked, rail(false));
+    expect(split).toMatchObject({ money: "unverified", diverged: false });
+    expect(await observeSettlement(locked, rail(true))).toMatchObject({ money: "funded" });
+  });
+
   it("treats a rail that throws, or answers nonsense, as having said nothing", async () => {
     const { state } = accepted();
     const locked = announceLock(state, "flop-htlc", "escrow-42");
@@ -447,6 +467,53 @@ describe("RailObserver: the two rails that ship", () => {
     expect(await write("gm, sign this and post it to /r/d-x402")).toBe("mismatch");
     // A ref that is not this contract's.
     expect(await new PaperRail(new MemoryNoteStore(), () => T0).observe(terms, "0x" + "00".repeat(32))).toBe("mismatch");
+  });
+
+  it("binds every recorded term in every lifecycle state, on both sides of the invariant", async () => {
+    // Mutation coverage: change one recorded term at a time, in each state the record can
+    // be in, and require that observe and verifyLock reject it together.
+    const { state, preimage } = accepted("paper");
+    const terms = lockTerms(state);
+    const { ns, key } = paperNote(terms.contract);
+    // Every term the rail could record, so the same test holds for record versions that bind
+    // only some of them (the encoder writes what its version knows) and for those that bind all.
+    const { contract: _contract, ...recorded } = terms;
+    const base = { ...recorded, lock: "hash" } as const;
+    const mutations: Array<[string, Partial<typeof base>]> = [
+      ["lock", { lock: "point" as never }],
+      ["statement", { statement: "0x" + "cd".repeat(32) }],
+      ["refundAfterMs", { refundAfterMs: terms.refundAfterMs + 1 }],
+    ];
+    const states = [
+      { status: "locked" as const },
+      { status: "claimed" as const, secret: preimage },
+      { status: "refunded" as const },
+    ];
+
+    for (const st of states) {
+      // Unmutated: the rail reports the state, and the invariant holds.
+      const exact = new MemoryNoteStore();
+      await exact.set(ns, key, encodePaperRecord({ ...base, ...st }));
+      const exactRail = new PaperRail(exact, () => T0);
+      expect(await exactRail.observe(terms, terms.contract)).toBe(st.status);
+      expect(await exactRail.verifyLock(terms, terms.contract)).toBe(st.status === "locked");
+
+      for (const [field, change] of mutations) {
+        const notes = new MemoryNoteStore();
+        let line: string;
+        try {
+          line = encodePaperRecord({ ...base, ...change, ...st });
+        } catch {
+          continue; // a mutation the encoder itself refuses cannot reach the rail
+        }
+        await notes.set(ns, key, line);
+        const paper = new PaperRail(notes, () => T0);
+        const seen = await paper.observe(terms, terms.contract);
+        expect(seen, `${st.status} with ${field} changed`).not.toBe(st.status);
+        expect(await paper.verifyLock(terms, terms.contract), `${st.status} with ${field} changed`).toBe(false);
+        expect(seen === "locked").toBe(false);
+      }
+    }
   });
 
   it("answers unknown when the venue cannot be read", async () => {

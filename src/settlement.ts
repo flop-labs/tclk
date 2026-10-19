@@ -166,6 +166,11 @@ export function settlementView(state: ContractState, evidence?: RailEvidence): S
  *
  * The rail is only asked when it is the contract's own rail. Asking another one would
  * produce an observation that means nothing for this contract.
+ *
+ * A `"locked"` from `observe` is checked against `verifyLock` before it counts. The two are
+ * required to agree (see `RailObserver`); a rail where they do not has contradicted itself
+ * about these terms, and a contradiction establishes nothing, so the view stays `unverified`
+ * instead of reading `funded` out of the weaker of two answers.
  */
 export async function observeSettlement(
   state: ContractState,
@@ -182,6 +187,9 @@ export async function observeSettlement(
     const terms = lockTerms(state);
     if (typeof rail.observe === "function") {
       observation = await rail.observe(terms, ref);
+      if (observation === "locked" && !(await rail.verifyLock(terms, ref))) {
+        observation = "unknown";
+      }
     } else {
       observation = (await rail.verifyLock(terms, ref)) ? "locked" : "unknown";
     }
