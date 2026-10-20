@@ -15,6 +15,8 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- A key-free, offline MCP handler example that builds and decodes an offer frame from
+  complete fixture inputs, with repository build instructions in `mcp/README.md`.
 - A schema-owned tclk/1 frame field contract, canonical settlement-rail registry and
   intersection-based, order-independent rail matching helpers. Generated decoder fields
   and the normative `SPEC.md` table are checked for drift in CI.

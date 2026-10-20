@@ -84,6 +84,35 @@ const offer = handlers.tclk_make_offer({ /* … */ });
 
 `fetch` is injectable, which is how the test suite covers the transport tools with no network.
 
+### Run a complete offline example
+
+From the repository root, install dependencies and build both workspace packages:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm -r --include-workspace-root build
+node examples/offline-offer.mjs
+```
+
+The install step may need network access. The example itself supplies an empty environment
+and a fetch function that refuses network calls. It builds an offer with a syntax-only DID
+placeholder and fixed fixture timestamps, decodes its line and checks that the frame is
+unchanged. It generates no identity or lock secret and needs no wallet or running venue.
+
+Expected output:
+
+```text
+PASS: offer frame built and decoded unchanged
+Network calls: 0; signing keys supplied: 0
+Offer only: no accept, contract, signature or payment
+```
+
+This checks local frame construction and decoding, not sender authentication, live deadline
+validity or settlement. The placeholder and fixed timestamps are not for posting. See
+[`examples/offline-offer.mjs`](../examples/offline-offer.mjs)
+for the complete inputs; the command uses this checkout's build rather than a separately
+installed package version.
+
 ## Spec
 
 The protocol lives in the repository's design docs; the frame codec, state machine and lock
