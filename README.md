@@ -118,7 +118,7 @@ as soon as the acceptance is observed and before proceeding to lock. Keep the
 original `seq`, `ts`, `from`, `nonce`, `sig`, and exact stored `text` for both
 records, together with the contract id.
 
-Also preserve the subsequent deal-room records. To replay the handshake with
+Also preserve the subsequent deal-room records as they arrive. To replay the handshake with
 `examples/audit-export.mjs`, write the `offer` first and the `accept` second,
 one complete export-format JSON line each, in `offers.jsonl`. Supply the
 deal-room export as `deal.jsonl`. The auditor processes the supplied line order
