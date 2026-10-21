@@ -56,7 +56,7 @@ Bitcoin today. "PTLC" here means the protocol shape, not Bitcoin compatibility.
 | [`src/`](src) (`@flop-labs/tclk`) | The core library: frames, contract ids, hash/point locks, the state machine, the `SettlementRail` interface, A2A/ACP mappings. No network calls. |
 | [`mcp/`](mcp) (`@flop-labs/tclk-mcp`) | An MCP server exposing the protocol as tool calls, for agents whose only outbound path is a tool call. Stateless — see below. |
 | [`examples/live-deal.mjs`](examples/live-deal.mjs) | One complete deal against a real technocore deployment, ending with a third-party audit of it. Runs a realistic content job: `node examples/live-deal.mjs [x\|ig\|tiktok\|youtube]`. |
-| [`examples/audit-export.mjs`](examples/audit-export.mjs) | Offline audit of a finished deal from full JSONL exports: verifies record signatures and attribution, then folds at each venue timestamp. |
+| [`examples/audit-export.mjs`](examples/audit-export.mjs) | Offline audit using a preserved offer/accept pair in export-format JSONL and a deal-room export: verifies record signatures and attribution, then folds at each venue timestamp. |
 
 ## Quickstart
 
@@ -105,6 +105,38 @@ fold authenticates every record, requires `frame.from` to match its signed sende
 that record's timestamp for deadline guards; unsigned or malformed records get a verdict
 and cannot advance state. Technocore's timestamp and sequence are venue metadata rather than
 fields in the sender's signature, so an offline audit still trusts its export file for them.
+
+### Preserving a deal for offline verification
+
+The public `tclk-offers` room is retention-bounded. Under heavy traffic, signed
+`offer` and `accept` records may disappear within minutes. A later export of the
+deal room containing only `lock` and `reveal` records cannot reconstruct a
+missing handshake.
+
+**Preserve the complete signed `offer` and `accept` records at accept time**,
+as soon as the acceptance is observed and before proceeding to lock. Keep the
+original `seq`, `ts`, `from`, `nonce`, `sig`, and exact stored `text` for both
+records, together with the contract id.
+
+Also preserve the subsequent deal-room records as they arrive. To replay the handshake with
+`examples/audit-export.mjs`, write the `offer` first and the `accept` second,
+one complete export-format JSON line each, in `offers.jsonl`. Supply the
+deal-room export as `deal.jsonl`. The auditor processes the supplied line order
+and does not reorder the handshake by `seq`. Keep each record's `seq`, `ts`,
+`from`, `nonce`, `sig` and exact `text`.
+The auditor takes a record's room from the file it is supplied in
+(`offers.jsonl` → `tclk-offers`, `deal.jsonl` → the deal room) and verifies
+the signature against that room. A record in the wrong file therefore
+fails signature verification.
+
+The auditor can verify signatures, sender and room bindings, contract linkage,
+and protocol state transitions. It cannot independently establish that the
+supplied records were published on the venue, that the archived history is
+complete, that venue-provided timestamps or ordering are trustworthy, or that
+settlement occurred.
+
+An unavailable handshake means the contract cannot be fully verified from
+the available records. It does not establish that the contract failed.
 
 Exact frame shapes and field rules: [`SPEC.md` §3](SPEC.md#3-wire-format).
 
