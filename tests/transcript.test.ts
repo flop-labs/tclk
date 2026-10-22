@@ -235,3 +235,185 @@ describe("trusted transcript records", () => {
     )).toEqual({ offer: offerRecord, accept: acceptRecord });
   });
 });
+
+describe("strict deadline folding (#96)", () => {
+  function revealDeal() {
+    const { lock, offer, accept } = deal();
+    const lockFrame = {
+      type: "lock" as const,
+      from: payer.did,
+      contract: accept.contract,
+      rail: "flop-htlc",
+      ref: "escrow-96",
+    };
+    const reveal = {
+      type: "reveal" as const,
+      from: payee.did,
+      contract: accept.contract,
+      secret: lock.preimage,
+    };
+    return [
+      record(BOARD, 1, NOW - 1, payer, encodeFrame(offer)),
+      record(BOARD, 2, NOW, payee, encodeFrame(accept)),
+      record(dealRoom(accept.contract), 1, NOW + 1, payer, encodeFrame(lockFrame)),
+      record(dealRoom(accept.contract), 2, NOW + 2, payee, encodeFrame(reveal)),
+    ];
+  }
+
+  it("plain fold still trusts venue time and reaches claimed", () => {
+    const folded = foldTranscript(revealDeal());
+    expect(folded.state?.status).toBe("claimed");
+    expect(folded.steps.map((step) => step.ok)).toEqual([true, true, true, true]);
+  });
+
+  it("strict fold refuses to certify a claim that rests on the unsigned timestamp", () => {
+    const folded = foldTranscript(revealDeal(), { strictDeadlines: true });
+    expect(folded.steps.slice(0, 3).map((step) => step.ok)).toEqual([true, true, true]);
+    expect(folded.steps[3]).toMatchObject({
+      type: "reveal",
+      ok: false,
+      reason: expect.stringMatching(/unsigned venue timestamp/),
+    });
+    expect(folded.state?.status).toBe("locked");
+  });
+
+  it("the reveal signature still verifies after its timestamp is moved past the refund window", () => {
+    const records = revealDeal();
+    const forged = { ...records[3], timestampMs: records[3].timestampMs + 7_200_000 };
+    // Only timestampMs changed. The signature covers room|nonce|line, so the record still
+    // authenticates, and the plain fold now rejects the reveal and holds at locked. Same
+    // signed bytes, a different terminal outcome, decided entirely by venue time. That is #96.
+    const plain = foldTranscript([records[0], records[1], records[2], forged]);
+    expect(plain.steps[3]).toMatchObject({ ok: false, reason: expect.stringMatching(/refund window/) });
+    expect(plain.state?.status).toBe("locked");
+  });
+
+  it("strict fold refuses a refund verdict too", () => {
+    const { offer, accept } = deal(NOW + 7_800_000);
+    const lockFrame = {
+      type: "lock" as const,
+      from: payer.did,
+      contract: accept.contract,
+      rail: "flop-htlc",
+      ref: "escrow-96r",
+    };
+    const refund = { type: "refund" as const, from: payer.did, contract: accept.contract };
+    const records = [
+      record(BOARD, 1, NOW - 1, payer, encodeFrame(offer)),
+      record(BOARD, 2, NOW, payee, encodeFrame(accept)),
+      record(dealRoom(accept.contract), 1, NOW + 1, payer, encodeFrame(lockFrame)),
+      record(dealRoom(accept.contract), 2, offer.refundAfterMs, payer, encodeFrame(refund)),
+    ];
+    expect(foldTranscript(records).state?.status).toBe("refunded");
+    const strict = foldTranscript(records, { strictDeadlines: true });
+    expect(strict.steps[3]).toMatchObject({
+      type: "refund",
+      ok: false,
+      reason: expect.stringMatching(/unsigned venue timestamp/),
+    });
+    expect(strict.state?.status).toBe("locked");
+  });
+
+  it("does not guard the accept or lock deadlines, which still read unsigned time", () => {
+    // strictDeadlines refuses only the terminal reveal and refund verdicts. accept and lock
+    // also gate on the record's unsigned timestampMs (offer.expiresMs and offer.refundAfterMs
+    // in src/machine.ts), so editing one of those flips the fold before it ever reaches locked
+    // and strict mode stays silent. This pins that remaining trust boundary.
+    const { lock, offer, accept } = deal();
+    const lockFrame = {
+      type: "lock" as const,
+      from: payer.did,
+      contract: accept.contract,
+      rail: "flop-htlc",
+      ref: "escrow-96l",
+    };
+    const reveal = {
+      type: "reveal" as const,
+      from: payee.did,
+      contract: accept.contract,
+      secret: lock.preimage,
+    };
+    const honest = [
+      record(BOARD, 1, NOW - 1, payer, encodeFrame(offer)),
+      record(BOARD, 2, NOW, payee, encodeFrame(accept)),
+      record(dealRoom(accept.contract), 1, NOW + 1, payer, encodeFrame(lockFrame)),
+      record(dealRoom(accept.contract), 2, NOW + 2, payee, encodeFrame(reveal)),
+    ];
+    // With honest timestamps strict mode holds at locked, the PR's safe stop.
+    const honestStrict = foldTranscript(honest, { strictDeadlines: true });
+    expect(honestStrict.state?.status).toBe("locked");
+
+    // Move only the lock's unsigned timestamp to the refund boundary. The signature covers
+    // room|nonce|line, so the record still authenticates.
+    const forged = [...honest];
+    forged[2] = { ...honest[2], timestampMs: offer.refundAfterMs };
+    const strict = foldTranscript(forged, { strictDeadlines: true });
+
+    // The lock is refused by the ordinary machine guard, not the strict #96 guard, so the
+    // fold stalls at accepted. The outcome diverged before locked, driven by unsigned time,
+    // and no step carries the #96 refusal reason.
+    expect(strict.steps[2]).toMatchObject({
+      type: "lock",
+      ok: false,
+      reason: "refund window is already open",
+    });
+    expect(strict.state?.status).toBe("accepted");
+    expect(honestStrict.state?.status).not.toBe(strict.state?.status);
+    expect(strict.steps.some((step) => /unsigned venue timestamp/.test(step.reason ?? ""))).toBe(false);
+
+    // strictDeadlines changed nothing on this path: the plain fold of the same forged records
+    // stalls at accepted too. The flag never reaches the accept or lock guards.
+    expect(foldTranscript(forged).state?.status).toBe("accepted");
+  });
+
+  it("terminal state alone never upgrades evidence: terminal is rail-required, all else coordination-only", () => {
+    // The fold has no rail-authoritative input, so a terminal verdict rests on the signed
+    // transcript plus unsigned venue time. terminalEvidence must report every terminal
+    // status as rail-required, never as anything a consumer could read as settled, and a
+    // non-terminal or empty fold as coordination-only. This is the trust boundary the result
+    // carries alongside state.status, so a caller reads it rather than the status.
+
+    // claimed, reached only through venue time, still classifies rail-required.
+    const claimed = foldTranscript(revealDeal());
+    expect(claimed.state?.status).toBe("claimed");
+    expect(claimed.terminalEvidence).toBe("rail-required");
+
+    // refunded, the other time-driven terminal, is rail-required too.
+    const { offer, accept } = deal(NOW + 7_800_000);
+    const lockFrame = {
+      type: "lock" as const,
+      from: payer.did,
+      contract: accept.contract,
+      rail: "flop-htlc",
+      ref: "escrow-96e",
+    };
+    const refund = { type: "refund" as const, from: payer.did, contract: accept.contract };
+    const refunded = foldTranscript([
+      record(BOARD, 1, NOW - 1, payer, encodeFrame(offer)),
+      record(BOARD, 2, NOW, payee, encodeFrame(accept)),
+      record(dealRoom(accept.contract), 1, NOW + 1, payer, encodeFrame(lockFrame)),
+      record(dealRoom(accept.contract), 2, offer.refundAfterMs, payer, encodeFrame(refund)),
+    ]);
+    expect(refunded.state?.status).toBe("refunded");
+    expect(refunded.terminalEvidence).toBe("rail-required");
+
+    // cancelled is terminal, so rail-required, even though it never turned on a deadline.
+    const cancel = { type: "cancel" as const, from: payee.did, contract: accept.contract };
+    const cancelled = foldTranscript([
+      record(BOARD, 1, NOW - 1, payer, encodeFrame(offer)),
+      record(BOARD, 2, NOW, payee, encodeFrame(accept)),
+      record(dealRoom(accept.contract), 1, NOW + 1, payee, encodeFrame(cancel)),
+    ]);
+    expect(cancelled.state?.status).toBe("cancelled");
+    expect(cancelled.terminalEvidence).toBe("rail-required");
+
+    // A clean strict fold that safely holds at locked is non-terminal, so coordination-only.
+    // The clean strict fold is not settlement evidence, which is the boundary that matters.
+    const heldAtLocked = foldTranscript(revealDeal(), { strictDeadlines: true });
+    expect(heldAtLocked.state?.status).toBe("locked");
+    expect(heldAtLocked.terminalEvidence).toBe("coordination-only");
+
+    // An empty fold has no state at all, coordination-only and never rail-required.
+    expect(foldTranscript([]).terminalEvidence).toBe("coordination-only");
+  });
+});
