@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { ApiPromise, WsProvider } from "@polkadot/api";
+import { bytesToHex } from "@noble/hashes/utils.js";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import type { Option, Struct } from "@polkadot/types";
@@ -118,7 +119,7 @@ export class PolkadotFlopChain implements FlopChain {
     if (signer) {
       if (signer.type !== "ed25519" || signer.publicKey.length !== 32)
         throw new Error("flop: signer must use the party's Ed25519 DID key");
-      this.account = `0x${Buffer.from(signer.publicKey).toString("hex")}`;
+      this.account = `0x${bytesToHex(signer.publicKey)}`;
     }
     if (
       !api.tx.hasStation?.openEscrow ||

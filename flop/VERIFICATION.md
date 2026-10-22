@@ -15,11 +15,15 @@ pnpm check:protocol
 git diff --check
 ```
 
-240 tests: 104 protocol, 40 MCP, 33 hosted worker, 63 FlopRail. Golden vectors
+249 tests: 104 protocol, 40 MCP, 33 hosted worker, 72 FlopRail. Golden vectors
 and the generated protocol schema remain unchanged. The compiled package was
 also imported through its public package entry point.
 
 ## Live devnet
+
+These receipts were produced for the initial implementation at `1fe229e`.
+The subsequent review fixes were validated with the workspace gates above;
+no additional live transaction was required for the pre-submission checks.
 
 Ran `node flop/examples/devnet.mjs` with fresh local Ed25519 wallets funded
 with faucet test tokens. No mainnet transaction or package publication occurred.
@@ -51,6 +55,18 @@ The live run exposed the runtime's `{and:null}` SCALE JSON encoding; its exact
 shape is now a regression fixture. The demo's claim window also includes time
 for real network finality and independent payee verification.
 
+## Review follow-up
+
+Nine additional regression tests cover journal delays past the local or chain
+claim window, exhausted and last-permitted anchor allowances, chain reset,
+post-journal RPC failure and safe retry, invalid recovery references, claiming
+a pending reference, and connection-timeout cleanup. Rejected preflight attempts
+submit no escrow and release the local duplicate guard for a fresh attempt.
+
+The runtime uses the same public-key bytes via `bytesToHex`, recovery documentation
+explains late inclusion of immortal extrinsics, and the new package and its block
+deadline limitations are recorded under `[Unreleased]` in the tclk changelog.
+
 ## Design evidence and limits
 
 The binding targets FLOP typed escrow at upstream commit
@@ -65,4 +81,3 @@ See [the design and recovery instructions](README.md).
 
 All implementation changes are isolated in the tclk worktree. The original tclk
 checkout's local edits and the technocore-chat checkout were preserved.
-CHANGELOG.md is unchanged under the supplied repository policy.

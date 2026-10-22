@@ -125,12 +125,19 @@ state for the contract's lifetime (use an archive endpoint for long-lived locks)
 
 ## Recovery
 
-Transactions are never automatically retried. An RPC timeout can mean a signed
-transaction was included even though its receipt was lost. `FlopTransactionError`
+Transactions are never automatically retried. The transport currently signs
+immortal extrinsics: an uncertain transaction can remain eligible for inclusion
+much later, even after the client stops waiting. A manual replacement using the
+same account nonce can usurp it, so a timeout alone does not establish either
+execution or cancellation. An RPC timeout can also mean a signed transaction
+was included even though its receipt was lost. `FlopTransactionError`
 contains `txHash`; inspect its finalized events before resubmitting. A wallet
 should pass `persistPending: async (pendingRef) => { /* durable wallet journal */ }`
 to `connectFlopRail`. This hook completes before signing/sending; if it fails,
-no transaction is submitted. The library itself does not persist state.
+no transaction is submitted. After the hook finishes, the rail rechecks the
+claim window and the anchor against the latest finalized snapshot. A closed
+claim window or exhausted inclusion allowance aborts before submission and
+allows the wallet to prepare a fresh attempt. The library itself does not persist state.
 `FlopSubmissionError` carries that same `pendingRef` and, when available, `txHash`.
 Use `recoverFlopReference(pendingRef, escrowIdFromFinalizedEvent)` to reconstruct
 the reference after a lost receipt, then verify it against the chain. Do not

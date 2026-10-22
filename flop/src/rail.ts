@@ -312,6 +312,17 @@ export class FlopRail implements SettlementRail {
     const pendingRef = encodeRef(ref);
     try {
       await this.persistPending?.(pendingRef);
+      // Journaling can outlive both the coordination window and the anchor's
+      // inclusion allowance. Nothing has been signed yet, so reject safely here.
+      const current = await this.snapshot();
+      if (Math.max(this.now(), current.timestampMs) >= terms.claimByMs)
+        throw new Error("flop: claim window has closed");
+      if (
+        current.genesis !== anchor.genesis ||
+        current.number < anchor.number ||
+        current.number - anchor.number >= ref.refundMarginBlocks
+      )
+        throw new Error("flop: anchor became stale before submission");
     } catch (error) {
       this.submitted.delete(terms.contract);
       throw error;

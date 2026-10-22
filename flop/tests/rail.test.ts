@@ -383,3 +383,151 @@ describe("wallet recovery and duplicate submissions", () => {
     expect(chain.refunds).toBe(1);
   });
 });
+
+describe("post-journal admission", () => {
+  it("refuses to send when the local clock reaches claimByMs during journaling", async () => {
+    const chain = new Chain();
+    let now = T0;
+    const t = terms();
+    const rail = new FlopRail(
+      chain,
+      {},
+      () => now,
+      async () => {
+        now = t.claimByMs;
+      },
+    );
+    await expect(rail.lock(t)).rejects.toThrow("claim window has closed");
+    expect(chain.opens).toBe(0);
+    expect(chain.held).toBeUndefined();
+  });
+
+  it("also checks the chain clock after journaling", async () => {
+    const chain = new Chain();
+    const rail = new FlopRail(
+      chain,
+      {},
+      () => T0,
+      async () => {
+        chain.tick(30);
+      },
+    );
+    await expect(rail.lock(terms())).rejects.toThrow("claim window has closed");
+    expect(chain.opens).toBe(0);
+  });
+
+  it("rejects an exhausted inclusion allowance and permits a freshly anchored retry", async () => {
+    const chain = new Chain();
+    const t = {
+      ...terms(),
+      claimByMs: T0 + 60_000,
+      refundAfterMs: T0 + 90_000,
+    };
+    let delay = true;
+    const rail = new FlopRail(
+      chain,
+      {},
+      () => chain.head.timestampMs,
+      async () => {
+        if (delay) chain.tick(30);
+        delay = false;
+      },
+    );
+    await expect(rail.lock(t)).rejects.toThrow("anchor became stale");
+    expect(chain.opens).toBe(0);
+    const ref = await rail.lock(t);
+    expect(chain.opens).toBe(1);
+    expect(await rail.verifyLock(t, ref)).toBe(true);
+  });
+
+  it("accepts inclusion on the last permitted block", async () => {
+    const chain = new Chain();
+    const t = {
+      ...terms(),
+      claimByMs: T0 + 60_000,
+      refundAfterMs: T0 + 90_000,
+    };
+    const rail = new FlopRail(
+      chain,
+      {},
+      () => chain.head.timestampMs,
+      async () => {
+        chain.tick(29);
+      },
+    );
+    const ref = await rail.lock(t);
+    expect(chain.opens).toBe(1);
+    expect(await rail.verifyLock(t, ref)).toBe(true);
+  });
+
+  it("aborts without sending on a chain reset during journaling", async () => {
+    const chain = new Chain();
+    const rail = new FlopRail(
+      chain,
+      {},
+      () => T0,
+      async () => {
+        chain.head.genesis = h(7);
+      },
+    );
+    await expect(rail.lock(terms())).rejects.toThrow("anchor became stale");
+    expect(chain.opens).toBe(0);
+  });
+
+  it("aborts on an unavailable post-journal snapshot and permits a safe retry", async () => {
+    const chain = new Chain();
+    let fail = true;
+    const rail = new FlopRail(
+      chain,
+      {},
+      () => T0,
+      async () => {
+        chain.fail = fail;
+      },
+    );
+    await expect(rail.lock(terms())).rejects.toThrow("RPC unavailable");
+    expect(chain.opens).toBe(0);
+    fail = false;
+    chain.fail = false;
+    await rail.lock(terms());
+    expect(chain.opens).toBe(1);
+  });
+});
+
+describe("pending reference validation", () => {
+  it("rejects a completed reference and malformed escrow IDs during recovery", async () => {
+    const { recoverFlopReference } = await import("../src/rail.js");
+    const chain = new Chain();
+    let pending = "";
+    const rail = new FlopRail(
+      chain,
+      {},
+      () => T0,
+      async (ref) => {
+        pending = ref;
+      },
+    );
+    const completed = await rail.lock(terms());
+    expect(() => recoverFlopReference(completed, h(77))).toThrow(
+      "pending reference",
+    );
+    for (const id of ["", "0x12", "not-a-hash"])
+      expect(() => recoverFlopReference(pending, id)).toThrow("escrow id");
+  });
+
+  it("never submits a claim against a zero-escrow pending reference", async () => {
+    const chain = new Chain();
+    let pending = "";
+    const rail = new FlopRail(
+      chain,
+      {},
+      () => T0,
+      async (ref) => {
+        pending = ref;
+      },
+    );
+    await rail.lock(terms());
+    await expect(rail.claim(pending, secret)).rejects.toThrow("agreed terms");
+    expect(chain.claims).toBe(0);
+  });
+});
