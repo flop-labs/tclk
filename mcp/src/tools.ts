@@ -368,7 +368,10 @@ export function createHandlers(options: HandlerOptions = {}) {
     async tclk_post_frame(input: PostFrameInput) {
       // A frame that does not decode must never reach the room: rooms are the shared
       // transcript, and a malformed line there is a permanent record no one can fold.
-      decodeFrame(input.line);
+      const frame = decodeFrame(input.line);
+      if (encodeFrame(frame) !== input.line) {
+        fail("frame line is not canonical; use encodeFrame(frame)");
+      }
       const text = sweep(input.line);
       if (text !== input.line) fail("frame line does not survive the single-line sweep");
 
