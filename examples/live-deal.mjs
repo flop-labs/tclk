@@ -329,9 +329,13 @@ const dealLog = await readRoom(room);
 const handshake = findContractHandshake(board, accept.contract);
 if (handshake === null) throw new Error("could not find the deal on the full board export");
 
-// Fold complete records, not parallel lines/timestamps/senders. Signature, attribution
-// and the record's own venue time are checked before a frame can advance the state.
-const folded = foldTranscript([handshake.offer, handshake.accept, ...dealLog]);
+// This example is reading the live venue it just used and explicitly accepts that venue's
+// clock for replay. That is a caller-owned trust assertion; the record signature still does
+// not authenticate timestampMs, and generic/offline folds remain fail-closed by default.
+const folded = foldTranscript(
+  [handshake.offer, handshake.accept, ...dealLog],
+  { venueTimeTrust: "trusted_by_caller" },
+);
 if (folded.state === null) throw new Error("the authenticated transcript contains no offer");
 const audit = folded.state;
 const applied = folded.steps.filter((step) => step.ok).length;

@@ -18,6 +18,7 @@ import {
 
 const NOW = 1_735_000_000_000;
 const BOARD = "tclk-offers";
+const TRUST_VENUE_TIME = { venueTimeTrust: "trusted_by_caller" as const };
 
 function bytes(hex: string): Uint8Array {
   return Uint8Array.from(hex.match(/../g)!.map((part) => Number.parseInt(part, 16)));
@@ -81,7 +82,7 @@ function deal(expiresMs = NOW + 60_000) {
 }
 
 describe("trusted transcript records", () => {
-  it("authenticates and folds a complete deal at each record's own timestamp", () => {
+  it("authenticates and folds a complete deal when the caller explicitly trusts venue time", () => {
     const { lock, offer, accept } = deal();
     const lockFrame = {
       type: "lock" as const,
@@ -101,10 +102,58 @@ describe("trusted transcript records", () => {
       record(BOARD, 2, NOW, payee, encodeFrame(accept)),
       record(dealRoom(accept.contract), 1, NOW + 1, payer, encodeFrame(lockFrame)),
       record(dealRoom(accept.contract), 2, NOW + 2, payee, encodeFrame(reveal)),
-    ]);
+    ], TRUST_VENUE_TIME);
 
     expect(folded.steps.map((step) => step.ok)).toEqual([true, true, true, true]);
     expect(folded.state?.status).toBe("claimed");
+  });
+
+  it("fails closed when a deadline-dependent fold would rely on unsigned venue time", () => {
+    const { lock, offer, accept } = deal(NOW + 7_800_000);
+    const lockFrame = {
+      type: "lock" as const,
+      from: payer.did,
+      contract: accept.contract,
+      rail: "flop-htlc",
+      ref: "escrow-96",
+    };
+    const reveal = {
+      type: "reveal" as const,
+      from: payee.did,
+      contract: accept.contract,
+      secret: lock.preimage,
+    };
+    const refund = { type: "refund" as const, from: payer.did, contract: accept.contract };
+    const honest = [
+      record(BOARD, 1, NOW - 1, payer, encodeFrame(offer)),
+      record(BOARD, 2, NOW, payee, encodeFrame(accept)),
+      record(dealRoom(accept.contract), 1, NOW + 1, payer, encodeFrame(lockFrame)),
+      record(dealRoom(accept.contract), 2, NOW + 1_800_000, payee, encodeFrame(reveal)),
+      record(dealRoom(accept.contract), 3, offer.refundAfterMs + 5_000, payer, encodeFrame(refund)),
+    ];
+    const tampered = honest.map((item) => ({ ...item }));
+    tampered[3] = { ...tampered[3], timestampMs: offer.refundAfterMs + 10_000 };
+
+    const honestFold = foldTranscript(honest);
+    const tamperedFold = foldTranscript(tampered);
+
+    expect(honestFold.state?.status).toBe("proposed");
+    expect(tamperedFold.state?.status).toBe("proposed");
+    expect(honestFold.steps[1]).toMatchObject({
+      type: "accept",
+      ok: false,
+      reason: expect.stringMatching(/requires trusted time/),
+    });
+    expect(tamperedFold.steps[1]).toMatchObject({
+      type: "accept",
+      ok: false,
+      reason: expect.stringMatching(/requires trusted time/),
+    });
+
+    const trustedHonest = foldTranscript(honest, TRUST_VENUE_TIME);
+    const trustedTampered = foldTranscript(tampered, TRUST_VENUE_TIME);
+    expect(trustedHonest.state?.status).toBe("claimed");
+    expect(trustedTampered.state?.status).toBe("refunded");
   });
 
   it("rejects a validly signed record when the frame claims a different sender", () => {
@@ -120,7 +169,7 @@ describe("trusted transcript records", () => {
       record(BOARD, 1, NOW - 1, payer, encodeFrame(offer)),
       record(BOARD, 2, NOW, payee, encodeFrame(accept)),
       record(dealRoom(accept.contract), 1, NOW + 1, stranger, encodeFrame(forgedLock)),
-    ]);
+    ], TRUST_VENUE_TIME);
 
     expect(folded.state?.status).toBe("accepted");
     expect(folded.steps[2]).toMatchObject({
@@ -142,7 +191,7 @@ describe("trusted transcript records", () => {
       record(BOARD, 1, NOW - 1, payer, encodeFrame(offer)),
       record(BOARD, 2, NOW, payee, encodeFrame(accept)),
       record("lobby", 3, NOW + 1, payer, encodeFrame(lockFrame)),
-    ]);
+    ], TRUST_VENUE_TIME);
 
     expect(folded.state?.status).toBe("accepted");
     expect(folded.steps[2]).toMatchObject({
@@ -168,7 +217,7 @@ describe("trusted transcript records", () => {
     expect(folded.steps[2].reason).toBe("record signature does not verify");
   });
 
-  it("judges a refund at the refund record's timestamp", () => {
+  it("judges a refund at the refund record's timestamp when venue time is explicitly trusted", () => {
     const { offer, accept } = deal(NOW + 7_800_000);
     const lockFrame = {
       type: "lock" as const,
@@ -183,7 +232,7 @@ describe("trusted transcript records", () => {
       record(BOARD, 2, NOW, payee, encodeFrame(accept)),
       record(dealRoom(accept.contract), 1, NOW + 1, payer, encodeFrame(lockFrame)),
       record(dealRoom(accept.contract), 2, offer.refundAfterMs, payer, encodeFrame(refund)),
-    ]);
+    ], TRUST_VENUE_TIME);
 
     expect(folded.state?.status).toBe("refunded");
     expect(folded.steps.map((step) => step.ok)).toEqual([true, true, true, true]);

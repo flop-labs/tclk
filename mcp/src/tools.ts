@@ -35,6 +35,7 @@ import {
   type PresigRef,
   type TclkFrame,
   type TranscriptRecord,
+  type VenueTimeTrust,
 } from "@flop-labs/tclk";
 
 import { canonicalMessage, loadSigner, nextNonce, sweep, type Signer } from "./signing.js";
@@ -253,11 +254,16 @@ export function createHandlers(options: HandlerOptions = {}) {
 
     /**
      * Fold complete signed records, never positionally related arrays. The core verifies
-     * each record signature and sender binding, then applies its frame at that record's
-     * venue timestamp. Every record gets a verdict and invalid input changes no state.
+     * each record signature and sender binding. Venue time is unsigned metadata, so
+     * deadline-dependent transitions fail closed unless the caller explicitly declares
+     * that timestamp source trusted.
      */
-    tclk_apply_transcript(input: { records: TranscriptRecord[] }) {
-      const folded = foldTranscript(input.records);
+    tclk_apply_transcript(input: {
+      records: TranscriptRecord[];
+      venueTimeTrust?: VenueTimeTrust;
+    }) {
+      const venueTimeTrust = input.venueTimeTrust ?? "untrusted";
+      const folded = foldTranscript(input.records, { venueTimeTrust });
       if (folded.state === null) {
         const offerFailure = folded.steps.find((step) => step.type === "offer" && !step.ok);
         fail(
@@ -281,6 +287,7 @@ export function createHandlers(options: HandlerOptions = {}) {
         statement: open.statement ?? null,
         rail: open.rail ?? null,
         railRef: open.railRef ?? null,
+        venueTimeTrust,
         // The revealed secret is deliberately NOT echoed: it is in the transcript the
         // caller already holds, and this server never republishes secret material.
         secretRevealed: open.secret !== undefined,

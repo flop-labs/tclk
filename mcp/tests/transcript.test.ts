@@ -17,6 +17,7 @@ import {
 const h = createHandlers({ env: {} });
 const payer = signerFromSeed(hexToBytes(PAYER_SEED));
 const payee = signerFromSeed(hexToBytes(PAYEE_SEED));
+const TRUSTED_VENUE_TIME = { venueTimeTrust: "trusted_by_caller" as const };
 
 function records(lines: string[], timestampMs: number | number[]): TranscriptRecord[] {
   return lines.map((line, index) => {
@@ -50,8 +51,24 @@ function openDeal(offerFields = HASH_OFFER) {
   return { offer, accept };
 }
 
-describe("happy path", () => {
-  it("folds offer → accept → lock → reveal → receipt to claimed", () => {
+describe("venue-time trust", () => {
+  it("fails closed by default before an unsigned timestamp can decide a deadline transition", () => {
+    const { offer, accept } = openDeal();
+    const result = h.tclk_apply_transcript({
+      records: records([offer.line, accept.line], [NOW - 1, NOW]),
+    });
+
+    expect(result.status).toBe("proposed");
+    expect(result.venueTimeTrust).toBe("untrusted");
+    expect(result.steps[0]).toMatchObject({ ok: true, type: "offer" });
+    expect(result.steps[1]).toMatchObject({
+      ok: false,
+      type: "accept",
+      reason: expect.stringMatching(/requires trusted time/),
+    });
+  });
+
+  it("allows historical venue-timestamp replay only after explicit caller trust", () => {
     const { offer, accept } = openDeal();
     const lock = h.tclk_make_lock({
       from: PAYER_DID,
@@ -75,8 +92,10 @@ describe("happy path", () => {
 
     const result = h.tclk_apply_transcript({
       records: records([offer.line, accept.line, lock.line, reveal.line, receipt.line], NOW),
+      ...TRUSTED_VENUE_TIME,
     });
 
+    expect(result.venueTimeTrust).toBe("trusted_by_caller");
     expect(result.steps.map((s) => s.ok)).toEqual([true, true, true, true, true]);
     expect(result.status).toBe("claimed");
     expect(result.contract).toBe(accept.contract);
@@ -88,16 +107,13 @@ describe("happy path", () => {
     });
     expect(result.rail).toBe("flop-htlc");
     expect(result.railRef).toBe("escrow-42");
-
-    // The revealed secret is in the transcript the caller already holds; this server
-    // reports only that one exists.
     expect(result.secretRevealed).toBe(true);
     expect(JSON.stringify(result)).not.toContain(accept.secret.slice(2));
   });
 });
 
 describe("refund path", () => {
-  it("folds offer → accept → lock → refund to refunded once the window is open", () => {
+  it("folds to refunded only when the caller explicitly trusts venue time", () => {
     const { offer, accept } = openDeal();
     const lock = h.tclk_make_lock({
       from: PAYER_DID,
@@ -117,18 +133,18 @@ describe("refund path", () => {
         [offer.line, accept.line, lock.line, refund.line],
         [NOW - 1, NOW, NOW + 1, HASH_OFFER.refundAfterMs],
       ),
+      ...TRUSTED_VENUE_TIME,
     });
     expect(open.steps.map((s) => s.ok)).toEqual([true, true, true, true]);
     expect(open.status).toBe("refunded");
     expect(open.secretRevealed).toBe(false);
 
-    // With only the refund record moved one millisecond before the boundary, the lock
-    // remains valid but the refund is refused.
     const early = h.tclk_apply_transcript({
       records: records(
         [offer.line, accept.line, lock.line, refund.line],
         [NOW - 1, NOW, NOW + 1, HASH_OFFER.refundAfterMs - 1],
       ),
+      ...TRUSTED_VENUE_TIME,
     });
     expect(early.status).toBe("locked");
     expect(early.steps[3]).toMatchObject({ ok: false, reason: "refund window not open yet" });
@@ -156,13 +172,13 @@ describe("fail-closed folding", () => {
         ],
         NOW,
       ),
+      ...TRUSTED_VENUE_TIME,
     });
 
     expect(result.steps[0]).toMatchObject({ ok: false });
     expect(result.steps[1]).toMatchObject({ ok: true, type: "offer" });
     expect(result.steps[2]).toMatchObject({ ok: false });
     expect(result.steps[3]).toMatchObject({ ok: true, type: "accept" });
-    // Never locked, so the reveal cannot land — and the payer is not the payee anyway.
     expect(result.steps[4]).toMatchObject({ ok: false, reason: "reveal in status accepted" });
     expect(result.status).toBe("accepted");
     expect(result.secretRevealed).toBe(false);

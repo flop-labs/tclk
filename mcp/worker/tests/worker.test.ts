@@ -162,7 +162,7 @@ describe("tools/call round trip", () => {
     expect(decoded.value.frame.from).toBe(PAYER_DID);
   });
 
-  it("mints a secret in accept_offer and returns it to the caller once", async () => {
+  it("mints a secret in accept_offer and keeps MCP transcript folding fail-closed on unsigned time", async () => {
     const offer = (await callTool("tclk_make_offer", HASH_OFFER)).value.line;
     const accepted = await callTool("tclk_accept_offer", {
       offer,
@@ -202,7 +202,13 @@ describe("tools/call round trip", () => {
         },
       ],
     });
-    expect(folded.value.status).toBe("accepted");
+    expect(folded.value.status).toBe("proposed");
+    expect(folded.value.venueTimeTrust).toBe("untrusted");
+    expect(folded.value.steps[1]).toMatchObject({
+      ok: false,
+      type: "accept",
+      reason: expect.stringMatching(/requires trusted time/),
+    });
     expect(folded.value.secretRevealed).toBe(false);
     expect(folded.text).not.toContain(accepted.value.secret);
   });
