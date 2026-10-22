@@ -43,11 +43,24 @@ for (const step of folded.steps) {
   console.log(`${verdict} ${step.room}#${step.seq} ${step.type ?? "record"}${step.reason ? ` — ${step.reason}` : ""}`);
 }
 
+if (folded.warnings?.length) {
+  console.error("\nwarnings (timestamps/seq are venue metadata, not signed — see SPEC §2):");
+  for (const w of folded.warnings) console.error(`  WARN: ${w}`);
+  // A gap or reordering can flip claimed↔refunded with no BAD verdict (see #93).
+  // A backwards timestamp can flip a deadline with all signatures valid.
+  const fatal = folded.warnings.some((w) => w.includes("gap detected") || w.includes("seq not strictly increasing") || w.includes("timestamp goes backwards"));
+  if (fatal) {
+    console.error("\nevidence → INCOMPLETE: transcript is not per-room contiguous/monotonic — a signed row is missing or reordered. Refusing to treat fold as audit proof");
+    process.exit(1);
+  }
+}
+
 if (folded.state === null) {
   console.error("no authenticated contract could be opened");
   process.exit(1);
 }
 
 const terminal = ["claimed", "refunded", "cancelled"].includes(folded.state.status);
-console.log(`\nfold → ${folded.state.status}${terminal ? "" : " (not terminal)"}`);
+console.log(`\nreplay → ${folded.state.status}${terminal ? "" : " (not terminal)"}`);
+console.log("evidence → completeness NOT established. A gap is evidence of absence; the absence of a gap is not evidence of presence, because seq/ts are venue metadata outside the signature (room|nonce|line only). Exit 0 means the replay reached a terminal status. It does not mean audited — verify settlement on the rail.");
 process.exit(terminal ? 0 : 1);

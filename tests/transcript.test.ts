@@ -13,6 +13,7 @@ import {
   makeAccept,
   makeOffer,
   parseTranscriptExport,
+  verifyTranscriptRecord,
   type TranscriptRecord,
 } from "../src/index.js";
 
@@ -215,6 +216,46 @@ describe("trusted transcript records", () => {
     });
     expect(() => parseTranscriptExport(BOARD, withoutTimezone)).toThrow(/timezone-qualified/);
     expect(() => parseTranscriptExport(BOARD, localeTimestamp)).toThrow(/timezone-qualified/);
+  });
+
+  it("documents that delete-and-renumber leaves no gap (seq is unsigned)", () => {
+    const { lock, offer, accept } = deal(NOW + 7_800_000);
+    const room = dealRoom(accept.contract);
+    const lockFrame = {
+      type: "lock" as const,
+      from: payer.did,
+      contract: accept.contract,
+      rail: "flop-htlc",
+      ref: "escrow-42",
+    };
+    const reveal = {
+      type: "reveal" as const,
+      from: payee.did,
+      contract: accept.contract,
+      secret: lock.preimage,
+    };
+    const refund = { type: "refund" as const, from: payer.did, contract: accept.contract };
+
+    const offerRec = record(BOARD, 1, NOW - 1, payer, encodeFrame(offer));
+    const acceptRec = record(BOARD, 2, NOW, payee, encodeFrame(accept));
+    const lockRec = record(room, 1, NOW + 1, payer, encodeFrame(lockFrame));
+    const revealRec = record(room, 2, NOW + 2, payee, encodeFrame(reveal));
+    const refundRec = record(room, 3, offer.refundAfterMs, payer, encodeFrame(refund));
+
+    const honest = foldTranscript([offerRec, acceptRec, lockRec, revealRec, refundRec]);
+    expect(honest.state?.status).toBe("claimed");
+    expect(honest.warnings.some((w) => w.includes("gap detected"))).toBe(false);
+
+    // Supplier deletes the reveal and renumbers refund 3 -> 2. seq is venue
+    // metadata outside room|nonce|line, so the signature still verifies.
+    const renumberedRefund = { ...refundRec, seq: 2 };
+    const tampered = foldTranscript([offerRec, acceptRec, lockRec, renumberedRefund]);
+    expect(renumberedRefund.nonce).toBe(refundRec.nonce);
+    expect(verifyTranscriptRecord(renumberedRefund).ok).toBe(true);
+    expect(tampered.state?.status).toBe("refunded");
+    expect(tampered.steps.every((s) => s.ok)).toBe(true);
+    expect(tampered.warnings.some((w) => w.includes("gap detected"))).toBe(false);
+    expect(tampered.warnings.some((w) => w.includes("seq not strictly"))).toBe(false);
   });
 
   it("never synthesizes offer-before-accept order while selecting a board handshake", () => {

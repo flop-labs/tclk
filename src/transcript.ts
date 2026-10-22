@@ -52,6 +52,7 @@ export interface TranscriptStep {
 export interface TranscriptFoldResult {
   state: ContractState | null;
   steps: TranscriptStep[];
+  warnings: string[];
 }
 
 export interface ContractHandshake {
@@ -232,10 +233,68 @@ export function findContractHandshake(
  * invalid signatures, forged `from` fields, wrong rooms, malformed lines and bad
  * transitions are rejected without changing state. Deadline guards use that record's
  * venue timestamp.
+ *
+ * `timestampMs` and `seq` are venue metadata, not covered by the sender's Ed25519
+ * signature (`room|nonce|line` only). A file supplier can therefore rewrite `ts`
+ * to move a reveal across `refundAfterMs` and flip `claimed`↔`refunded` with all
+ * signatures still valid. It can also delete a row and renumber the rows it keeps
+ * (or drop the last row) to leave no gap — `seq` is not signed, so a contiguous
+ * `1,2` proves nothing about completeness. A gap is evidence of absence; the
+ * absence of a gap is not evidence of presence. Callers that treat a fold as
+ * settlement proof must verify the rail (`verifyLock`/`claim`/`refund`) — the
+ * transcript is coordination, not settlement. `warnings` surfaces this and any
+ * per-room ordering or monotonicity issues (see also #93).
  */
 export function foldTranscript(records: readonly TranscriptRecord[]): TranscriptFoldResult {
   const steps: TranscriptStep[] = [];
+  const warnings: string[] = [];
   let state: ContractState | null = null;
+
+  // --- ordering / gap / timestamp-monotonicity checks (venue metadata, not signed) ---
+  // These do not refuse to fold — a partial window or post-reap export is legitimate —
+  // but a silent gap or timestamp edit can flip a deadline-dependent outcome (reveal vs
+  // refund) with every signature intact. Surface it instead of failing closed.
+  // Only verified rows count for gaps — an unsigned/BAD row still shows as BAD in
+  // `steps` but must not make a censored verified seq look contiguous (e.g. verified
+  // 1,3 padded with unverified 2 should still be a gap).
+  const byRoom = new Map<string, TranscriptRecord[]>();
+  for (const r of records) {
+    if (!verifyTranscriptRecord(r).ok) continue;
+    const list = byRoom.get(r.room) ?? [];
+    list.push(r);
+    byRoom.set(r.room, list);
+  }
+  for (const [room, list] of byRoom) {
+    for (let i = 1; i < list.length; i += 1) {
+      const prev = list[i - 1]!;
+      const cur = list[i]!;
+      if (cur.seq <= prev.seq) {
+        warnings.push(
+          `room ${room}: seq not strictly increasing at index ${records.indexOf(cur)} (${prev.seq} -> ${cur.seq}) — supplied order is not per-room append order`,
+        );
+      } else if (cur.seq !== prev.seq + 1) {
+        warnings.push(
+          `room ${room}: gap detected (seq ${prev.seq} -> ${cur.seq} at index ${records.indexOf(cur)}) — transcript may be partial; a missing reveal/lock can flip claimed↔refunded with no BAD verdict`,
+        );
+      }
+      if (cur.timestampMs < prev.timestampMs) {
+        warnings.push(
+          `room ${room}: timestamp goes backwards at seq ${cur.seq} (${prev.timestampMs} -> ${cur.timestampMs}) — ts is venue metadata, not signed`,
+        );
+      }
+    }
+  }
+  // Generic trust-boundary warning when any verified deadline-sensitive frame is present.
+  const hasDeadlineFrame = records.some((r) => {
+    if (!verifyTranscriptRecord(r).ok) return false;
+    const f = tryDecodeFrame(r.line);
+    return f !== null && (f.type === "accept" || f.type === "lock" || f.type === "reveal" || f.type === "refund");
+  });
+  if (hasDeadlineFrame) {
+    warnings.push(
+      "timestamps and seq are venue metadata, not covered by the Ed25519 signature (room|nonce|line only); a file supplier can rewrite ts to move a reveal across refundAfterMs and flip claimed↔refunded with all signatures valid — verify settlement on the rail",
+    );
+  }
 
   records.forEach((record, index) => {
     const base = { index, room: record?.room ?? "", seq: record?.seq ?? -1 };
@@ -310,5 +369,5 @@ export function foldTranscript(records: readonly TranscriptRecord[]): Transcript
     steps.push({ ...base, type: frame.type, ok: result.ok, reason: result.reason });
   });
 
-  return { state, steps };
+  return { state, steps, warnings };
 }
