@@ -365,12 +365,35 @@ describe("HTTP and JSON-RPC framing", () => {
     expect(response.status).toBe(404);
   });
 
-  it("415s a body that is not declared JSON", async () => {
+  it("415s a body whose media type is not application/json", async () => {
+    for (const contentType of [
+      "text/plain",
+      "application/jsonp",
+      "text/plain; note=application/json",
+    ]) {
+      const response = await handleRequest(
+        new Request(url, {
+          method: "POST",
+          headers: { "content-type": contentType },
+          body: "{}",
+        }),
+        ENV,
+      );
+      expect(response.status, contentType).toBe(415);
+    }
+  });
+
+  it("accepts application/json case-insensitively and with parameters", async () => {
     const response = await handleRequest(
-      new Request(url, { method: "POST", headers: { "content-type": "text/plain" }, body: "{}" }),
+      new Request(url, {
+        method: "POST",
+        headers: { "content-type": "Application/JSON; charset=utf-8" },
+        body: '{"jsonrpc":"2.0","id":1,"method":"ping"}',
+      }),
       ENV,
     );
-    expect(response.status).toBe(415);
+    expect(response.status).toBe(200);
+    expect((await response.json() as any).result).toEqual({});
   });
 
   it("-32700 on malformed JSON", async () => {
