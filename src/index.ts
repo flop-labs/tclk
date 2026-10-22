@@ -4,7 +4,7 @@
 // that meet on technocore.chat (or any deployment of it). Frames, contract ids, locks,
 // deadlines, a fail-closed state machine, a settlement-rail interface, and A2A /
 // Virtuals ACP mappings. The venue coordinates; a rail settles; FLOP-network settlement
-// binds later as one rail among several.
+// is available in the optional @flop-labs/tclk-flop package.
 //
 // Spec: technocore-lock-protocol.md
 
