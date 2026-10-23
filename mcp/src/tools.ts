@@ -155,10 +155,24 @@ export function createHandlers(options: HandlerOptions = {}) {
 
     /**
      * Mint the lock and accept. The acceptor is the payee-side secret holder, so the
-     * secret is minted here and handed back once — it is not stored anywhere.
+     * secret is minted here and handed back once — it is not stored anywhere. That only
+     * holds when the offer's sender took the payer role, so a payee-opened offer is
+     * refused rather than minted into the wrong party's hands (#12).
      */
     tclk_accept_offer(input: AcceptOfferInput) {
       const offer = asOffer(input.offer);
+      // On `role: "payee"` the state machine makes the acceptor the payer, while only the
+      // payee may reveal. Minting here would hand the secret to the party the reveal guard
+      // refuses, and tclk/1 carries no statement from an offer sender, so the deal would
+      // reach `locked` and stop. Refuse instead of building an unsettleable contract.
+      if (offer.role === "payee") {
+        fail(
+          "this offer was opened by the payee, so accepting it makes you the payer: the " +
+            "secret would be minted on the paying side, which cannot reveal it. tclk/1 has " +
+            "no frame that carries a statement from the offer sender, so the contract could " +
+            "not settle — see flop-labs/tclk#12",
+        );
+      }
       const acceptorKey =
         input.paymentKey ?? (offer.lock === "point" ? (paymentPublicKey() ?? undefined) : undefined);
       if (offer.lock === "point" && acceptorKey === undefined) {

@@ -68,6 +68,17 @@ describe("offer and accept", () => {
     );
   });
 
+  it("refuses to mint for a payee-opened offer, whose acceptor is the payer", () => {
+    const offer = h.tclk_make_offer({ ...HASH_OFFER, from: PAYEE_DID, role: "payee" });
+    expect(offer.frame).toMatchObject({ role: "payee", from: PAYEE_DID });
+    expect(() => h.tclk_accept_offer({ offer: offer.line, from: PAYER_DID })).toThrow(
+      /opened by the payee, so accepting it makes you the payer/,
+    );
+    // Nothing partial escapes: a payer-opened offer of the same shape still mints.
+    expect(h.tclk_accept_offer({ offer: h.tclk_make_offer(HASH_OFFER).line, from: PAYEE_DID }).secret)
+      .toMatch(/^0x[0-9a-f]{64}$/);
+  });
+
   it("refuses to accept a line that is not an offer", () => {
     const cancel = h.tclk_make_cancel({ from: PAYER_DID, contract: `0x${"ab".repeat(32)}` });
     expect(() => h.tclk_accept_offer({ offer: cancel.line, from: PAYEE_DID })).toThrow(
