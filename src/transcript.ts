@@ -8,7 +8,8 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { base58, base64urlnopad } from "@scure/base";
 
-import { decodeFrame, tryDecodeFrame } from "./frames.js";
+import { contractId, decodeFrame, isValidStatement, tryDecodeFrame } from "./frames.js";
+import type { OfferFrame } from "./frames.js";
 import { applyFrame, openContract, type ContractState } from "./machine.js";
 import { dealRoom, OFFER_ROOM } from "./technocore.js";
 
@@ -206,19 +207,42 @@ export function findContractHandshake(
 ): ContractHandshake | null {
   // Reuse the public derivation's strict contract-id validation.
   dealRoom(contract);
-  const offers = new Map<string, TranscriptRecord>();
+  const offers = new Map<string, { record: TranscriptRecord; frame: OfferFrame }>();
   let acceptPrecededOffer = false;
 
   for (const record of records) {
     const frame = authenticatedFrame(record);
     if (frame?.type === "offer") {
-      if (!offers.has(frame.id)) offers.set(frame.id, record);
+      if (!offers.has(frame.id)) offers.set(frame.id, { record, frame });
       continue;
     }
     if (frame?.type !== "accept" || frame.contract !== contract) continue;
     const offer = offers.get(frame.ref);
-    if (offer !== undefined) return { offer, accept: record };
-    acceptPrecededOffer = true;
+    if (offer === undefined) {
+      acceptPrecededOffer = true;
+      continue;
+    }
+    // The contract id binds the full offer and the acceptance core (SPEC §3.2).
+    // A signature alone does not make an accept an agreement: without this check an
+    // attacker can name any contract id over a victim's public offer and this helper
+    // would return it as the authenticated pair, while applyFrame later rejects it.
+    if (frame.from === offer.frame.from) continue;
+    if (!isValidStatement(offer.frame.lock, frame.statement)) continue;
+    if (offer.frame.lock === "point" && frame.paymentKey === undefined) continue;
+    let expected: string;
+    try {
+      expected = contractId(offer.frame, {
+        from: frame.from,
+        ref: frame.ref,
+        statement: frame.statement,
+        paymentKey: frame.paymentKey,
+        nonce: frame.nonce,
+      });
+    } catch {
+      continue;
+    }
+    if (expected !== frame.contract) continue;
+    return { offer: offer.record, accept: record };
   }
 
   if (acceptPrecededOffer) {

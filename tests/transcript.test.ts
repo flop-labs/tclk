@@ -234,4 +234,23 @@ describe("trusted transcript records", () => {
       accept.contract,
     )).toEqual({ offer: offerRecord, accept: acceptRecord });
   });
+
+  it("refuses a signed accept that names a contract id the offer+accept do not derive", () => {
+    const { offer } = deal();
+    const offerRecord = record(BOARD, 1, NOW - 1, payer, encodeFrame(offer));
+    const fakeContract = `0x${"aa".repeat(32)}`;
+    const fakeAcceptLine =
+      `tclk1 ` +
+      JSON.stringify({
+        contract: fakeContract,
+        from: payee.did,
+        nonce: "bbbbbbbbbbbbbbbb",
+        ref: offer.id,
+        statement: `0x${"22".repeat(32)}`,
+        type: "accept",
+      });
+    const fakeAcceptRecord = record(BOARD, 2, NOW, payee, fakeAcceptLine);
+
+    expect(findContractHandshake([offerRecord, fakeAcceptRecord], fakeContract)).toBeNull();
+  });
 });
