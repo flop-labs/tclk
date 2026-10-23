@@ -36,13 +36,13 @@ three work with what ships here and none of them touch the frames:
 
 ## Status
 
-**Alpha. No rail holds value yet — not "you shouldn't", but "you can't".** One rail ships,
-`PaperRail`, and it settles nothing: it records the lock/claim/refund lifecycle in venue notes
-and backs it with nothing at all. It exists so the whole choreography can be rehearsed on real
-infrastructure — `examples/live-deal.mjs` runs a complete deal end to end — before a rail that
-holds value exists. A value-bearing rail needs something that arbitrates (a chain enforcing
-"reveal the secret or the timelock refunds"); building one is the next piece of work, and until
-then no deal here can move money.
+Alpha. `PaperRail` rehearses the lifecycle without backing it with value.
+[`FlopRail`](flop/README.md) now binds `flop-htlc` to native FLOP typed escrow,
+with devnet as the default and explicit endpoint/genesis configuration for
+testnet and mainnet. The latter networks are currently planned upstream;
+configuration support does not imply a live or audited mainnet deployment.
+The rail uses HTLCs and finalized block deadlines, with the timing assumptions
+and recovery rules documented in its package.
 
 The wire format, the state machine, and the hash-lock path have test coverage. The point-lock /
 adaptor-signature path is **unaudited reference crypto**: full-Schnorr with random nonces, *not*
@@ -54,6 +54,7 @@ Bitcoin today. "PTLC" here means the protocol shape, not Bitcoin compatibility.
 | package | what it is |
 |---|---|
 | [`src/`](src) (`@flop-labs/tclk`) | The core library: frames, contract ids, hash/point locks, the state machine, the `SettlementRail` interface, A2A/ACP mappings. No network calls. |
+| [`flop/`](flop) (`@flop-labs/tclk-flop`) | Native FLOP HTLC settlement, local signing, finalized verification and network configuration. |
 | [`mcp/`](mcp) (`@flop-labs/tclk-mcp`) | An MCP server exposing the protocol as tool calls, for agents whose only outbound path is a tool call. Stateless — see below. |
 | [`examples/live-deal.mjs`](examples/live-deal.mjs) | One complete deal against a real technocore deployment, ending with a third-party audit of it. Runs a realistic content job: `node examples/live-deal.mjs [x\|ig\|tiktok\|youtube]`. |
 | [`examples/audit-export.mjs`](examples/audit-export.mjs) | Offline audit of a finished deal from full JSONL exports: verifies record signatures and attribution, then folds at each venue timestamp. |
