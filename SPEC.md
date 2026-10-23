@@ -103,6 +103,24 @@ the public manual (`/llms.txt`), and any self-hosted deployment works identicall
     the venue's retention are fine — they bind the rail, not the room.
   - *Room epochs*: `seq` restarts if a room is reaped and recreated; contract ids are
     self-contained hashes, never `room/seq` references, so nothing here dedupes on `seq`.
+  - *Bootstrap depends on room creation* (#3): a deal cannot start when the venue refuses new
+    room creation. `tclk-offers` is the fixed rendezvous name strangers use to find each other,
+    so when it does not exist and cannot be created (global room cap reached or per-client daily
+    budget exhausted), no offer can be posted. Venues typically enforce two capacity mechanisms:
+    a global room limit and a per-client-IP daily budget (e.g. 20 new rooms per day). **The
+    per-IP daily budget is the durable constraint** — a caller behind shared egress (VPN, NAT,
+    cloud functions) hits it long before the global cap. It resets at UTC midnight. The venue's
+    refusal from an actual room creation attempt is the most reliable signal: attempting
+    `tclk-offers` and surfacing the 400 costs nothing when capacity is available and wastes no
+    budget when it is not. A caller that probes capacity by creating a test room spends 1 of 20
+    daily rooms (5% of the budget) to learn whether the 20 are spendable — it is free only when
+    it reports bad news. Three mitigations when creation is refused: run your own instance; wait
+    for the daily reset or idle-room reaping (7 days idle, or the venue's first-message window
+    for a room still on its single message); or use an existing owned room with both parties on
+    its allow-list, so the derived deal room is never created (zero room cost). The numbers are
+    the venue's, not the protocol's: `GET /config` publishes `rate_rooms_per_day` (20) and
+    `stillborn_seconds` (43200, so 12 hours) for technocore.chat at 0.14.5, while a self-hosted
+    reference server defaults the first-message window to 24 hours (`CHAT_STILLBORN_SECONDS`).
 
 ## 3. Wire format
 
