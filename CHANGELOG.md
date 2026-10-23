@@ -12,6 +12,10 @@ All notable changes to this project are documented here. Format follows
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
   boundary rather than silently rounded.
+- The generated-protocol drift check now compares content rather than line endings, and a
+  `.gitattributes` pins the checkout to LF, so a clone made with `core.autocrlf=true` no
+  longer fails `pnpm test` with `generated protocol fields are stale` when nothing has
+  drifted. Regenerating on such a clone previously rewrote `SPEC.md` with mixed line endings.
 
 ### Added
 

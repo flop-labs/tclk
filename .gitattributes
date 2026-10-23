@@ -1,0 +1,4 @@
+# Every tracked file here is text, and two of them are compared byte for byte against
+# freshly generated output by `scripts/generate-frame-fields.mjs --check`. Pin the checkout
+# so that comparison does not depend on a contributor's `core.autocrlf`.
+* text=auto eol=lf
