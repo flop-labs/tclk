@@ -76,9 +76,9 @@
           "minItems": 1,
           "items": { "$ref": "#/$defs/rail" }
         },
-        "claimByMs": { "type": "integer", "minimum": 1 },
-        "refundAfterMs": { "type": "integer", "minimum": 1 },
-        "expiresMs": { "type": "integer", "minimum": 1 },
+        "claimByMs": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "refundAfterMs": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "expiresMs": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
         "paymentKey": { "$ref": "#/$defs/hex33" },
         "job": { "$ref": "#/$defs/job" },
         "nonce": { "$ref": "#/$defs/nonce" },
@@ -87,7 +87,9 @@
       "required": [
         "type", "from", "role", "amount", "asset", "lock", "rails", "claimByMs",
         "refundAfterMs", "expiresMs", "nonce", "id"
-      ]
+      ],
+      "if": { "properties": { "lock": { "const": "point" } }, "required": ["lock"] },
+      "then": { "required": ["paymentKey"] }
     },
     "accept": {
       "type": "object",
