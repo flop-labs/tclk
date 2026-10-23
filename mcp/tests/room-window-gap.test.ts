@@ -34,6 +34,38 @@ describe("room window gaps", () => {
     );
   });
 
+  it("rejects an empty filtered window when first_seq proves a gap", async () => {
+    const { fetchLike } = fakeFetch([{
+      body: "",
+      json: {
+        room: "busy",
+        count: 50,
+        first_seq: 151,
+        last_seq: 200,
+        messages: [],
+      },
+    }]);
+    const client = createClient({ fetch: fetchLike });
+
+    await expect(client.readRoom("busy", 100)).rejects.toThrow(
+      /missed room records.*since=100.*first_seq=151.*full:true.*complete export/,
+    );
+  });
+
+  it("accepts an empty filtered window without evidence of a gap", async () => {
+    const view = {
+      room: "quiet",
+      count: 100,
+      first_seq: 1,
+      last_seq: 100,
+      messages: [],
+    };
+    const { fetchLike } = fakeFetch([{ body: "", json: view }]);
+    const client = createClient({ fetch: fetchLike });
+
+    await expect(client.readRoom("quiet", 100)).resolves.toEqual(view);
+  });
+
   it("keeps a contiguous since window readable", async () => {
     const view = {
       room: "busy",
