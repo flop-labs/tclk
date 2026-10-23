@@ -8,6 +8,12 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `offerId` and `contractId` now hash exactly the fields their contracts document: `offerId`
+  drops the `id` a decoded `OfferFrame` already carries, and `contractId` binds only the
+  acceptance core (`from`, `ref`, `statement`, `paymentKey`, `nonce`). Re-deriving ids from a
+  decoded frame now reproduces the posted ids instead of silently hashing extra keys.
+  Ids of valid frames are unchanged; the golden vectors still pass.
+
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
