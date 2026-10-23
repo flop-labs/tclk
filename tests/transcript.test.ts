@@ -13,6 +13,7 @@ import {
   makeAccept,
   makeOffer,
   parseTranscriptExport,
+  verifyTranscriptRecord,
   type TranscriptRecord,
 } from "../src/index.js";
 
@@ -148,6 +149,29 @@ describe("trusted transcript records", () => {
     expect(folded.steps[2]).toMatchObject({
       ok: false,
       reason: expect.stringMatching(/derived deal room/),
+    });
+  });
+
+  it("accepts a signed 19-digit nonce and rejects an otherwise-valid 20-digit nonce", () => {
+    const { offer } = deal();
+    const line = encodeFrame(offer);
+    const nonce19 = "9999999999999999999";
+    const valid = {
+      ...record(BOARD, 1, NOW, payer, line),
+      nonce: nonce19,
+      signature: payer.sign(`${BOARD}|${nonce19}|${line}`),
+    };
+    expect(verifyTranscriptRecord(valid)).toEqual({ ok: true });
+
+    const nonce20 = "10000000000000000000";
+    const impossible = {
+      ...valid,
+      nonce: nonce20,
+      signature: payer.sign(`${BOARD}|${nonce20}|${line}`),
+    };
+    expect(verifyTranscriptRecord(impossible)).toEqual({
+      ok: false,
+      reason: "record nonce is not canonical decimal",
     });
   });
 
