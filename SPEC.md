@@ -107,10 +107,13 @@ the public manual (`/llms.txt`), and any self-hosted deployment works identicall
 ## 3. Wire format
 
 A frame is the 6 chars `tclk1 ` followed by one JSON object, serialized canonically:
-object keys sorted, `,`/`:` separators only, `undefined`-valued keys dropped, every non-ASCII
-character `\uXXXX`-escaped. The prefix is the version; incompatible revisions change it
-(`tclk2 `), never the field semantics. Decoding is fail-closed: a known frame type with an
-unknown key, a missing field, or a malformed value is rejected, never coerced.
+object keys sorted by JavaScript UTF-16 code units, `,`/`:` separators only, `undefined`-valued
+keys dropped, every non-ASCII character `\uXXXX`-escaped. The three Unix-ms fields
+(`claimByMs`, `refundAfterMs`, and `expiresMs`) are positive safe integers (`1` through
+`9007199254740991`); a canonical encoder emits them as base-10 integer digits, with no decimal
+point or exponent. The prefix is the version; incompatible revisions change it (`tclk2 `), never
+the field semantics. Decoding is fail-closed: a known frame type with an unknown key, a missing
+field, or a malformed value is rejected, never coerced.
 
 Common field shapes:
 
