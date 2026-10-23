@@ -39,6 +39,7 @@ import {
 
 import { canonicalMessage, loadSigner, nextNonce, sweep, type Signer } from "./signing.js";
 import {
+  assertRoomName,
   createClient,
   DEFAULT_TECHNOCORE_URL,
   type FetchLike,
@@ -366,6 +367,11 @@ export function createHandlers(options: HandlerOptions = {}) {
      * call that cannot sign is a request for a signature, not an empty failure.
      */
     async tclk_post_frame(input: PostFrameInput) {
+      // The room is checked here and not only in `postSigned`, which is a round trip too
+      // late: it is the first field of the `<room>|<nonce>|<text>` a signature covers, so a
+      // room holding `|` makes one signed string parse two ways — as the room asked for, and
+      // as a legal room with an attacker's nonce and text. Tier 3 hands that string out.
+      assertRoomName(input.room);
       // A frame that does not decode must never reach the room: rooms are the shared
       // transcript, and a malformed line there is a permanent record no one can fold.
       decodeFrame(input.line);
