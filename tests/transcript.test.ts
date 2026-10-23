@@ -13,6 +13,7 @@ import {
   makeAccept,
   makeOffer,
   parseTranscriptExport,
+  verifyTranscriptRecord,
   type TranscriptRecord,
 } from "../src/index.js";
 
@@ -81,6 +82,23 @@ function deal(expiresMs = NOW + 60_000) {
 }
 
 describe("trusted transcript records", () => {
+  it("rejects a runtime numeric nonce instead of coercing it to signed text", () => {
+    const { offer } = deal();
+    const line = encodeFrame(offer);
+    const signed = record(BOARD, 1, NOW, payer, line);
+    const numericNonce = Number(signed.nonce);
+    const malformed = {
+      ...signed,
+      nonce: numericNonce,
+      signature: payer.sign(`${BOARD}|${numericNonce}|${line}`),
+    };
+
+    expect(verifyTranscriptRecord(malformed as never)).toEqual({
+      ok: false,
+      reason: "record nonce is not canonical decimal",
+    });
+  });
+
   it("authenticates and folds a complete deal at each record's own timestamp", () => {
     const { lock, offer, accept } = deal();
     const lockFrame = {
