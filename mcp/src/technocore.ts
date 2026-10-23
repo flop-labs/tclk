@@ -107,6 +107,24 @@ export function createClient(opts: { baseUrl?: string; fetch?: FetchLike } = {})
       if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.messages)) {
         throw new Error(`tclk-mcp: GET /r/${room} returned no messages array`);
       }
+      if (since !== undefined) {
+        const firstSeq = parsed.first_seq;
+        if (parsed.messages.length > 0 &&
+            (typeof firstSeq !== "number" || !Number.isSafeInteger(firstSeq) || firstSeq < 0)) {
+          throw new Error(
+            `tclk-mcp: GET /r/${room} returned no usable first_seq for a since window`,
+          );
+        }
+        // An empty filtered result can still hide a lost interval: the
+        // retained room tail starts after the caller's cursor.
+        if (typeof firstSeq === "number" && Number.isSafeInteger(firstSeq) &&
+            firstSeq >= 0 && firstSeq > since + 1) {
+          throw new Error(
+            `tclk-mcp: GET /r/${room} missed room records after since=${since}: ` +
+              `first_seq=${firstSeq}; retry with tclk_read_room full:true for a complete export`,
+          );
+        }
+      }
       return parsed as RoomView;
     },
 
