@@ -136,6 +136,22 @@ All notable changes to this project are documented here. Format follows
   `!res.ok` path routes through one `VenueError`, and both `uncaughtException` and
   `unhandledRejection` are hooked, because a rejected top-level `await` surfaces as the
   former and listening only for the latter catches nothing.
+- `examples/htlc-walkthrough.md` now carries frames the library actually accepts. The
+  previous lines had 46-character DIDs, 63-digit statement and contract ids and a 62-digit
+  secret, so all four failed `decodeFrame` (`from is malformed`), the shown statement was a
+  truncated `sha256("password")` rather than the hash the prose claimed, and step 5 of the
+  MCP flow could not reproduce. The frames are regenerated with `makeOffer` / `makeAccept` /
+  `encodeFrame` (fixed nonces, a fixed stand-in preimage), and `tests/walkthrough.test.ts`
+  decodes every line and folds the transcript to `claimed` and `refunded`, so the example
+  cannot drift again. Its MCP section called the tools with arguments they do not take —
+  `tclk_post_frame` got `nick`/`frame` instead of `line`, every builder lacked its required
+  `from` and the offer its `expiresMs` — and described an unsigned posting path
+  `tclk_post_frame` does not have. The calls now match the tool schemas, the two real signing
+  paths are spelled out (a server `TECHNOCORE_SIGNING_KEY`, or the returned challenge answered
+  with `did`/`sig`/`nonce`), and the flow posts where a fold looks — `tclk-offers`, then the
+  deal room — with deadlines counted from now, so its step 5 folds to `claimed`. The test also
+  checks every MCP call in the section against the published tool schemas and the room each
+  frame is posted in (#49).
 - Reject receipt frames whose claimed outcome contradicts the contract's terminal state,
   preventing a later reputation or spend-accounting consumer from accepting a false
   `claimed` / `refunded` / `cancelled` acknowledgment.
