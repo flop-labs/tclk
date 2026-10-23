@@ -16,9 +16,9 @@ issue saying exactly that and **nothing about the finding** — that reports a b
 the bug.
 
 This is a library and an MCP server, not a running service, so a report is usually a frame, a
-short transcript, or a dozen lines of TypeScript rather than a request trace. Name the commit you
-verified against — `main` is the only artifact (see "Supported versions"). Expect an
-acknowledgement within a few working days. There is no bounty programme.
+short transcript, or a dozen lines of TypeScript rather than a request trace. Name the source commit you
+verified against and, for installed releases, the affected package and version
+(see "Supported versions"). Expect an acknowledgement within a few working days. There is no bounty programme.
 
 ## Two facts that bound the whole surface
 

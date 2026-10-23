@@ -27,8 +27,11 @@ describe("security policy contract", () => {
 
   it("acknowledges published core and MCP packages without promising instant updates", () => {
     const policy = read("../SECURITY.md");
-    expect(policy).toContain("@flop-labs/tclk");
-    expect(policy).toContain("@flop-labs/tclk-mcp");
+    const supportedVersions = policy.split("## Supported versions\n")[1];
+    expect(supportedVersions).toMatch(/`@flop-labs\/tclk`/);
+    expect(supportedVersions).toMatch(/`@flop-labs\/tclk-mcp`/);
+    expect(policy).toMatch(/for installed releases, the affected package and version/);
+    expect(policy).not.toContain("`main` is the only artifact");
     expect(policy).toContain("0.1.0");
     expect(policy).toMatch(/already-installed packages/);
     expect(policy).not.toMatch(/Nothing is published to a registry yet/i);
