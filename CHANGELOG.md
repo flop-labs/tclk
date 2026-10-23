@@ -27,6 +27,8 @@ All notable changes to this project are documented here. Format follows
   and the normative `SPEC.md` table are checked for drift in CI.
 - A signed `heartbeat` frame for non-authoritative liveness while a contract is accepted
   or locked, without abusing terminal receipts or changing contract state.
+- Documented competing acceptance behavior and application-level reservation guidance for
+  losing acceptors in `SPEC.md` §4 (#140, #127).
 - A hosted deployment of the MCP server at `https://tclk.technocore.chat/mcp`, streamable
   HTTP, no account and no key. It is the no-custody Worker build: it binds neither
   `TECHNOCORE_SIGNING_KEY` nor `TCLK_PAYMENT_KEY` and refuses to serve if either is present,
