@@ -48,10 +48,17 @@ Two tools behave differently here as a result, and say so rather than failing bl
 **`tclk_post_frame` has no tier 2.** Tier 1 still works — supply `did`, `sig` and `nonce`
 and the Worker passes your signature through to technocore untouched. Tier 3 still works —
 call it without them and the reply *is* the signing challenge: the exact canonical string
-`<room>|<nonce>|<text>`, a usable nonce, and the swept text the signature must cover. What
+`<room>|<nonce>|<text>`, a candidate nonce, and the swept text the signature must cover. What
 is gone is the middle tier, where the server signs on your behalf. The tier-3 hint says
 that in those words instead of telling you to set an environment variable this build will
 not read.
+
+An existing DID may have a room replay floor above the default millisecond nonce. Pass
+`challengeNonce` as exact canonical decimal text to select a higher value without sending
+a key. Sign the returned canonical string locally, then pass `did`, `sig` and `nonce`
+without `challengeNonce`. See the [nonce selection contract](../README.md#tclk_post_frame-has-three-tiers).
+The Worker does not query or reserve the floor: serialize writes across clients/isolates,
+and do not assume an incomplete room window contains your latest accepted nonce.
 
 **`tclk_adaptor_presign` refuses.** A pre-signature is made with the payer's own secp256k1
 key, so there is nothing for a keyless server to do. It answers with the same

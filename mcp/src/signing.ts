@@ -13,8 +13,8 @@
 //     strings decode to the same 64 bytes, so the last character must be the one the
 //     encoder produces, always one of A/Q/g/w;
 //   * the nonce must exceed the last one this key used in that room. A millisecond
-//     clock with a per-process monotonic bump satisfies that with no state to persist,
-//     which is what keeps this usable from a stateless server.
+//     clock only orders values within this process; it cannot know another client's
+//     replay floor or coordinate independent stateless isolates.
 //
 // The seed never leaves this module: `Signer` exposes the DID and a signing function,
 // nothing that echoes the key material.
@@ -37,6 +37,9 @@ const INVISIBLE = /[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Zl}\p{Zp}]/gu;
 /** Canonical unpadded base64url of 64 bytes: 86 chars, last one carrying 2 bits. */
 const CANONICAL_SIG = /^[A-Za-z0-9_-]{85}[AQgw]$/;
 
+/** Exact decimal text, including zero. The end assertion also refuses a final newline. */
+export const CHALLENGE_NONCE = /^(?:0|[1-9][0-9]{0,18})(?![\s\S])/;
+
 /** The single-line sweep, minus the service's own empty/too-long refusals. */
 export function sweep(text: string): string {
   return text.replace(INVISIBLE, " ").trim();
@@ -51,9 +54,8 @@ let lastNonce = 0;
 
 /**
  * Milliseconds since the epoch, bumped past the last value this process issued.
- * Strictly increasing within a process; effectively increasing across processes
- * because wall time dominates. A collision is never silent — the venue refuses with
- * the last nonce it saw.
+ * Strictly increasing within a process only. The venue may already have a greater
+ * nonce for this DID/room; independent processes can collide or arrive out of order.
  */
 export function nextNonce(): number {
   lastNonce = Math.max(Date.now(), lastNonce + 1);

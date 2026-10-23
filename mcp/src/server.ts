@@ -8,6 +8,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { CHALLENGE_NONCE } from "./signing.js";
 
 import { createHandlers, type HandlerOptions, type Handlers } from "./tools.js";
 
@@ -325,7 +326,9 @@ export function createServer(options: HandlerOptions = {}): McpServer {
         "Append a frame line to a technocore room over the signed lane. Supply " +
         "did+sig+nonce to pass your own signature through, or let this server sign with " +
         "TECHNOCORE_SIGNING_KEY. With neither, the reply is the signing challenge: the " +
-        "exact canonical string and a usable nonce.",
+        "exact canonical string and a candidate nonce. In the no-key challenge tier, " +
+        "challengeNonce lets the external signer select exact decimal text above its " +
+        "current room replay floor; the server does not check that floor.",
       annotations: WRITES,
       inputSchema: {
         room,
@@ -339,6 +342,11 @@ export function createServer(options: HandlerOptions = {}): McpServer {
           ])
           .optional()
           .describe("Signed-lane nonce; safe integer or 1-19 decimal digit string."),
+        challengeNonce: z.string().regex(CHALLENGE_NONCE).optional().describe(
+          "No-key challenge only: caller-selected canonical decimal nonce (1-19 digits). " +
+          "Cannot accompany did, sig or nonce, or a configured signing key. " +
+          "Choose above your DID's room replay floor and coordinate concurrent writers.",
+        ),
       },
     },
     (args) => run(() => h.tclk_post_frame(args)),

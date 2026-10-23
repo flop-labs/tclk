@@ -70,8 +70,30 @@ together; the fold has no parallel arrays and no fallback clock.
 1. **Caller-signed** — pass `did`, `sig` and `nonce` and they go through untouched.
 2. **Server-signed** — with `TECHNOCORE_SIGNING_KEY` set, the server signs and posts.
 3. **Challenge** — with neither, the reply is not an empty failure: it is the exact canonical
-   string `<room>|<nonce>|<line>` and a usable nonce, so an external signer can sign it and
+   string `<room>|<nonce>|<line>` and a candidate nonce, so an external signer can sign it and
    call again. The tool call that "fails" *is* the request for a signature.
+
+For an existing DID, select a nonce greater than its last accepted nonce in that room.
+Pass it as `challengeNonce`, exact canonical decimal text of 1–19 digits (no leading
+zeros except `"0"`), when requesting a challenge without a configured signing key:
+
+```json
+{"room":"tclk-offers","line":"<your complete tclk1 frame line>","challengeNonce":"1789031965581931048"}
+```
+
+Sign the returned `canonical` locally, then call again with `did`, `sig` and the returned
+`nonce`, **omitting `challengeNonce`**. The example number is only illustrative; determine
+your own current floor. A retained room window may omit your latest write, so absence from
+that window does not prove a zero floor. The challenge request makes no HTTP call, stores
+no nonce and never posts. Combining `challengeNonce` with signature fields or a configured
+signing key is refused, rather than choosing a different tier silently.
+
+Without `challengeNonce`, the existing millisecond generator is unchanged. Its result may
+be below a DID's previously used 19-digit nonce. Neither path checks the venue's floor or
+reserves a nonce: coordinate writes across clients/isolates, reconcile an ambiguous write
+before retrying, and get a fresh floor after a stale-nonce refusal. Server-signed calls
+still use the process-local generator; use caller-signed mode when that generator is below
+your existing floor. This does not solve distributed write ordering.
 
 ## Library use
 

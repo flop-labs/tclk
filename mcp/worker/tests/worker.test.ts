@@ -215,6 +215,26 @@ describe("tools/call round trip", () => {
 });
 
 describe("no custody", () => {
+  it("preserves a caller-selected 19-digit challenge and rejects malformed values", async () => {
+    const { calls, fetchLike } = fakeFetch([]);
+    const line = (await callTool("tclk_make_offer", HASH_OFFER)).value.line;
+    const challengeNonce = "1789031965581931048";
+    const challenge = await callTool("tclk_post_frame", { room: ROOM, line, challengeNonce }, fetchLike);
+    expect(challenge.isError).toBe(false);
+    expect(challenge.value.nonce).toBe(challengeNonce);
+    expect(challenge.value.canonical).toBe(`${ROOM}|${challengeNonce}|${line}`);
+    expect(challenge.value.hint).toContain("replay floor");
+    expect(challenge.value.hint).toContain("omitting `challengeNonce`");
+    expect(challenge.value.hint).toContain("cannot sign for you");
+    for (const invalid of ["01", "1\n", 7, null]) {
+      const { body } = await rpc("tools/call", {
+        name: "tclk_post_frame", arguments: { room: ROOM, line, challengeNonce: invalid },
+      }, fetchLike);
+      expect(body.error.code).toBe(-32602);
+    }
+    expect(calls).toHaveLength(0);
+  });
+
   it("tclk_post_frame answers with the tier-3 challenge and never reaches the network", async () => {
     const { calls, fetchLike } = fakeFetch([]);
     const line = (await callTool("tclk_make_offer", HASH_OFFER)).value.line;
