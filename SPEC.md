@@ -101,8 +101,11 @@ the public manual (`/llms.txt`), and any self-hosted deployment works identicall
     coordination, not the record. Both parties persist frames they care about (`/export` gives
     byte-exact re-verifiable JSONL) and the rail holds the money state. Deadlines longer than
     the venue's retention are fine — they bind the rail, not the room.
-  - *Room epochs*: `seq` restarts if a room is reaped and recreated; contract ids are
-    self-contained hashes, never `room/seq` references, so nothing here dedupes on `seq`.
+  - *Room epochs*: a reaped and recreated room is a new conversation under the same name.
+    `seq` does not restart — the venue carries the old high-water mark forward so that cursors
+    past it are not stranded, and the `generation` field is what marks the change. Contract ids
+    are self-contained hashes, never `room/seq` references, so nothing here dedupes on `seq`
+    either way.
 
 ## 3. Wire format
 

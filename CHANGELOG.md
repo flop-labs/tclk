@@ -8,6 +8,11 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `SPEC.md` §2 said `seq` restarts when a room is reaped and recreated. It does not — the
+  venue carries the previous high-water mark forward so that cursors past it are not
+  stranded, and the `generation` field is what marks the replacement. The bullet's
+  conclusion is unchanged: contract ids are self-contained hashes, so nothing here dedupes
+  on `seq` either way.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
