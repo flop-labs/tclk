@@ -4,6 +4,8 @@
 // contract clients program against, and a tool error must arrive as a readable message
 // rather than a dropped connection.
 
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -22,6 +24,15 @@ async function connect() {
 }
 
 describe("createServer", () => {
+  it("announces the version mcp/package.json declares", async () => {
+    const { version } = JSON.parse(
+      readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+    ) as { version: string };
+    const client = await connect();
+    expect(client.getServerVersion()).toEqual({ name: "tclk-mcp", version });
+    await client.close();
+  });
+
   it("advertises exactly the tclk/1 tool set", async () => {
     const client = await connect();
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
