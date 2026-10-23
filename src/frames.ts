@@ -171,7 +171,10 @@ function fail(msg: string): never {
 
 function requireString(v: unknown, name: string, re?: RegExp): string {
   if (typeof v !== "string" || v.length === 0) fail(`${name} must be a non-empty string`);
-  if (re && !re.test(v)) fail(`${name} is malformed: ${v}`);
+  if (re && !re.test(v)) {
+    const shape = typeof v === "string" ? `${v.length} chars` : typeof v;
+    fail(`${name} is malformed (${re.source}, got ${shape})`);
+  }
   return v;
 }
 
