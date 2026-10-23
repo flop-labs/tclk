@@ -130,13 +130,15 @@ decoder uses. `type` is shown explicitly because it is part of every signed fram
 | frame | required fields | optional fields |
 |---|---|---|
 | `offer` | `type`, `from`, `role`, `amount`, `asset`, `lock`, `rails`, `claimByMs`, `refundAfterMs`, `expiresMs`, `nonce`, `id` | `paymentKey`, `job` |
-| `accept` | `type`, `from`, `ref`, `statement`, `contract`, `nonce` | `paymentKey` |
+| `accept` | `type`, `from`, `ref`, `statement`, `contract`&nbsp;†, `nonce` | `paymentKey` |
 | `lock` | `type`, `from`, `contract`, `rail`, `ref` | `presig` |
 | `reveal` | `type`, `from`, `contract`, `secret` | `ref` |
 | `refund` | `type`, `from`, `contract` | `ref`, `reason` |
 | `cancel` | `type`, `from`, `contract` | `reason` |
 | `receipt` | `type`, `from`, `contract`, `outcome` | `rail`, `ref` |
 | `heartbeat` | `type`, `from`, `contract`, `nonce` | `note` |
+
+† Derived, not supplied. The sending side computes it from frames that are already public; it is never a value the counterparty fills in later. A frame that omits it is rejected at decode, before it is signed, posted, or used to advance state.
 <!-- END GENERATED FRAME FIELDS -->
 
 ### 3.1 `offer`
