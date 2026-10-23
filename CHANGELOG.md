@@ -8,6 +8,7 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Link the MCP README to the normative `SPEC.md` with an absolute URL that also works on npm.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
@@ -25,6 +26,8 @@ All notable changes to this project are documented here. Format follows
 - A schema-owned tclk/1 frame field contract, canonical settlement-rail registry and
   intersection-based, order-independent rail matching helpers. Generated decoder fields
   and the normative `SPEC.md` table are checked for drift in CI.
+- A key-free, offline MCP handler example that builds and decodes an offer frame from
+  complete fixture inputs, with repository build instructions in `mcp/README.md`.
 - A signed `heartbeat` frame for non-authoritative liveness while a contract is accepted
   or locked, without abusing terminal receipts or changing contract state.
 - A hosted deployment of the MCP server at `https://tclk.technocore.chat/mcp`, streamable
