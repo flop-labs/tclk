@@ -356,7 +356,14 @@ export function validateFrame(value: unknown): TclkFrame {
     }
     case "receipt": {
       requireString(frame.contract, "contract", HEX32);
-      if (!["claimed", "refunded", "cancelled"].includes(String(frame.outcome))) {
+      // Compare the value, never its stringification: `String(["claimed"])` is
+      // `"claimed"`, so coercing here admitted a receipt whose outcome is not one of the
+      // three strings at all — the one enum in this grammar that was not fail-closed.
+      if (
+        frame.outcome !== "claimed" &&
+        frame.outcome !== "refunded" &&
+        frame.outcome !== "cancelled"
+      ) {
         fail("outcome must be claimed|refunded|cancelled");
       }
       if (frame.rail !== undefined) {
