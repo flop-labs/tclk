@@ -459,6 +459,115 @@ export function isTclkLine(text: string): boolean {
   return text.startsWith(TCLK_PREFIX);
 }
 
+/**
+ * Reject duplicate JSON object members before JSON.parse erases them. Keys are
+ * compared after JSON string escape decoding, so the names "type" and
+ * "\u0074ype" are the same member. This is deliberately a structural
+ * preflight only; JSON.parse remains the authority for the full JSON grammar.
+ */
+function rejectDuplicateObjectKeys(json: string): void {
+  let at = 0;
+
+  const skipWhitespace = (): void => {
+    while (at < json.length && /[\u0009\u000a\u000d\u0020]/.test(json[at]!)) at += 1;
+  };
+
+  const parseString = (): string => {
+    const start = at;
+    if (json[at] !== '"') fail("frame is not valid JSON");
+    at += 1;
+    while (at < json.length) {
+      if (json[at] === "\\") {
+        at += 2;
+        continue;
+      }
+      if (json[at] === '"') {
+        at += 1;
+        try {
+          const value: unknown = JSON.parse(json.slice(start, at));
+          if (typeof value !== "string") fail("frame is not valid JSON");
+          return value;
+        } catch {
+          fail("frame is not valid JSON");
+        }
+      }
+      at += 1;
+    }
+    fail("frame is not valid JSON");
+  };
+
+  const parseValue = (): void => {
+    skipWhitespace();
+    if (json[at] === "{") {
+      parseObject();
+      return;
+    }
+    if (json[at] === "[") {
+      parseArray();
+      return;
+    }
+    if (json[at] === '"') {
+      parseString();
+      return;
+    }
+    const start = at;
+    while (at < json.length && !/[\u0009\u000a\u000d\u0020,\]}]/.test(json[at]!)) at += 1;
+    if (at === start) fail("frame is not valid JSON");
+  };
+
+  const parseObject = (): void => {
+    at += 1;
+    skipWhitespace();
+    const keys = new Set<string>();
+    if (json[at] === "}") {
+      at += 1;
+      return;
+    }
+    while (at < json.length) {
+      const key = parseString();
+      if (keys.has(key)) fail(`duplicate object key: ${key}`);
+      keys.add(key);
+      skipWhitespace();
+      if (json[at] !== ":") fail("frame is not valid JSON");
+      at += 1;
+      parseValue();
+      skipWhitespace();
+      if (json[at] === "}") {
+        at += 1;
+        return;
+      }
+      if (json[at] !== ",") fail("frame is not valid JSON");
+      at += 1;
+      skipWhitespace();
+    }
+    fail("frame is not valid JSON");
+  };
+
+  const parseArray = (): void => {
+    at += 1;
+    skipWhitespace();
+    if (json[at] === "]") {
+      at += 1;
+      return;
+    }
+    while (at < json.length) {
+      parseValue();
+      skipWhitespace();
+      if (json[at] === "]") {
+        at += 1;
+        return;
+      }
+      if (json[at] !== ",") fail("frame is not valid JSON");
+      at += 1;
+    }
+    fail("frame is not valid JSON");
+  };
+
+  parseValue();
+  skipWhitespace();
+  if (at !== json.length) fail("frame is not valid JSON");
+}
+
 /** Encode a frame to its room-message line. Validates, and enforces the venue caps. */
 export function encodeFrame(frame: TclkFrame): string {
   const validated = validateFrame(frame);
@@ -482,9 +591,11 @@ export function decodeFrame(text: string): TclkFrame {
   if (text.length > MAX_FRAME_CHARS) {
     fail(`frame exceeds the ${MAX_FRAME_CHARS}-char room-message cap (${text.length})`);
   }
+  const json = text.slice(TCLK_PREFIX.length);
+  rejectDuplicateObjectKeys(json);
   let parsed: unknown;
   try {
-    parsed = JSON.parse(text.slice(TCLK_PREFIX.length));
+    parsed = JSON.parse(json);
   } catch {
     fail("frame is not valid JSON");
   }

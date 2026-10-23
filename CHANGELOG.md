@@ -8,6 +8,9 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `decodeFrame` now rejects duplicate JSON object members at every nesting level, including
+  escape-equivalent names, instead of letting `JSON.parse` silently keep the last value.
+  This follows the existing canonical, fail-closed wire rule and leaves golden vectors unchanged.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
