@@ -8,6 +8,15 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- An MCP tool now always builds the frame kind its own name says. The thin builders took
+  their input by spread over a `type` literal, so a caller-supplied `type` argument decided
+  the frame instead: `tclk_make_lock` answered with a settlement `receipt`, `tclk_make_cancel`
+  with a `refund`, and `tclk_make_refund` with a `reveal` line publishing the secret it was
+  handed. The stdio build hid it because zod strips a key the schema does not name; the
+  hosted Worker has no zod and returned the wrong frame. `type` is now written after the
+  spread, and the Worker enforces the `"additionalProperties": false` its generated schemas
+  already advertise, answering `-32602` for an argument the tool does not declare instead of
+  passing it through to the handler.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
