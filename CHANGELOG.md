@@ -35,6 +35,18 @@ All notable changes to this project are documented here. Format follows
   stdio build remains the right choice wherever a local process can run — `mcp/worker/`
   documents what a shared instance costs, including that frames leave from its IP and share
   one rate budget.
+- `vectors/tclk-v1.golden.json`: a portable, language-agnostic companion to
+  `tests/vectors.test.ts` — one decodable example of every tclk/1 frame type (offer,
+  accept, lock, reveal, refund, cancel, receipt, heartbeat), carrying every optional field
+  except `paymentKey`, for a from-scratch implementation in any language to check its
+  encoder/decoder against without a TypeScript toolchain. It ships in the npm package, and
+  its SHA-256 is published in `vectors/README.md`.
+- `tests/interop-vectors.test.ts`: proves the portable file stays in sync with the
+  reference encoder/decoder (round-trip in both directions) and pins its exact bytes to
+  the published SHA-256, on every test run.
+- `scripts/generate-interop-vectors.mjs`: regenerates the portable file from the built
+  reference implementation; only needed when the corpus changes on purpose. `--check`
+  verifies that the committed file is byte-identical to its output, without rewriting it.
 
 ### Changed
 
