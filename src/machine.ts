@@ -41,6 +41,8 @@ export interface ContractState {
   /** Set at accept. */
   contract?: string;
   statement?: string;
+  /** Set at cancel to the exact identifier a later receipt must acknowledge. */
+  cancelTarget?: string;
   /** Set at lock. */
   rail?: string;
   railRef?: string;
@@ -196,11 +198,12 @@ export function applyFrame(state: ContractState, frame: TclkFrame, nowMs: number
       if (state.status !== "proposed" && state.status !== "accepted") {
         return reject(state, `cancel in status ${state.status}`);
       }
-      if (state.status === "accepted" && frame.contract !== state.contract) {
+      const target = state.status === "proposed" ? state.offer.id : state.contract;
+      if (target === undefined || frame.contract !== target) {
         return reject(state, "cancel names a different contract");
       }
       if (!isParty(state, frame.from)) return reject(state, "cancel from a non-party");
-      return { ok: true, state: { ...state, status: "cancelled" } };
+      return { ok: true, state: { ...state, status: "cancelled", cancelTarget: target } };
     }
 
     case "receipt": {
@@ -208,7 +211,10 @@ export function applyFrame(state: ContractState, frame: TclkFrame, nowMs: number
       if (!TCLK_TERMINAL_STATUSES.has(state.status)) {
         return reject(state, "receipt before a terminal status");
       }
-      if (frame.contract !== state.contract) return reject(state, "receipt names a different contract");
+      const target = state.status === "cancelled" ? state.cancelTarget : state.contract;
+      if (target === undefined || frame.contract !== target) {
+        return reject(state, "receipt names a different contract");
+      }
       if (!isParty(state, frame.from)) return reject(state, "receipt from a non-party");
       if (frame.outcome !== state.status) {
         return reject(state, `receipt outcome ${frame.outcome} does not match ${state.status}`);

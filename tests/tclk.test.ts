@@ -372,12 +372,99 @@ describe("tclk state machine", () => {
 
   it("cancel works pre-lock for parties only, and never after lock", () => {
     const { offer, state } = accepted();
-    expect(applyFrame(openContract(offer), { type: "cancel", from: PAYER_DID, contract: "0x" + "00".repeat(32) }, T0).state.status).toBe("cancelled");
+    expect(applyFrame(openContract(offer), { type: "cancel", from: PAYER_DID, contract: offer.id }, T0).state.status).toBe("cancelled");
+    expect(applyFrame(openContract(offer), { type: "cancel", from: PAYER_DID, contract: "0x" + "00".repeat(32) }, T0).ok).toBe(false);
     expect(applyFrame(state, { type: "cancel", from: STRANGER_DID, contract: state.contract! }, T0).ok).toBe(false);
     const cancelled = applyFrame(state, { type: "cancel", from: PAYEE_DID, contract: state.contract! }, T0);
     expect(cancelled.state.status).toBe("cancelled");
+    expect(cancelled.state.cancelTarget).toBe(state.contract);
+    expect(applyFrame(cancelled.state, {
+      type: "receipt", from: PAYER_DID, contract: state.contract!, outcome: "cancelled",
+    }, T0).ok).toBe(true);
     const locked = applyFrame(state, { type: "lock", from: PAYER_DID, contract: state.contract!, rail: "x402", ref: "r" }, T0).state;
     expect(applyFrame(locked, { type: "cancel", from: PAYER_DID, contract: state.contract! }, T0).ok).toBe(false);
+  });
+
+  it("cancel while proposed binds to the specific offer and permits receipt (#5, #17)", () => {
+    const { offer } = accepted();
+    const otherOffer = makeOffer({
+      from: PAYER_DID,
+      role: "payer",
+      amount: "2000000",
+      asset: "FLOP",
+      lock: "hash",
+      rails: ["flop-htlc"],
+      claimByMs: 1756703600000,
+      refundAfterMs: 1756707200000,
+      expiresMs: 1756700600000,
+      nonce: "1122334455667788",
+    });
+    const cancelFirst = { type: "cancel" as const, from: PAYER_DID, contract: offer.id };
+
+    const firstProposed = openContract(offer);
+    const otherProposed = openContract(otherOffer);
+
+    // Cancel naming offer does not cancel otherOffer
+    const crossCancel = applyFrame(otherProposed, cancelFirst, T0);
+    expect(crossCancel.ok).toBe(false);
+    expect(crossCancel.reason).toBe("cancel names a different contract");
+    expect(crossCancel.state.status).toBe("proposed");
+
+    // Cancel naming offer cancels the intended offer
+    const cancelled = applyFrame(firstProposed, cancelFirst, T0);
+    expect(cancelled.ok).toBe(true);
+    expect(cancelled.state.status).toBe("cancelled");
+    expect(cancelled.state.cancelTarget).toBe(offer.id);
+
+    // Receipt following proposed-state cancel validates against offer id
+    const validReceipt = applyFrame(
+      cancelled.state,
+      { type: "receipt", from: PAYER_DID, contract: offer.id, outcome: "cancelled" },
+      T0,
+    );
+    expect(validReceipt.ok).toBe(true);
+
+    // Receipt with mismatched contract is rejected
+    const invalidReceipt = applyFrame(
+      cancelled.state,
+      { type: "receipt", from: PAYER_DID, contract: otherOffer.id, outcome: "cancelled" },
+      T0,
+    );
+    expect(invalidReceipt.ok).toBe(false);
+    expect(invalidReceipt.reason).toBe("receipt names a different contract");
+  });
+
+  it("does not infer an offer target for malformed post-accept states", () => {
+    const { offer, state } = accepted();
+    const missingContract = { ...state, contract: undefined };
+
+    const cancel = applyFrame(
+      missingContract,
+      { type: "cancel", from: PAYER_DID, contract: offer.id },
+      T0,
+    );
+    expect(cancel.ok).toBe(false);
+    expect(cancel.state).toBe(missingContract);
+
+    for (const status of ["claimed", "refunded"] as const) {
+      const malformed: ContractState = { ...missingContract, status };
+      const receipt = applyFrame(
+        malformed,
+        { type: "receipt", from: PAYER_DID, contract: offer.id, outcome: status },
+        T0,
+      );
+      expect(receipt.ok).toBe(false);
+      expect(receipt.state).toBe(malformed);
+    }
+
+    const cancelled: ContractState = { ...missingContract, status: "cancelled" };
+    const receipt = applyFrame(
+      cancelled,
+      { type: "receipt", from: PAYER_DID, contract: offer.id, outcome: "cancelled" },
+      T0,
+    );
+    expect(receipt.ok).toBe(false);
+    expect(receipt.state).toBe(cancelled);
   });
 
   it("rejects hostile/malformed frames without throwing", () => {

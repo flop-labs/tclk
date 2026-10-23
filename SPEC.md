@@ -209,9 +209,11 @@ late — the payee gambles against the refund; the rail arbitrates.
 - `refund`: payer, while locked, at/after `refundAfterMs`; new senders SHOULD include `ref`, and
   when present it MUST equal the preceding `lock.ref`. As for `reveal`, it is optional on the
   tclk/1 wire solely for replay compatibility.
-- `cancel`: either party, before any lock exists (proposed/accepted).
+- `cancel`: either party, before any lock exists (proposed/accepted). While `proposed`, `contract`
+  carries the offer `id`; from `accepted` on, the contract id.
 - `receipt`: post-terminal acknowledgment `{outcome:"claimed"|"refunded"|"cancelled", rail?,
-  ref?}` — `outcome` must match the contract's terminal state. This is the line a
+  ref?}` — `outcome` must match the contract's terminal state; `contract` carries the contract id
+  (or the offer `id` if cancelled while `proposed`). This is the line a
   reputation/spend-accounting layer would consume later; it makes no transition and MUST NOT
   be used as a liveness signal.
 
