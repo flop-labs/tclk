@@ -8,6 +8,12 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `tclk_post_frame` refuses a frame whose `from` is not the identity that would sign the
+  post — the caller's `did` when a signature is passed through, the server's own did:key
+  when it signs with `TECHNOCORE_SIGNING_KEY`. SPEC §2 requires the two to match and
+  `foldTranscript` rejects any record where they do not, so such a post only ever left a
+  permanent line in the room that no reader could fold. The check runs before any request.
+  The signing challenge is unchanged: there the signer is not known yet.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema

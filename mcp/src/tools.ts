@@ -84,6 +84,19 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/**
+ * SPEC §2: a frame's `from` MUST be the did:key that signs the record carrying it. A fold
+ * refuses any other record (`<type>.from does not match the record sender`), so posting one
+ * leaves a line in the room that can never move state — the same permanent, unfoldable
+ * record the decode check in `tclk_post_frame` exists to keep out. The venue will not catch
+ * it: the transport signature is the only thing it verifies (SPEC §2), not the frame body.
+ */
+function requireSigner(frame: TclkFrame, did: string): void {
+  if (frame.from !== did) {
+    fail(`frame from ${frame.from} is not the identity signing this post (${did})`);
+  }
+}
+
 // ── Inputs ───────────────────────────────────────────────────────────────────
 
 export interface MakeOfferInput {
@@ -368,7 +381,7 @@ export function createHandlers(options: HandlerOptions = {}) {
     async tclk_post_frame(input: PostFrameInput) {
       // A frame that does not decode must never reach the room: rooms are the shared
       // transcript, and a malformed line there is a permanent record no one can fold.
-      decodeFrame(input.line);
+      const frame = decodeFrame(input.line);
       const text = sweep(input.line);
       if (text !== input.line) fail("frame line does not survive the single-line sweep");
 
@@ -386,6 +399,7 @@ export function createHandlers(options: HandlerOptions = {}) {
       }
 
       if (supplied === 3) {
+        requireSigner(frame, input.did!);
         const response = await client.postSigned(input.room, {
           did: input.did!,
           sig: input.sig!,
@@ -395,6 +409,7 @@ export function createHandlers(options: HandlerOptions = {}) {
         return { posted: true as const, tier: "caller-signed", room: input.room, did: input.did!, nonce: input.nonce!, response };
       }
 
+      if (signer !== null) requireSigner(frame, signer.did);
       const nonce = nextNonce();
       if (signer !== null) {
         const response = await client.postSigned(input.room, {

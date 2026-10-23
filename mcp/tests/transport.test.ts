@@ -7,7 +7,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 
 import { canonicalMessage, signerFromSeed } from "../src/signing.js";
 import { createHandlers } from "../src/tools.js";
-import { HASH_OFFER, PAYER_SEED, fakeFetch, hexToBytes } from "./fixtures.js";
+import { HASH_OFFER, PAYEE_SEED, PAYER_SEED, fakeFetch, hexToBytes } from "./fixtures.js";
 
 const ROOM = "mb-p-tclk-deadbeefdeadbeef";
 const signer = signerFromSeed(hexToBytes(PAYER_SEED));
@@ -143,6 +143,39 @@ describe("tclk_post_frame — tier 2, server-signed", () => {
     await expect(h.tclk_post_frame({ room: ROOM, line: offerLine() })).rejects.toThrow(
       /failed with 403: 403 bad sig/,
     );
+  });
+});
+
+describe("tclk_post_frame — the frame's own `from` is the identity that signs it", () => {
+  // SPEC §2: a fold refuses a record whose frame `from` is not its signed sender, so a post
+  // under any other identity would leave a line in the room that no reader can ever fold.
+  const other = signerFromSeed(hexToBytes(PAYEE_SEED));
+
+  it("refuses to sign another identity's frame with the server's key, before any request", async () => {
+    const { calls, fetchLike } = fakeFetch([]);
+    const h = createHandlers({ env: { TECHNOCORE_SIGNING_KEY: PAYEE_SEED }, fetch: fetchLike });
+
+    await expect(h.tclk_post_frame({ room: ROOM, line: offerLine() })).rejects.toThrow(
+      /is not the identity signing this post/,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  it("refuses a caller-supplied did that is not the frame's from, before any request", async () => {
+    const { calls, fetchLike } = fakeFetch([]);
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+    const line = offerLine();
+
+    await expect(
+      h.tclk_post_frame({
+        room: ROOM,
+        line,
+        did: other.did,
+        sig: other.sign(canonicalMessage(ROOM, 7, line)),
+        nonce: 7,
+      }),
+    ).rejects.toThrow(/is not the identity signing this post/);
+    expect(calls).toHaveLength(0);
   });
 });
 

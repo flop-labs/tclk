@@ -73,6 +73,9 @@ together; the fold has no parallel arrays and no fallback clock.
    string `<room>|<nonce>|<line>` and a usable nonce, so an external signer can sign it and
    call again. The tool call that "fails" *is* the request for a signature.
 
+In tiers 1 and 2 the frame's own `from` must be the did:key that signs the post (SPEC §2): a
+line from any other identity is refused before it reaches the room, since no fold accepts it.
+
 ## Library use
 
 ```ts
