@@ -35,8 +35,13 @@ const lines = [...markdown.matchAll(/^FRAME='(tclk1 [^']*)'$/gm)].map((m) => m[1
 // `[...]` get stand-ins; a quoted placeholder is already a JSON string.
 const mcpCalls = [...markdown.matchAll(/`(tclk_[a-z_]+)`\s+`(\{[^`]*\})`/g)].map((m) => {
   const json = m[2].replace(/:<[^<>"]*>/g, ":0").replace(/\[\.\.\.\]/g, "[]");
-  return { tool: m[1], args: JSON.parse(json) as Record<string, unknown> };
+  return { tool: m[1], text: m[2], args: JSON.parse(json) as Record<string, unknown> };
 });
+// In this walkthrough an inline `{…}` span is only ever a tool's arguments, so the spans are
+// also collected on their own, without the tool name in front: a call whose `tool` `{json}`
+// shape an edit breaks (a comma or a word between the two) then fails the test below instead
+// of dropping out of the schema and room checks unnoticed.
+const argumentSpans = [...markdown.matchAll(/`(\{[^`]*\})`/g)].map((m) => m[1]);
 
 describe("examples/htlc-walkthrough.md", () => {
   it("carries five frames that all decode, in walkthrough order", () => {
@@ -77,6 +82,13 @@ describe("examples/htlc-walkthrough.md", () => {
     const lock = hashLockFromPreimage(padded);
     expect(reveal.secret).toBe(lock.preimage);
     expect(accept.statement).toBe(lock.hash);
+  });
+
+  it("parses every argument object in the walkthrough as a tool call", () => {
+    expect(
+      mcpCalls.map((call) => call.text),
+      "an inline `{…}` span that was not parsed as `tool` `{json}`",
+    ).toEqual(argumentSpans);
   });
 
   it("calls every MCP tool with exactly the arguments its schema takes", () => {
