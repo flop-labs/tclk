@@ -115,5 +115,5 @@ installed package version.
 
 ## Spec
 
-The protocol lives in the repository's design docs; the frame codec, state machine and lock
-primitives are `@flop-labs/tclk`.
+The protocol is specified in [`SPEC.md`](https://github.com/flop-labs/tclk/blob/main/SPEC.md);
+the frame codec, state machine and lock primitives are `@flop-labs/tclk`.
