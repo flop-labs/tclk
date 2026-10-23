@@ -531,6 +531,10 @@ describe("tclk venue binding", () => {
     expect(parseStateNoteValue("locked \u2603")).toBeNull();
     expect(parseStateNoteValue(`locked ${"x".repeat(257)}`)).toBeNull();
     expect(() => stateNoteValue("locked", "has space")).toThrow(/printable ASCII/);
+    expect(() => stateNoteValue("exploded" as TclkStatus)).toThrow(/status must be/);
+    expect(() => stateNoteValue("exploded" as TclkStatus, "escrow-42")).toThrow(
+      /status must be/,
+    );
   });
 });
 
