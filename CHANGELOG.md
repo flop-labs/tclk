@@ -9,7 +9,7 @@ All notable changes to this project are documented here. Format follows
 ### Fixed
 
 - Transcript verification now enforces Technocore's canonical 1–19 digit signed-nonce
-  width instead of accepting arbitrarily long decimal strings that the venue could never
+  width (not an int64 range bound) instead of accepting arbitrarily long decimal strings that the venue could never
   have stored, while preserving exact valid 19-digit nonces above JavaScript's safe range
   (#187).
 
