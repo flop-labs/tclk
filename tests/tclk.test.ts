@@ -199,6 +199,28 @@ describe("tclk frames — wire codec", () => {
     }
   });
 
+  it("round-trips a genuine adaptor pre-signature through the lock codec", () => {
+    const secretKey = "0x" + "11".repeat(32);
+    const publicKey = schnorrAdaptor.getPublicKey(secretKey)!;
+    const message = new TextEncoder().encode("tclk lock presig positive verification");
+    const { statement, witness } = generatePointLock();
+    const presig = schnorrAdaptor.preSign(secretKey, message, statement)!;
+    const frame = {
+      type: "lock" as const,
+      from: PAYER_DID,
+      contract: "0x" + "11".repeat(32),
+      rail: "flop-htlc",
+      ref: "escrow-42",
+      presig,
+    };
+
+    expect((decodeFrame(encodeFrame(frame)) as typeof frame).presig).toEqual(presig);
+    expect(schnorrAdaptor.verifyPreSignature(publicKey, message, statement, presig)).toBe(true);
+    const completed = schnorrAdaptor.adapt(presig, witness)!;
+    expect(schnorrAdaptor.verifySignature(publicKey, message, completed)).toBe(true);
+    expect(schnorrAdaptor.extractWitness(presig, completed)).toBe(witness);
+  });
+
   it("tryDecodeFrame skips foreign and hostile lines instead of throwing", () => {
     expect(tryDecodeFrame("hello from ~alice")).toBeNull();
     expect(tryDecodeFrame('tclk1 {"type":"offer"}')).toBeNull();
