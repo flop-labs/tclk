@@ -42,6 +42,7 @@ import {
   createClient,
   DEFAULT_TECHNOCORE_URL,
   type FetchLike,
+  type RoomView,
   type TechnocoreClient,
 } from "./technocore.js";
 
@@ -54,6 +55,36 @@ export interface TclkEnv {
 export interface HandlerOptions {
   env?: TclkEnv;
   fetch?: FetchLike;
+}
+
+/**
+ * Ranges of seqs that fall inside the window's own bounds but are absent from its messages.
+ * Walks the sorted seqs the venue served (malformed envelopes included, since their seq is
+ * accounted for), so the cost is bounded by the message count however wide a hostile
+ * `first_seq`/`last_seq` claims the window is.
+ */
+function missingSeqRanges(view: RoomView): { from: number; to: number }[] {
+  const seqs: number[] = [];
+  for (const message of view.messages) {
+    const seq = (message as { seq?: unknown } | null)?.seq;
+    if (typeof seq === "number" && Number.isSafeInteger(seq)) seqs.push(seq);
+  }
+  seqs.sort((a, b) => a - b);
+  const bound = (value: unknown, fallback: number | undefined) =>
+    typeof value === "number" && Number.isSafeInteger(value) ? value : fallback;
+  const first = bound(view.first_seq, seqs[0]);
+  const last = bound(view.last_seq, seqs.at(-1));
+  if (first === undefined || last === undefined) return [];
+
+  const missing: { from: number; to: number }[] = [];
+  let next = first;
+  for (const seq of seqs) {
+    if (seq < first || seq > last) continue;
+    if (seq > next) missing.push({ from: next, to: seq - 1 });
+    if (seq >= next) next = seq + 1;
+  }
+  if (next <= last) missing.push({ from: next, to: last });
+  return missing;
 }
 
 function fail(msg: string): never {
@@ -468,7 +499,12 @@ export function createHandlers(options: HandlerOptions = {}) {
         records,
         malformed,
         count: records.length,
+        firstSeq: Number.isSafeInteger(view.first_seq) ? (view.first_seq as number) : null,
         lastSeq: view.last_seq,
+        // Seqs the venue's own bounds cover but its messages skip. Seq and venue time are
+        // unsigned, so an empty list is not proof of completeness; a non-empty one is proof
+        // of a hole, and folding across it can change the outcome.
+        missing: missingSeqRanges(view),
       };
     },
 

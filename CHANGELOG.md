@@ -12,6 +12,11 @@ All notable changes to this project are documented here. Format follows
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
   boundary rather than silently rounded.
+- `tclk_read_room` window reads now report `firstSeq` and `missing` (seq ranges inside the
+  venue's own `first_seq`..`last_seq` that its messages skip). Previously a response with a
+  dropped record returned the remaining records with no signal, and a fold over them could
+  reach a different outcome (a dropped `reveal` folds a claimed deal to `refunded`). Seq is
+  unsigned venue metadata, so an empty `missing` is not proof of completeness.
 
 ### Added
 
