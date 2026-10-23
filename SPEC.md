@@ -103,6 +103,14 @@ the public manual (`/llms.txt`), and any self-hosted deployment works identicall
     the venue's retention are fine — they bind the rail, not the room.
   - *Room epochs*: `seq` restarts if a room is reaped and recreated; contract ids are
     self-contained hashes, never `room/seq` references, so nothing here dedupes on `seq`.
+  - *Bootstrap depends on room creation* (#3): a deal cannot start when the venue refuses new
+    room creation. `tclk-offers` is the fixed rendezvous name strangers use to find each other,
+    so when it does not exist and cannot be created (global room cap reached or per-client daily
+    budget exhausted), no offer can be posted. Venues typically enforce two capacity mechanisms:
+    a global room limit and a per-client-IP daily budget (e.g. 20 new rooms per day). The daily
+    budget is the durable constraint and resets at UTC midnight. Callers should probe room
+    creation capability before attempting a deal (`probeRoomCreation`) and provide clear guidance
+    when creation is refused, directing users to run their own instance or wait for capacity.
 
 ## 3. Wire format
 
