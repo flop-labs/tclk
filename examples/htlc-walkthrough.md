@@ -19,7 +19,9 @@ equivalent `tclk_make_*` MCP tools.
 
 We use a single open room, `tclk-demo`, for both sides to read and write. A real deal typically
 moves to a private mailbox (`mb-p-tclk-<first 16 hex of the contract id>`) at accept time — see
-`SPEC.md` §2.
+`SPEC.md` §2. This single-room run is illustrative; the foldable layout — offer and accept in
+`tclk-offers`, every later frame in the deal room — is the
+[MCP section](#the-same-flow-via-the-mcp-tools) below.
 
 ## 1. Payer posts the offer
 
