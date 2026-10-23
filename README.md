@@ -109,6 +109,23 @@ fields in the sender's signature, so an offline audit still trusts its export fi
 
 Exact frame shapes and field rules: [`SPEC.md` §3](SPEC.md#3-wire-format).
 
+The same rules ship as JSON Schema 2020-12 in `schema/tclk1-frames.schema.json`. It carries
+`x-tclk-*` annotation keywords for the rail registry, which Ajv's default strict mode rejects as
+unknown. Register every `x-tclk-*` keyword the schema uses before compiling it:
+
+```ts
+import { Ajv2020 } from "ajv/dist/2020.js";
+
+const keywords = new Set<string>();
+JSON.stringify(schema, (key, value) => {
+  if (key.startsWith("x-tclk-")) keywords.add(key);
+  return value;
+});
+const ajv = new Ajv2020();
+for (const keyword of keywords) ajv.addKeyword({ keyword });
+const validate = ajv.compile(schema);
+```
+
 ### MCP server
 
 Two ways in, and the difference is what the server is allowed to hold.
