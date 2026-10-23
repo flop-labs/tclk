@@ -8,6 +8,13 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `tclk_post_frame`'s string nonce must now be canonical decimal — no leading zero — the same
+  spelling `verifyTranscriptRecord` accepts. The 1-19 digit pattern admitted `0000001730000000001`,
+  and the caller-signed tier sends a string nonce to the venue verbatim, so the tool wrote a record
+  this package then refuses to fold: either the venue echoes the padded nonce back and the read path
+  calls it "not canonical decimal", or it normalizes to the bare number and the signature over
+  `room|0000001730000000001|text` no longer verifies. A posted frame cannot be taken back, so the
+  write path is now no looser than the read path. `0` remains valid; a numeric nonce is unaffected.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema

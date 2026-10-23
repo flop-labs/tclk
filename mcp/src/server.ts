@@ -9,7 +9,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
-import { createHandlers, type HandlerOptions, type Handlers } from "./tools.js";
+import { CANONICAL_NONCE, createHandlers, type HandlerOptions, type Handlers } from "./tools.js";
 
 export { createHandlers } from "./tools.js";
 export type { Handlers, HandlerOptions, TclkEnv } from "./tools.js";
@@ -335,10 +335,13 @@ export function createServer(options: HandlerOptions = {}): McpServer {
         nonce: z
           .union([
             z.number().int().safe().nonnegative(),
-            z.string().regex(/^[0-9]{1,19}$/, "1 to 19 decimal digits"),
+            z.string().regex(CANONICAL_NONCE, "1 to 19 decimal digits, no leading zero"),
           ])
           .optional()
-          .describe("Signed-lane nonce; safe integer or 1-19 decimal digit string."),
+          .describe(
+            "Signed-lane nonce; safe integer, or canonical decimal text of up to 19 " +
+              "digits with no leading zero — the spelling a fold accepts back.",
+          ),
       },
     },
     (args) => run(() => h.tclk_post_frame(args)),

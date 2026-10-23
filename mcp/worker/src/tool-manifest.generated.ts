@@ -738,10 +738,10 @@ export const TOOLS: readonly ManifestTool[] = [
             },
             {
               "type": "string",
-              "pattern": "^[0-9]{1,19}$"
+              "pattern": "^(?:0|[1-9][0-9]{0,18})$"
             }
           ],
-          "description": "Signed-lane nonce; safe integer or 1-19 decimal digit string."
+          "description": "Signed-lane nonce; safe integer, or canonical decimal text of up to 19 digits with no leading zero — the spelling a fold accepts back."
         }
       },
       "required": [

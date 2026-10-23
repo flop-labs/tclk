@@ -297,6 +297,17 @@ describe("no custody", () => {
     expect(tooLongRes.body.error).toBeDefined();
     expect(tooLongRes.body.error.code).toBe(-32602);
     expect(calls).toHaveLength(0);
+
+    // A leading zero is not canonical decimal, so `verifyTranscriptRecord` would refuse the
+    // record this posts. The manifest pattern the Worker checks must say so too.
+    const paddedRes = await rpc(
+      "tools/call",
+      { name: "tclk_post_frame", arguments: { room: ROOM, line, did: PAYER_DID, sig: "x".repeat(86), nonce: "0000001730000000001" } },
+      fetchLike,
+    );
+    expect(paddedRes.body.error).toBeDefined();
+    expect(paddedRes.body.error.code).toBe(-32602);
+    expect(calls).toHaveLength(0);
   });
 
   it("tclk_adaptor_presign refuses structurally, naming where pre-signing belongs", async () => {
