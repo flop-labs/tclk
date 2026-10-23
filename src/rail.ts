@@ -43,6 +43,21 @@ export function lockTerms(state: ContractState): LockTerms {
   };
 }
 
+/**
+ * Read the injected clock as the operand of a deadline guard. A reading that is not a finite
+ * non-negative time cannot be compared meaningfully: `NaN` makes every comparison false in
+ * both directions, so a guard is skipped rather than failed, and a negative or infinite
+ * reading answers the comparison confidently about a time that never existed. This is the
+ * rule `applyFrame` already applies to its own `nowMs`.
+ */
+export function railNow(clock: () => number): number {
+  const now = clock();
+  if (!Number.isFinite(now) || now < 0) {
+    throw new Error("tclk: rail clock must read a finite non-negative number");
+  }
+  return now;
+}
+
 export interface SettlementRail {
   /** Rail id as advertised in `offer.rails` (e.g. "flop-htlc", "x402"). */
   readonly id: CanonicalRailId;
@@ -84,7 +99,7 @@ export class MemoryRail implements SettlementRail {
     if (this.locks.has(terms.contract)) {
       throw new Error(`tclk: rail already holds a lock for ${terms.contract}`);
     }
-    if (this.clock() >= terms.refundAfterMs) {
+    if (railNow(this.clock) >= terms.refundAfterMs) {
       throw new Error("tclk: refusing to lock into an already-open refund window");
     }
     this.locks.set(terms.contract, { terms, status: "locked" });
@@ -102,7 +117,7 @@ export class MemoryRail implements SettlementRail {
 
   async claim(ref: string, secret: string): Promise<void> {
     const held = this.requireLocked(ref, "claim");
-    if (this.clock() >= held.terms.refundAfterMs) {
+    if (railNow(this.clock) >= held.terms.refundAfterMs) {
       throw new Error("tclk: claim after refundAfterMs");
     }
     if (!verifySecret(held.terms.lock, held.terms.statement, secret)) {
@@ -113,7 +128,7 @@ export class MemoryRail implements SettlementRail {
 
   async refund(ref: string): Promise<void> {
     const held = this.requireLocked(ref, "refund");
-    if (this.clock() < held.terms.refundAfterMs) {
+    if (railNow(this.clock) < held.terms.refundAfterMs) {
       throw new Error("tclk: refund before refundAfterMs");
     }
     this.locks.set(ref, { ...held, status: "refunded" });

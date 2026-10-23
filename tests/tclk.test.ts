@@ -460,6 +460,27 @@ describe("tclk MemoryRail (reference rail predicates)", () => {
     expect(await rail.verifyLock(terms, ref)).toBe(false);
   });
 
+  // The clock reading is an operand of all three deadline guards. `NaN` is the reading that
+  // voids all three, because every comparison with it is false in both directions; a negative
+  // or infinite reading instead answers each comparison confidently about a time that never
+  // existed. Neither is a time, so the rail must refuse the reading rather than compare it.
+  it.each([
+    ["NaN", Number.NaN],
+    ["Infinity", Number.POSITIVE_INFINITY],
+    ["negative", -1],
+  ])("refuses to lock, claim or refund on a %s clock reading", async (_label, bad) => {
+    const badClock = /rail clock must read a finite non-negative number/;
+    const { rail, lock, terms, setNow } = railFixture();
+    const ref = await rail.lock(terms);
+
+    setNow(bad);
+    await expect(rail.claim(ref, lock.preimage)).rejects.toThrow(badClock);
+    await expect(rail.refund(ref)).rejects.toThrow(badClock);
+    expect(rail.status(ref)).toBe("locked");
+
+    await expect(new MemoryRail("memory", () => bad).lock(terms)).rejects.toThrow(badClock);
+  });
+
   it("verifyLock is fail-closed on unknown refs and mismatched terms", async () => {
     const { rail, terms } = railFixture();
     expect(await rail.verifyLock(terms, terms.contract)).toBe(false);
