@@ -24,11 +24,17 @@ import { normalizeRailId } from "./rails.js";
 
 export type TclkStatus = "proposed" | "accepted" | "locked" | "claimed" | "refunded" | "cancelled";
 
-export const TCLK_TERMINAL_STATUSES: ReadonlySet<TclkStatus> = new Set([
+const TERMINAL_STATUS_VALUES: readonly TclkStatus[] = [
   "claimed",
   "refunded",
   "cancelled",
-]);
+];
+
+export const TCLK_TERMINAL_STATUSES: ReadonlySet<TclkStatus> = new Set(TERMINAL_STATUS_VALUES);
+
+function isTerminalStatus(status: TclkStatus): boolean {
+  return TERMINAL_STATUS_VALUES.includes(status);
+}
 
 export interface ContractState {
   status: TclkStatus;
@@ -205,7 +211,7 @@ export function applyFrame(state: ContractState, frame: TclkFrame, nowMs: number
 
     case "receipt": {
       // Post-terminal acknowledgment; never a transition.
-      if (!TCLK_TERMINAL_STATUSES.has(state.status)) {
+      if (!isTerminalStatus(state.status)) {
         return reject(state, "receipt before a terminal status");
       }
       if (frame.contract !== state.contract) return reject(state, "receipt names a different contract");

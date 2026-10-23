@@ -13,6 +13,7 @@ import { describe, it, expect } from "vitest";
 import {
   MAX_FRAME_CHARS,
   TCLK_PREFIX,
+  TCLK_TERMINAL_STATUSES,
   applyFrame,
   contractId,
   dealRoom,
@@ -226,6 +227,28 @@ describe("tclk locks", () => {
 });
 
 describe("tclk state machine", () => {
+  it("does not let runtime mutation of the exported terminal set alter transitions", () => {
+    const { lock, state } = accepted();
+    const locked = applyFrame(state, {
+      type: "lock", from: PAYER_DID, contract: state.contract!, rail: "x402", ref: "r",
+    }, T0).state;
+    const claimed = applyFrame(locked, {
+      type: "reveal", from: PAYEE_DID, contract: state.contract!, ref: "r", secret: lock.preimage,
+    }, T0 + 1).state;
+    const runtimeSet = TCLK_TERMINAL_STATUSES as Set<TclkStatus>;
+
+    runtimeSet.delete("claimed");
+    try {
+      const receipt = applyFrame(claimed, {
+        type: "receipt", from: PAYER_DID, contract: state.contract!, outcome: "claimed",
+      }, T0 + 2);
+      expect(receipt.ok).toBe(true);
+      expect(receipt.state).toBe(claimed);
+    } finally {
+      runtimeSet.add("claimed");
+    }
+  });
+
   it("runs the HTLC happy path: propose → accept → lock → reveal", () => {
     const { lock, state } = accepted();
     expect(state.status).toBe("accepted");
