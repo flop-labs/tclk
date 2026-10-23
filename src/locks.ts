@@ -71,7 +71,7 @@ export function validateDeadlines(
   // here with whatever it parsed, and `JSON.parse('{"offer":null}')` is an ordinary way
   // to get null. Reading .claimByMs off that throws instead of returning false, which is
   // the one input shape this guard was not closing.
-  if (offer === null || typeof (offer as unknown) !== "object") {
+  if (offer === null || typeof (offer as unknown) !== "object" || Array.isArray(offer)) {
     return false;
   }
   if (

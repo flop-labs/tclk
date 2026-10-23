@@ -228,7 +228,7 @@ describe("tclk locks", () => {
     // An offer that is null is not an offer with bad numbers in it, it is no offer at
     // all, and a caller holding a parsed blob can have that. Returning false lets the
     // caller branch on the result the way the signature says it can.
-    const absent = [null, undefined, "not an offer", 42];
+    const absent = [null, undefined, "not an offer", 42, []];
     for (const offer of absent) {
       expect(() =>
         validateDeadlines(offer as unknown as OfferFrame, T0, 1, 1),
