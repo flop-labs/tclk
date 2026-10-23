@@ -9,7 +9,7 @@ All notable changes to this project are documented here. Format follows
 ### Fixed
 
 - `voteCommitment` rejects a verdict containing a character technocore rewrites — control,
-  format, line- or paragraph-separator. The venue replaces these with a space before it
+  format, surrogate, private-use, line- or paragraph-separator. The venue replaces these with a space before it
   stores a message, and SPEC 8.3 opens a commitment by posting the verdict into a room, so
   such a verdict committed successfully and could then never be reopened: the reveal that
   came back was not the string that was hashed, stranding the juror's vote with no

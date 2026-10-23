@@ -52,6 +52,8 @@ describe("commit–reveal voting", () => {
       ["soft hyphen", "y" + chr(0x00ad) + "es"],
       ["BOM", chr(0xfeff) + "yes"],
       ["line separator", "yes" + chr(0x2028)],
+      ["private use", "yes" + chr(0xe000)],
+      ["lone surrogate", "yes" + chr(0xd800)],
     ] as const;
 
     for (const [label, verdict] of stranded) {

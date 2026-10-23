@@ -20,8 +20,9 @@ import { SECP256K1_N } from "./points.js";
 const HEX32 = /^0x[0-9a-f]{64}$/;
 
 /**
- * Characters technocore rewrites to a space before it stores a message: control,
- * format, line- and paragraph-separator. The same hazard `encodeFrame` refuses to
+ * Characters technocore rewrites to a space before it stores a message: the same list
+ * as `store.INVISIBLE_CATEGORIES` in technocore-chat (control, format, surrogate,
+ * private-use, line- and paragraph-separator). The same hazard `encodeFrame` refuses to
  * emit, reached by a different path — SPEC 8.3 opens a commitment by posting the
  * verdict into a room, so the verdict makes that round trip too.
  *
@@ -30,7 +31,7 @@ const HEX32 = /^0x[0-9a-f]{64}$/;
  * a visible non-ASCII verdict ("si", "\u306f\u3044") survives the venue untouched.
  * Only the invisible classes are a problem.
  */
-const VENUE_REWRITES = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+const VENUE_REWRITES = /[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Zl}\p{Zp}]/u;
 
 function requireSecret(value: string, name: string): Uint8Array {
   if (!HEX32.test(value)) throw new Error(`tclk: ${name} must be 32 bytes of 0x-hex`);
