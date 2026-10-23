@@ -114,6 +114,16 @@ export class PaperRail implements SettlementRail {
     if (this.clock() >= terms.refundAfterMs) {
       throw new Error("tclk: refusing to lock into an already-open refund window");
     }
+    // The record only stores lowercase canonical spellings (decodePaperRecord enforces
+    // them), so refuse a non-canonical statement here rather than writing a record no
+    // reader can parse back. Honest terms always come from lockTerms() over an accepted
+    // contract, where the statement already passed isValidStatement.
+    if (!isValidStatement(terms.lock, terms.statement)) {
+      throw new Error("tclk: paper rail lock statement does not fit its lock kind");
+    }
+    if (!Number.isSafeInteger(terms.refundAfterMs) || terms.refundAfterMs <= 0) {
+      throw new Error("tclk: paper rail lock refundAfterMs must be a positive unix-ms integer");
+    }
     const { ns, key } = paperNote(terms.contract);
     const record: PaperRecord = {
       status: "locked",
@@ -128,6 +138,9 @@ export class PaperRail implements SettlementRail {
 
   async verifyLock(terms: LockTerms, ref: string): Promise<boolean> {
     if (ref !== terms.contract) return false;
+    // read() returns null for malformed ids and unparseable lines, so a malformed
+    // input ends here as false. A transport failure from notes.get still throws,
+    // which is correct: that is an outage, not a negative answer.
     const record = await this.read(ref);
     return (
       record !== null &&
@@ -141,10 +154,14 @@ export class PaperRail implements SettlementRail {
   async claim(ref: string, secret: string): Promise<void> {
     const { current, record } = await this.requireLocked(ref, "claim");
     if (this.clock() >= record.refundAfterMs) throw new Error("tclk: claim after refundAfterMs");
-    if (!verifySecret(record.lock, record.statement, secret)) {
+    // verifySecret accepts uppercase hex, but the record encoding is canonical
+    // lowercase. Store the lowercase spelling so a successful claim stays readable
+    // (decodePaperRecord requires it) instead of becoming unauditable.
+    const canonicalSecret = secret.toLowerCase();
+    if (!verifySecret(record.lock, record.statement, canonicalSecret)) {
       throw new Error("tclk: secret does not open the statement");
     }
-    await this.advance(ref, current, { ...record, status: "claimed", secret });
+    await this.advance(ref, current, { ...record, status: "claimed", secret: canonicalSecret });
   }
 
   async refund(ref: string): Promise<void> {
@@ -155,7 +172,13 @@ export class PaperRail implements SettlementRail {
 
   /** The record as it stands, or null when absent or unparseable. */
   async read(ref: string): Promise<PaperRecord | null> {
-    const { ns, key } = paperNote(ref);
+    let ns: string;
+    let key: string;
+    try {
+      ({ ns, key } = paperNote(ref));
+    } catch {
+      return null;
+    }
     const value = await this.notes.get(ns, key);
     return value === null ? null : decodePaperRecord(value);
   }
