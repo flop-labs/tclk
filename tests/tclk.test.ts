@@ -36,6 +36,7 @@ import {
   tclkStatusToA2A,
   tclkStatusToAcpPhase,
   tryDecodeFrame,
+  fundingOutlook,
   validateDeadlines,
   verifyHashPreimage,
   verifyPointWitness,
@@ -554,5 +555,105 @@ describe("tclk interop mappings", () => {
     expect(offer.job).toEqual({ proto: "acp", id: "1234" });
     expect(a2aJob("t-1")).toEqual({ proto: "a2a", id: "t-1" });
     expect(a2aJob("t-1", "c-9")).toEqual({ proto: "a2a", id: "t-1", context: "c-9" });
+  });
+});
+
+describe("fundingOutlook — derived, never signed (#41)", () => {
+  const lockFrame = (state: ContractState) => ({
+    type: "lock" as const,
+    from: PAYER_DID,
+    contract: state.contract!,
+    rail: "flop-htlc",
+    ref: "escrow-41",
+  });
+
+  // The whole point of the reading is that it agrees with the guard. If someone changes the
+  // `lock` guard's comparison and not this, one of these clocks disagrees.
+  it("agrees with the lock guard at every clock around the boundary", () => {
+    const { state } = accepted();
+    const clocks = [
+      T0,
+      REFUND_AFTER - 60_000,
+      REFUND_AFTER - 1,
+      REFUND_AFTER,
+      REFUND_AFTER + 1,
+      REFUND_AFTER + 60_000,
+    ];
+    for (const now of clocks) {
+      expect(fundingOutlook(state, now).actionable).toBe(applyFrame(state, lockFrame(state), now).ok);
+    }
+  });
+
+  it("separates the four an accepted contract gets confused between", () => {
+    const { state, lock } = accepted();
+    expect(fundingOutlook(state, T0)).toMatchObject({
+      actionable: true,
+      code: "open",
+      msRemaining: REFUND_AFTER - T0,
+    });
+
+    // The cliff #41 is about: the window shut and no lock ever arrived.
+    expect(fundingOutlook(state, REFUND_AFTER)).toMatchObject({
+      actionable: false,
+      code: "lapsed",
+      msRemaining: 0,
+    });
+
+    const locked = applyFrame(state, lockFrame(state), T0);
+    expect(locked.ok).toBe(true);
+    expect(fundingOutlook(locked.state, T0).code).toBe("funded");
+
+    const cancelled = applyFrame(state, {
+      type: "cancel",
+      from: PAYER_DID,
+      contract: state.contract!,
+    }, T0);
+    expect(cancelled.ok).toBe(true);
+    expect(fundingOutlook(cancelled.state, T0).code).toBe("cancelled");
+
+    const revealed = applyFrame(locked.state, {
+      type: "reveal",
+      from: PAYEE_DID,
+      contract: state.contract!,
+      secret: lock.preimage,
+    }, T0);
+    expect(revealed.ok).toBe(true);
+    expect(fundingOutlook(revealed.state, T0).code).toBe("settled");
+  });
+
+  it("reports both barriers a proposed offer can hit, in the order the machine hits them", () => {
+    const state = openContract(baseOffer());
+    expect(fundingOutlook(state, T0)).toMatchObject({
+      actionable: true,
+      code: "awaiting-accept",
+      msRemaining: EXPIRES - T0,
+    });
+    expect(fundingOutlook(state, EXPIRES).code).toBe("offer-expired");
+
+    // Nothing requires expiresMs < refundAfterMs, so an offer can still be acceptable at a clock
+    // where no lock could follow. That is a closed funding window, not an expired offer.
+    const late = openContract(baseOffer({ expiresMs: REFUND_AFTER + 600_000 }));
+    expect(fundingOutlook(late, REFUND_AFTER)).toMatchObject({ actionable: false, code: "lapsed" });
+    expect(applyFrame(late, makeAccept(late.offer, {
+      from: PAYEE_DID,
+      statement: generateHashLock().hash,
+    }), REFUND_AFTER).ok).toBe(true);
+  });
+
+  it("fails closed on a clock the machine would refuse", () => {
+    const { state } = accepted();
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, -1]) {
+      const outlook = fundingOutlook(state, bad);
+      expect(outlook).toMatchObject({ actionable: false, code: "unreadable-clock", msRemaining: 0 });
+      expect(applyFrame(state, lockFrame(state), bad).ok).toBe(false);
+    }
+  });
+
+  it("never mutates the state it reads", () => {
+    const { state } = accepted();
+    const before = structuredClone(state);
+    fundingOutlook(state, T0);
+    fundingOutlook(state, REFUND_AFTER + 1);
+    expect(state).toEqual(before);
   });
 });

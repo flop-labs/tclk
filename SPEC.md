@@ -249,6 +249,20 @@ distinct from two valid sets having no overlap. For a historical custom tclk/1 i
 normalized, replay uses the original exact-string membership rule and never treats it as equal
 to a registered rail.
 
+**Abandonment is already observable, and `refundAfterMs` is the deadline.** A contract's *status*
+stays `accepted` indefinitely when a payer walks away, which is what makes an abandonment look
+like a party being briefly offline. Funding, though, does not: the `lock` guard above refuses a
+lock once `now ≥ refundAfterMs`, and `refundAfterMs` is an offer field committed by `contractId`,
+so both parties signed the bound before either acted. tclk/1 therefore needs no coordination
+deadline field and no abort frame to make the cliff visible — `fundingOutlook(state, nowMs)`
+reports it, distinguishing an accepted contract whose window is still open from one whose window
+shut with no lock, from one explicitly cancelled, from one already funded. It is a derived
+reading, never a signed frame and never contract state: absence of funding is not something a
+vanished party can be made to attest, and a clock passing is not evidence that anyone intended to
+abort. A safety margin on top of the bound is rail-specific and belongs to the caller, which is
+why the reading reports the time remaining rather than only a verdict. `claimByMs` is not a
+boundary here: no transition guard reads it, and §3.1 calls it the payee's *safe* claim deadline.
+
 ## 5. Settlement rails
 
 A rail is anything that can hold `amount` of `asset` under the contract's statement and

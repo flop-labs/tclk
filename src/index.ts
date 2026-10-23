@@ -31,8 +31,8 @@ export {
 } from "./locks.js";
 export type { HashLock } from "./locks.js";
 
-export { TCLK_TERMINAL_STATUSES, openContract, applyFrame } from "./machine.js";
-export type { TclkStatus, ContractState, StepResult } from "./machine.js";
+export { TCLK_TERMINAL_STATUSES, openContract, applyFrame, fundingOutlook } from "./machine.js";
+export type { TclkStatus, ContractState, StepResult, FundingOutlook, FundingOutlookCode } from "./machine.js";
 
 export {
   verifyTranscriptRecord, transcriptRecord, parseTranscriptExport,
