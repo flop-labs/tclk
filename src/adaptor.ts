@@ -123,13 +123,29 @@ export function adapt(pre: PreSignature, witness: string): Signature | null {
 
 /**
  * Extract the witness `t = s − ŝ (mod n)` from a pre-signature and its completed
- * signature, or `null` if either scalar is malformed. This is the on-chain → off-chain
- * bridge: `t` opens `Point(T)`.
+ * signature, or `null` if the two do not adapt to one another. This is the on-chain →
+ * off-chain bridge: `t` opens `Point(T)`.
+ *
+ * The scalar difference alone does not carry that guarantee. `adapt` sets `R = R̂ + t·G`,
+ * so the difference is the witness only when it also explains the *nonce* difference —
+ * and two pre-signatures over the same message and statement differ only in `r`, which
+ * the caller never chooses and never sees. Subtracting one signer's scalars across two
+ * unrelated pre-signatures yields a scalar that opens nothing, from inputs where the
+ * pre-signature verifies, the signature verifies, and no byte is malformed.
+ *
+ * Checking `t·G == R − R̂` closes that. Once the caller has verified the pre-signature
+ * against their statement `T` and the signature against the same key and message, `e`
+ * is forced equal on both sides, hence `R = R̂ + T`, hence `t·G == T`: the returned
+ * scalar is provably the witness for the statement they pre-signed under, not merely a
+ * number of the right shape.
  */
 export function extractWitness(pre: PreSignature, sig: Signature): string | null {
   try {
     const diff = mod(toScalar(sig.s) - toScalar(pre.s));
     if (diff === 0n) return null;
+    const Rhat = P256.fromBytes(hexToU8a(pre.nonce));
+    const R = P256.fromBytes(hexToU8a(sig.nonce));
+    if (!R.equals(Rhat.add(P256.BASE.multiply(diff)))) return null;
     return scalarHex(diff);
   } catch {
     return null;

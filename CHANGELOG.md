@@ -8,6 +8,13 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `extractWitness` now verifies that the extracted scalar explains the *nonce* difference
+  (`t·G == R - R̂`) and not only the scalar difference, returning `null` when it does not.
+  Two pre-signatures over the same message and statement differ only in the random `r`, so
+  the previous check let a mismatched but individually valid pre-signature/signature pair
+  yield a scalar that opens nothing — reported as a success. `applyFrame` already re-verifies
+  a revealed secret, so the protocol path was not exposed; `tclk_adaptor_extract` was, and
+  now returns `ok:false` for such a pair.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
