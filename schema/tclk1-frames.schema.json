@@ -25,6 +25,12 @@
       "type": "string",
       "pattern": "^0x[0-9a-f]{66}$"
     },
+    "paymentKey": {
+      "type": "string",
+      "pattern": "^0x(?:02|03)[0-9a-f]{64}$",
+      "description": "33-byte SEC1-compressed secp256k1 payment key. JSON Schema enforces the compressed encoding; the runtime decoder additionally requires the point to be on-curve.",
+      "x-tclk-runtimeConstraint": "secp256k1-compressed-point-on-curve"
+    },
     "nonce": {
       "type": "string",
       "pattern": "^[0-9a-f]{8,64}$"
@@ -79,7 +85,7 @@
         "claimByMs": { "type": "integer", "minimum": 1 },
         "refundAfterMs": { "type": "integer", "minimum": 1 },
         "expiresMs": { "type": "integer", "minimum": 1 },
-        "paymentKey": { "$ref": "#/$defs/hex33" },
+        "paymentKey": { "$ref": "#/$defs/paymentKey" },
         "job": { "$ref": "#/$defs/job" },
         "nonce": { "$ref": "#/$defs/nonce" },
         "id": { "$ref": "#/$defs/hex32" }
@@ -101,7 +107,7 @@
           "pattern": "^0x(?:[0-9a-f]{64}|[0-9a-f]{66})$"
         },
         "contract": { "$ref": "#/$defs/hex32" },
-        "paymentKey": { "$ref": "#/$defs/hex33" },
+        "paymentKey": { "$ref": "#/$defs/paymentKey" },
         "nonce": { "$ref": "#/$defs/nonce" }
       },
       "required": ["type", "from", "ref", "statement", "contract", "nonce"]
