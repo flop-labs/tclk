@@ -94,6 +94,21 @@ function tclk1OfferIncludesRail(offered: readonly string[], selected: string): b
 }
 
 /**
+ * Rail equality for receipt acknowledgments. Mirrors the lock path's canonical
+ * comparison: two spellings that normalize to the same registered id (e.g.
+ * `paperrail` vs `paper`) name the same rail, while historical custom ids that
+ * cannot be normalized only ever equal their exact spelling.
+ */
+function sameTclkRail(left: string, right: string): boolean {
+  if (left === right) return true;
+  try {
+    return normalizeRailId(left) === normalizeRailId(right);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Apply one frame at wall-clock `nowMs`. Clock and structural validation run first
  * (bad input is rejected, not thrown on); then the transition guards.
  */
@@ -213,7 +228,7 @@ export function applyFrame(state: ContractState, frame: TclkFrame, nowMs: number
       if (frame.outcome !== state.status) {
         return reject(state, `receipt outcome ${frame.outcome} does not match ${state.status}`);
       }
-      if (frame.rail !== undefined && state.rail !== undefined && frame.rail !== state.rail) {
+      if (frame.rail !== undefined && state.rail !== undefined && !sameTclkRail(frame.rail, state.rail)) {
         return reject(state, `receipt rail ${frame.rail} does not match contract rail ${state.rail}`);
       }
       if (frame.ref !== undefined && state.railRef !== undefined && frame.ref !== state.railRef) {
