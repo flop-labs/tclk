@@ -18,7 +18,9 @@ const schema = JSON.parse(readFileSync(
 
 const PAYER_DID = "did:key:z6Mk" + "f".repeat(44);
 const CONTRACT = "0x" + "11".repeat(32);
-const PRESIG_NONCE = "0x02" + "11".repeat(32);
+const PRESIG_NONCE = "0x0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+const OFF_CURVE_NONCE = "0x02fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f";
+const CURVE_ORDER = "0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141";
 
 /**
  * Evaluate one schema string leaf against a value, following at most one `$ref`. Every
@@ -80,6 +82,27 @@ describe("protocol schema", () => {
     for (const s of ["0x11", `0x${"a".repeat(64)}`]) {
       expect(schemaAdmits("presig", "s", s), `schema rejects presig.s ${s}`).toBe(true);
       expect(() => validateFrame(lockWithPresigScalar(s))).not.toThrow();
+    }
+  });
+
+  it("marks semantic pre-signature constraints that JSON Schema cannot express", () => {
+    const nonce = schema.$defs.presig.properties.nonce;
+    const scalar = schema.$defs.presig.properties.s;
+
+    expect(nonce["x-tclk-runtimeConstraint"]).toBe("secp256k1-compressed-point-on-curve");
+    expect(scalar["x-tclk-runtimeConstraint"]).toBe("secp256k1-scalar-[1,n)");
+
+    // The schema owns the portable lexical shape. The decoder owns curve membership and
+    // numeric scalar range, which JSON Schema regexes cannot express without duplicating crypto.
+    expect(schemaAdmits("presig", "nonce", OFF_CURVE_NONCE)).toBe(true);
+    expect(() => validateFrame({
+      ...lockWithPresigScalar("0x11"),
+      presig: { nonce: OFF_CURVE_NONCE, s: "0x11" },
+    })).toThrow(/presig\.nonce is not a valid secp256k1 point/);
+
+    for (const s of ["0x00", CURVE_ORDER]) {
+      expect(schemaAdmits("presig", "s", s), `schema rejects lexical scalar ${s}`).toBe(true);
+      expect(() => validateFrame(lockWithPresigScalar(s))).toThrow(/presig\.s is not a scalar/);
     }
   });
 
