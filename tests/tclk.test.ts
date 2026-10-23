@@ -47,6 +47,7 @@ import {
   type OfferFrame,
   type TclkStatus,
 } from "../src/index.js";
+import { SECP256K1_N } from "../src/points.js";
 
 const PAYER_DID = "did:key:z6Mk" + "f".repeat(44);
 const PAYEE_DID = "did:key:z6Mk" + "g".repeat(44);
@@ -389,6 +390,51 @@ describe("tclk state machine", () => {
 });
 
 describe("tclk PTLC path (adaptor cycle)", () => {
+  it("rejects nested type fields and malformed presignatures before locking", () => {
+    expect(() => baseOffer({ job: { proto: "a2a", id: "task-3f", type: "job" } }))
+      .toThrow(/unknown field on job: type/);
+
+    const payerSecret = "0x" + "11".repeat(32);
+    const payerKey = schnorrAdaptor.getPublicKey(payerSecret)!;
+    const payeeKey = schnorrAdaptor.getPublicKey("0x" + "22".repeat(32))!;
+    const offer = baseOffer({ lock: "point", paymentKey: payerKey });
+    const ptlc = generatePointLock();
+    const accept = makeAccept(offer, { from: PAYEE_DID, statement: ptlc.statement, paymentKey: payeeKey });
+    const accepted = applyFrame(openContract(offer), accept, T0);
+    expect(accepted.ok).toBe(true);
+
+    const lock = (presig: unknown) => ({
+      type: "lock" as const,
+      from: PAYER_DID,
+      contract: accepted.state.contract!,
+      rail: "flop-htlc",
+      ref: "escrow-7",
+      presig,
+    });
+    const rejected = (presig: unknown, reason: string) => {
+      expect(applyFrame(accepted.state, lock(presig) as never, T0)).toMatchObject({
+        ok: false,
+        state: accepted.state,
+        reason: `tclk: ${reason}`,
+      });
+    };
+    const zeroNonce = "0x" + "00".repeat(33);
+    rejected({ nonce: zeroNonce, s: "0x01" }, "presig.nonce is not a valid secp256k1 point");
+    rejected({ nonce: ptlc.statement, s: "0x00" }, "presig.s is not a scalar in [1, n)");
+
+    const order = "0x" + SECP256K1_N.toString(16);
+    expect(order.length % 2).toBe(0);
+    rejected({ nonce: ptlc.statement, s: order }, "presig.s is not a scalar in [1, n)");
+    rejected(
+      { nonce: ptlc.statement, s: "0x01", type: "presig" },
+      "unknown field on presig: type",
+    );
+
+    const claimMsg = "0x" + "cd".repeat(32);
+    const pre = schnorrAdaptor.preSign(payerSecret, claimMsg, ptlc.statement)!;
+    expect(applyFrame(accepted.state, lock(pre) as never, T0).ok).toBe(true);
+  });
+
   it("accept(Y) → lock(presig) → adapt with y → completed sig extracts the witness that opens Y", () => {
     const payerSecret = "0x" + "11".repeat(32);
     const payerKey = schnorrAdaptor.getPublicKey(payerSecret)!;

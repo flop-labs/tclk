@@ -18,7 +18,7 @@ const schema = JSON.parse(readFileSync(
 
 const PAYER_DID = "did:key:z6Mk" + "f".repeat(44);
 const CONTRACT = "0x" + "11".repeat(32);
-const PRESIG_NONCE = "0x02" + "11".repeat(32);
+const PRESIG_NONCE = "0x02" + "22".repeat(32);
 
 /**
  * Evaluate one schema string leaf against a value, following at most one `$ref`. Every

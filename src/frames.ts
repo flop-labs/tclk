@@ -14,7 +14,7 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { FRAME_FIELDS, TCLK1_RAIL_PATTERN } from "./frame-fields.generated.js";
 import { randomU8a, stringToU8a, u8aToHex } from "./hex.js";
-import { isValidPointStatement } from "./points.js";
+import { isValidPointStatement, SECP256K1_N } from "./points.js";
 import {
   normalizeRailId,
   normalizeRailIds,
@@ -186,19 +186,20 @@ function requireKeys(
   record: Record<string, unknown>,
   allowed: ReadonlySet<string>,
   required: readonly string[],
+  label = String(record.type),
 ): void {
   for (const key of Object.keys(record)) {
-    if (!allowed.has(key)) fail(`unknown field on ${String(record.type)}: ${key}`);
+    if (!allowed.has(key)) fail(`unknown field on ${label}: ${key}`);
   }
   for (const key of required) {
-    if (record[key] === undefined) fail(`missing field on ${String(record.type)}: ${key}`);
+    if (record[key] === undefined) fail(`missing field on ${label}: ${key}`);
   }
 }
 
 function validateJob(v: unknown): JobRef {
   if (!v || typeof v !== "object" || Array.isArray(v)) fail("job must be an object");
   const job = v as Record<string, unknown>;
-  requireKeys({ ...job, type: "job" }, new Set(["type", "proto", "id", "context"]), ["proto", "id"]);
+  requireKeys(job, new Set(["proto", "id", "context"]), ["proto", "id"], "job");
   requireString(job.proto, "job.proto", /^[a-z0-9][a-z0-9._-]{0,31}$/);
   requireString(job.id, "job.id");
   if (job.context !== undefined) requireString(job.context, "job.context");
@@ -211,6 +212,13 @@ function validatePaymentKey(v: unknown, name: string): string {
   // rule as the on-chain Point statement.
   if (!isValidPointStatement(key)) fail(`${name} is not a valid secp256k1 point`);
   return key;
+}
+
+function validateScalar(v: unknown, name: string): string {
+  const scalar = requireString(v, name, SCALAR_HEX);
+  const value = BigInt(scalar);
+  if (value <= 0n || value >= SECP256K1_N) fail(`${name} is not a scalar in [1, n)`);
+  return scalar;
 }
 
 // ── Canonical encoding ───────────────────────────────────────────────────────
@@ -331,9 +339,10 @@ export function validateFrame(value: unknown): TclkFrame {
       if (frame.presig !== undefined) {
         const presig = frame.presig as Record<string, unknown>;
         if (!presig || typeof presig !== "object" || Array.isArray(presig)) fail("presig must be an object");
-        requireKeys({ ...presig, type: "presig" }, new Set(["type", "nonce", "s"]), ["nonce", "s"]);
-        requireString(presig.nonce, "presig.nonce", HEX33);
-        requireString(presig.s, "presig.s", SCALAR_HEX);
+        requireKeys(presig, new Set(["nonce", "s"]), ["nonce", "s"], "presig");
+        const nonce = requireString(presig.nonce, "presig.nonce", HEX33);
+        if (!isValidPointStatement(nonce)) fail("presig.nonce is not a valid secp256k1 point");
+        validateScalar(presig.s, "presig.s");
       }
       break;
     }
