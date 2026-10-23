@@ -24,13 +24,17 @@ acknowledgement within a few working days. There is no bounty programme.
 
 Read these first; they decide whether what you found is a finding.
 
-**No rail here holds value.** The only rail that ships, `PaperRail`, settles nothing: it records
-the lock/claim/refund lifecycle in world-writable venue notes and backs it with nothing at all,
-which its module banner says in those words. Anyone can overwrite any status on any contract, and
-no coin moves, because there is no coin. So "an attacker takes the money" is not currently
-reachable through this repository — which makes a break in the *coordination* layer more
-interesting, not less: it is the thing a value-bearing rail will be built on top of, and a wire
-format already posted in a room outlives any release of this package.
+**The core does not settle funds; the two rails have different trust models.**
+`PaperRail` records the lock/claim/refund lifecycle in world-writable venue notes and
+backs it with nothing. By contrast, the in-tree `flop/` package
+(`@flop-labs/tclk-flop`) contains `FlopRail`, a devnet-oriented FLOP HTLC adapter
+that can sign and submit escrow open, satisfy and refund transactions to a configured
+chain RPC. These are value-bearing chain operations, not paper receipts. This does
+not claim a production/mainnet deployment or an audit of that adapter, and the
+pure core and hosted MCP server do not themselves custody funds. Security reports
+about the FLOP adapter belong in the same private advisory channel as other
+exploitable findings. A wire format already posted in a room outlives any release
+of this package.
 
 **`src/adaptor.ts` is unaudited reference cryptography, and says so.** Full-Schnorr, not BIP-340
 x-only; random nonces; no constant-time claim; it cannot produce a Taproot-valid signature. That
@@ -58,6 +62,10 @@ from data the protocol publishes before the reveal.
 - **Deadline handling.** `validateDeadlines` admitting a `claimByMs` / `refundAfterMs` ordering
   that leaves both parties able to act, or neither. The per-rail time domain is the caller's to
   enforce (§7); the ordering rules this library states are ours.
+- **FLOP settlement adapter (`flop/`).** Escrow open/claim/refund transactions, chain
+  and genesis selection, local signing, finalized-state verification, and deadline
+  checks are in scope. A reproducible exploitable flaw belongs in a private advisory
+  even if it was observed on devnet; do not assume the paper rail's limitations apply.
 - **Custody in the MCP server.** Any path that stores, logs, or echoes a minted preimage or
   witness, returns a key from the environment, or reintroduces one in a later tool result
   (`tclk_apply_transcript` reports `secretRevealed: boolean` and must never carry the value). The
@@ -75,7 +83,8 @@ Documented properties, not bugs. Reports about them will be closed with a link h
 
 - **The paper rail's records are world-writable and back nothing.** `verifyLock` returning true
   means a string is present in a namespace a stranger could have written. Two-party fair exchange
-  without an arbiter is impossible; this is not a weak escrow, it is not escrow.
+  without an arbiter is impossible; this is not a weak escrow, it is not escrow. This
+  exclusion applies to `PaperRail`, not the FLOP HTLC adapter.
 - **The venue is world-writable, and room content is untrusted input.** It may carry prompt
   injection aimed at whatever agent reads it. Fold frames through `applyFrame`, which is
   fail-closed by design precisely so it can be run over every line a stranger wrote.
@@ -93,5 +102,10 @@ Documented properties, not bugs. Reports about them will be closed with a link h
 
 ## Supported versions
 
-`main`. Nothing is published to a registry yet and there are no maintenance branches — a fix is a
-commit on `main`, and the first release will carry it.
+`main` is the active fix target; there are no maintenance branches. The core
+`@flop-labs/tclk` and MCP `@flop-labs/tclk-mcp` have published `0.1.0` releases.
+The `flop/` adapter is present in the source tree; do not infer npm publication
+or mainnet readiness from that fact. A fix committed to `main` does **not**
+update already-installed packages; registry users receive it only in a later
+release. Reports should identify the affected source commit and, where relevant,
+the installed package and version.

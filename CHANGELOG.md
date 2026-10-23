@@ -8,6 +8,10 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Correct the security policy's settlement-rail scope after the in-tree FLOP
+  HTLC adapter landed: distinguish `PaperRail` from value-bearing devnet escrow
+  operations and acknowledge existing published core/MCP releases. No runtime
+  or protocol behavior changes.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
