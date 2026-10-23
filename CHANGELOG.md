@@ -8,6 +8,10 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `foldTranscript` no longer reports a signed room line that is not a `tclk1 ` frame (the deliverable a payee
+  posts in the deal room before revealing, or chat) as a failed step. Such records are `{ok: true, ignored: true}`:
+  no transition, not a defect, so a reader counting `!ok` steps counts only frames that failed. A line that carries
+  the `tclk1 ` prefix and does not decode is still rejected.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema

@@ -107,6 +107,35 @@ describe("trusted transcript records", () => {
     expect(folded.state?.status).toBe("claimed");
   });
 
+  it("ignores a signed non-frame line in the deal room instead of reporting a defect", () => {
+    const { offer, accept, lock } = deal();
+    const lockFrame = { type: "lock" as const, from: payer.did, contract: accept.contract, rail: "flop-htlc", ref: "escrow-42" };
+    const reveal = { type: "reveal" as const, from: payee.did, contract: accept.contract, secret: lock.preimage };
+    const room = dealRoom(accept.contract);
+    const folded = foldTranscript([
+      record(BOARD, 1, NOW - 1, payer, encodeFrame(offer)),
+      record(BOARD, 2, NOW, payee, encodeFrame(accept)),
+      record(room, 1, NOW + 1, payer, encodeFrame(lockFrame)),
+      record(room, 2, NOW + 2, payee, "count=7, rows 12 and 19 (the deliverable, posted before the reveal)"),
+      record(room, 3, NOW + 3, payee, encodeFrame(reveal)),
+    ]);
+
+    expect(folded.steps.map((step) => step.ok)).toEqual([true, true, true, true, true]);
+    expect(folded.steps[3]).toMatchObject({ ok: true, ignored: true, reason: expect.stringMatching(/not a tclk\/1 line/) });
+    expect(folded.steps.filter((step) => !step.ok)).toHaveLength(0);
+    expect(folded.state?.status).toBe("claimed");
+  });
+
+  it("still rejects a line that claims the tclk1 prefix but does not decode", () => {
+    const { offer } = deal();
+    const folded = foldTranscript([
+      record(BOARD, 1, NOW - 1, payer, encodeFrame(offer)),
+      record(BOARD, 2, NOW, payee, "tclk1 {\"type\":\"lock\",\"contract\":\"0x00\"}"),
+    ]);
+    expect(folded.steps[1].ok).toBe(false);
+    expect(folded.steps[1].ignored).toBeUndefined();
+  });
+
   it("rejects a validly signed record when the frame claims a different sender", () => {
     const { offer, accept } = deal();
     const forgedLock = {

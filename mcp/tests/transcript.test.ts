@@ -158,7 +158,7 @@ describe("fail-closed folding", () => {
       ),
     });
 
-    expect(result.steps[0]).toMatchObject({ ok: false });
+    expect(result.steps[0]).toMatchObject({ ok: true, ignored: true }); // chat is ignored, never a throw and never a defect
     expect(result.steps[1]).toMatchObject({ ok: true, type: "offer" });
     expect(result.steps[2]).toMatchObject({ ok: false });
     expect(result.steps[3]).toMatchObject({ ok: true, type: "accept" });

@@ -8,7 +8,7 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { base58, base64urlnopad } from "@scure/base";
 
-import { decodeFrame, tryDecodeFrame } from "./frames.js";
+import { decodeFrame, tryDecodeFrame, isTclkLine } from "./frames.js";
 import { applyFrame, openContract, type ContractState } from "./machine.js";
 import { dealRoom, OFFER_ROOM } from "./technocore.js";
 
@@ -47,6 +47,9 @@ export interface TranscriptStep {
   type?: string;
   ok: boolean;
   reason?: string;
+  /** True when the record was a signed room line that is not a `tclk1 ` frame (a deliverable, chat) and was
+   *  ignored: no transition, not a defect. Readers counting defects should skip these. */
+  ignored?: boolean;
 }
 
 export interface TranscriptFoldResult {
@@ -245,6 +248,14 @@ export function foldTranscript(records: readonly TranscriptRecord[]): Transcript
       return;
     }
 
+    // A signed line that is not a tclk/1 frame at all — the deliverable a payee posts in the deal room before
+    // revealing (patterns.md §6), or chat — is not a transcript defect: the spec says readers ignore what is not
+    // a frame, and nothing here transitions. Report it as ignored so a reader counting `!ok` steps counts only
+    // frames that failed. A line that *claims* to be a frame and does not decode stays a rejected step.
+    if (!isTclkLine(record.line)) {
+      steps.push({ ...base, ok: true, ignored: true, reason: "not a tclk/1 line: ignored" });
+      return;
+    }
     const frame = tryDecodeFrame(record.line);
     if (frame === null) {
       steps.push({ ...base, ok: false, reason: decodeReason(record.line) });
