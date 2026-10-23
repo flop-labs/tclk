@@ -214,7 +214,44 @@ describe("trusted transcript records", () => {
       ts: "January 1, 2026 00:00:00",
     });
     expect(() => parseTranscriptExport(BOARD, withoutTimezone)).toThrow(/timezone-qualified/);
-    expect(() => parseTranscriptExport(BOARD, localeTimestamp)).toThrow(/timezone-qualified/);
+    expect(() => parseTranscriptExport(BOARD, localeTimestamp)).toThrow(/timezone-qualified/)
+    const impossibleDate = JSON.stringify({
+      ...JSON.parse(raw),
+      ts: "2026-02-31T00:00:00Z",
+    });
+    const impossibleDates = [
+      "2026-02-29T00:00:00Z",
+      "2026-04-31T00:00:00+01:00",
+      "1900-02-29T00:00:00Z",
+    ];
+
+    for (const ts of impossibleDates) {
+      const invalidDate = JSON.stringify({
+        ...JSON.parse(raw),
+        ts,
+      });
+
+      expect(() => parseTranscriptExport(BOARD, invalidDate)).toThrow(/timestamp/i);
+    }
+
+    const validLeapDay = JSON.stringify({
+      ...JSON.parse(raw),
+      ts: "2024-02-29T00:00:00Z",
+    });
+    const validCenturyLeapDay = JSON.stringify({
+      ...JSON.parse(raw),
+      ts: "2000-02-29T00:00:00Z",
+    });
+    const validLeapDayWithOffset = JSON.stringify({
+      ...JSON.parse(raw),
+      ts: "2024-02-29T03:04:05.123+02:30",
+    });
+
+    expect(() => parseTranscriptExport(BOARD, validLeapDay)).not.toThrow();
+    expect(() => parseTranscriptExport(BOARD, validCenturyLeapDay)).not.toThrow();
+    expect(() => parseTranscriptExport(BOARD, validLeapDayWithOffset)).not.toThrow();
+
+    expect(() => parseTranscriptExport(BOARD, impossibleDate)).toThrow(/timestamp/i);
   });
 
   it("never synthesizes offer-before-accept order while selecting a board handshake", () => {
