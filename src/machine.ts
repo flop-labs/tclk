@@ -55,16 +55,25 @@ export interface StepResult {
   reason?: string;
 }
 
+function snapshotOffer(offer: OfferFrame): OfferFrame {
+  return {
+    ...offer,
+    rails: [...offer.rails],
+    ...(offer.job === undefined ? {} : { job: { ...offer.job } }),
+  };
+}
+
 /** Open the local view of a contract from a validated offer. Throws on a bad offer. */
 export function openContract(offer: OfferFrame): ContractState {
   validateFrame(offer);
+  const acceptedOffer = snapshotOffer(offer);
   return {
     status: "proposed",
-    offer,
-    payerDid: offer.role === "payer" ? offer.from : undefined,
-    payeeDid: offer.role === "payee" ? offer.from : undefined,
-    payerKey: offer.role === "payer" ? offer.paymentKey : undefined,
-    payeeKey: offer.role === "payee" ? offer.paymentKey : undefined,
+    offer: acceptedOffer,
+    payerDid: acceptedOffer.role === "payer" ? acceptedOffer.from : undefined,
+    payeeDid: acceptedOffer.role === "payee" ? acceptedOffer.from : undefined,
+    payerKey: acceptedOffer.role === "payer" ? acceptedOffer.paymentKey : undefined,
+    payeeKey: acceptedOffer.role === "payee" ? acceptedOffer.paymentKey : undefined,
   };
 }
 
@@ -163,7 +172,13 @@ export function applyFrame(state: ContractState, frame: TclkFrame, nowMs: number
       }
       return {
         ok: true,
-        state: { ...state, status: "locked", rail: frame.rail, railRef: frame.ref, presig: frame.presig },
+        state: {
+          ...state,
+          status: "locked",
+          rail: frame.rail,
+          railRef: frame.ref,
+          presig: frame.presig === undefined ? undefined : { ...frame.presig },
+        },
       };
     }
 

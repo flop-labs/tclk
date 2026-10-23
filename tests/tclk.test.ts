@@ -315,6 +315,37 @@ describe("tclk state machine", () => {
     }, REFUND_AFTER).ok).toBe(true);
   });
 
+  it("snapshots caller-owned offer and lock inputs before storing them", () => {
+    const offer = baseOffer({ job: a2aJob("before", "ctx-1") });
+    const { state: acceptedState } = accepted(offer);
+    const lockFrame = {
+      type: "lock" as const,
+      from: PAYER_DID,
+      contract: acceptedState.contract!,
+      rail: "flop-htlc",
+      ref: "escrow-snapshot",
+      presig: { nonce: "0x02" + "22".repeat(32), s: "0x01" },
+    };
+    const locked = applyFrame(acceptedState, lockFrame, T0);
+    expect(locked.ok).toBe(true);
+
+    offer.refundAfterMs = T0 + 1;
+    offer.rails[0] = "x402";
+    offer.job!.id = "after";
+    lockFrame.presig.s = "0x02";
+
+    expect(locked.state.offer.refundAfterMs).toBe(REFUND_AFTER);
+    expect(locked.state.offer.rails).toEqual(["flop-htlc", "x402"]);
+    expect(locked.state.offer.job?.id).toBe("before");
+    expect(locked.state.presig?.s).toBe("0x01");
+    expect(applyFrame(locked.state, {
+      type: "refund",
+      from: PAYER_DID,
+      contract: locked.state.contract!,
+      ref: "escrow-snapshot",
+    }, T0 + 2).ok).toBe(false);
+  });
+
   it("payee-initiated offers assign roles correctly at accept", () => {
     const offer = makeOffer({
       from: PAYEE_DID, role: "payee", amount: "5", asset: "USDC", lock: "hash",
