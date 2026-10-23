@@ -27,7 +27,8 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./schema/tclk1-frames.schema.json": "./schema/tclk1-frames.schema.json"
   },
   "files": [
     "dist",
