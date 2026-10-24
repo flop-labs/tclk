@@ -31,7 +31,9 @@ backs it with nothing. By contrast, the in-tree `flop/` package
 that can sign and submit escrow open, satisfy and refund transactions to a configured
 chain RPC. These are value-bearing chain operations, not paper receipts. This does
 not claim a production/mainnet deployment or an audit of that adapter, and the
-pure core and hosted MCP server do not themselves custody funds. Security reports
+pure core and hosted MCP server do not themselves custody funds. A locally
+configured MCP server may hold a transport signing key; see "Custody in the MCP server" below
+for the separate secret-handling boundary. Security reports
 about the FLOP adapter belong in the same private advisory channel as other
 exploitable findings. A wire format already posted in a room outlives any release
 of this package.
