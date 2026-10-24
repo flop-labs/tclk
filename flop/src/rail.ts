@@ -264,6 +264,13 @@ export class FlopRail implements SettlementRail {
       throw new Error("flop: genesis mismatch");
     return s;
   }
+  /** Before signing only: a window that runs out after the open strands funds until refund. */
+  private checkClaimWindow(claimByMs: number, chainMs: number): void {
+    const remaining = claimByMs - Math.max(this.now(), chainMs);
+    if (remaining <= 0) throw new Error("flop: claim window has closed");
+    if (remaining < this.config.minClaimWindowMs)
+      throw new Error("flop: claim window is too short to lock safely");
+  }
   private checkRef(ref: Reference): void {
     if (
       ref.network !== this.config.network ||
@@ -288,8 +295,7 @@ export class FlopRail implements SettlementRail {
         "flop: contract already submitted by this wallet instance",
       );
     const anchor = await this.snapshot();
-    if (Math.max(this.now(), anchor.timestampMs) >= terms.claimByMs)
-      throw new Error("flop: claim window has closed");
+    this.checkClaimWindow(terms.claimByMs, anchor.timestampMs);
     const ref: Reference = {
       v: 1,
       network: this.config.network,
@@ -315,8 +321,7 @@ export class FlopRail implements SettlementRail {
       // Journaling can outlive both the coordination window and the anchor's
       // inclusion allowance. Nothing has been signed yet, so reject safely here.
       const current = await this.snapshot();
-      if (Math.max(this.now(), current.timestampMs) >= terms.claimByMs)
-        throw new Error("flop: claim window has closed");
+      this.checkClaimWindow(terms.claimByMs, current.timestampMs);
       if (
         current.genesis !== anchor.genesis ||
         current.number < anchor.number ||

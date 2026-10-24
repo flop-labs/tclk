@@ -58,6 +58,7 @@ are supported. PTLC/adaptor signing is not used.
 | `expectedGenesisHash` | Pin the first connected devnet genesis | Explicit trusted 32-byte lowercase hex pin |
 | `blockTimeMs` | `1000` | Nominal block interval agreed by both parties |
 | `refundMarginBlocks` | `30` | Extra refund blocks and maximum accepted inclusion delay |
+| `minClaimWindowMs` | `90000` | Least claim window left at which `lock` will still sign; `0` disables it |
 | `transactionTimeoutMs` | `120000` | Time to await finalized transaction execution |
 
 Testnet and mainnet require **both** `rpcUrl` and `expectedGenesisHash`. FLOP's
@@ -137,7 +138,13 @@ to `connectFlopRail`. This hook completes before signing/sending; if it fails,
 no transaction is submitted. After the hook finishes, the rail rechecks the
 claim window and the anchor against the latest finalized snapshot. A closed
 claim window or exhausted inclusion allowance aborts before submission and
-allows the wallet to prepare a fresh attempt. The library itself does not persist state.
+allows the wallet to prepare a fresh attempt. Both checks also refuse a window with
+less than `minClaimWindowMs` left: inclusion, finality and the payee's verification all
+have to fit before `claimByMs`, and a window that runs out after the open has finalized
+leaves the funds locked until refund. On devnet a 45 s window ran out that way and a
+180 s one did not; size `claimByMs` above the floor. The floor is a local admission
+check, not part of the reference: two parties can configure different floors, which
+changes only who is willing to sign, never the contract. The library itself does not persist state.
 `FlopSubmissionError` carries that same `pendingRef` and, when available, `txHash`.
 Use `recoverFlopReference(pendingRef, escrowIdFromFinalizedEvent)` to reconstruct
 the reference after a lost receipt, then verify it against the chain. Do not

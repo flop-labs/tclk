@@ -127,10 +127,13 @@ try {
   console.log(
     JSON.stringify({ stage: "claimed", contract: deal.terms.contract }),
   );
-  const expiry = createTerms(45000, 60000);
+  // Wide enough to clear the rail's 90 s claim-window floor: a 45 s window was consumed by
+  // inclusion and finality on devnet, leaving the escrow Open until a manual refund.
+  const expiry = createTerms(120000, 150000);
   const refundRef = await a.rail.lock(expiry.terms);
   console.log(JSON.stringify({ stage: "refund-pending", ref: refundRef }));
-  const end = Date.now() + 120000;
+  // Refund needs refundAfterMs, then refundMarginBlocks more blocks, then finality.
+  const end = expiry.terms.refundAfterMs + 120000;
   while (true) {
     try {
       await a.rail.refund(refundRef);

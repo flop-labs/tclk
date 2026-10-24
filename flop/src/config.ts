@@ -9,6 +9,12 @@ export interface FlopRailConfig {
   blockTimeMs?: number;
   /** Extra blocks before refund; also bounds lock-inclusion delay. */
   refundMarginBlocks?: number;
+  /**
+   * Local admission floor: refuse to sign a lock with less claim window left. Inclusion,
+   * finality and the payee's verification must all fit before `claimByMs`. Not part of
+   * the reference, so the parties need not agree on it. 0 disables the floor.
+   */
+  minClaimWindowMs?: number;
 }
 export interface ResolvedFlopConfig {
   network: FlopNetwork;
@@ -16,6 +22,7 @@ export interface ResolvedFlopConfig {
   expectedGenesisHash?: string;
   blockTimeMs: number;
   refundMarginBlocks: number;
+  minClaimWindowMs: number;
 }
 export const HEX32 = /^0x[0-9a-f]{64}$/;
 export function resolveFlopConfig(
@@ -58,11 +65,20 @@ export function resolveFlopConfig(
       throw new Error(`flop: invalid ${field}`);
     }
   }
+  // Measured on devnet: inclusion plus finality consumed a 45 s window, not a 180 s one.
+  const minClaimWindowMs = input.minClaimWindowMs ?? 90_000;
+  if (
+    !Number.isSafeInteger(minClaimWindowMs) ||
+    minClaimWindowMs < 0 ||
+    minClaimWindowMs > 0xffffffff
+  )
+    throw new Error("flop: invalid minClaimWindowMs");
   return Object.freeze({
     network,
     rpcUrl,
     expectedGenesisHash: input.expectedGenesisHash,
     blockTimeMs,
     refundMarginBlocks,
+    minClaimWindowMs,
   });
 }
