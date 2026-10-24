@@ -86,5 +86,5 @@ const offer = handlers.tclk_make_offer({ /* … */ });
 
 ## Spec
 
-The protocol lives in the repository's design docs; the frame codec, state machine and lock
-primitives are `@flop-labs/tclk`.
+The normative protocol is [`SPEC.md`](https://github.com/flop-labs/tclk/blob/main/SPEC.md);
+the frame codec, state machine and lock primitives are `@flop-labs/tclk`.
