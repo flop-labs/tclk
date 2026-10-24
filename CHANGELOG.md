@@ -8,6 +8,17 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Reject noncanonical decimal timestamp spellings in `tclkpaper2` records before
+  numeric conversion, preserving legacy `tclkpaper1` decoding behavior.
+
+- `PaperRail` now emits versioned `tclkpaper2` records that persist the complete
+  lock terms needed for exact verification. `verifyLock()` therefore rejects
+  mismatches in `amount`, `asset`, `payer`, `payee`, and `claimByMs` instead of
+  accepting them. Legacy `tclkpaper1` records remain readable for claim/refund
+  lifecycle compatibility but fail closed for exact lock verification. A shared
+  `SettlementRail` conformance suite now exercises all lock-term bindings and
+  lifecycle boundaries.
+
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
@@ -37,6 +48,17 @@ All notable changes to this project are documented here. Format follows
   one rate budget.
 
 ### Changed
+
+- PaperRail record migration requires upgrading all participants that need to
+  operate new `tclkpaper2` locks. Older v1-only implementations cannot read,
+  claim, or refund v2 records, and cannot create a replacement lock for the same
+  contract. New implementations retain v1 claim/refund support and preserve v1
+  encoding, but `verifyLock()` returns `false` for v1 records, including those
+  in existing rehearsals. Upgrading does not convert existing records. See
+  [PaperRail record migration](README.md#paperrail-record-migration) for cutover
+  guidance: do not upgrade mid-rehearsal. SPEC §5.1 now states the compatibility
+  matrix, pinned by a same-contract v1/v2 vector against a frozen v1 implementation.
+  The `tclk/1` frame format is unchanged.
 
 - Transcript folding now consumes complete signed records instead of bare `lines` plus
   optional positional metadata. A record keeps its exact line, room, sequence, venue

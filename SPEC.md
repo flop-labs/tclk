@@ -329,6 +329,36 @@ binds the hash-lock subset to FLOP; other rails remain integrations outside this
   hash escrow, an EVM point escrow verifying `t·G == Y`, a NEAR HTLC, a taproot adaptor spend.
   One revealed witness completes every leg, which is the point of PTLC.
 
+### 5.1 PaperRail record migration
+
+**Do not upgrade mid-rehearsal.** Finish existing rehearsals before upgrading,
+then upgrade every participant that needs to read, verify, claim, or refund new
+locks before creating them. Upgrading does not convert existing records.
+
+New PaperRail locks use `tclkpaper2`, storing the lock kind, statement, amount,
+asset, payer, payee, claim deadline and refund deadline. The contract id selects
+the note location and is the rail reference. Exact verification compares all nine
+`LockTerms` fields and requires a locked record. Legacy `tclkpaper1` records lack
+amount, asset, parties and claim deadline, so they MUST NOT be accepted as
+exact-verifiable locks by the upgraded implementation, including existing rehearsals.
+
+| implementation | stored record | `read()` | `verifyLock()` | `claim()` / `refund()` |
+|---|---|---|---|---|
+| v1-only | v1 | readable | checks only the fields v1 stored | supported within the lifecycle windows |
+| upgraded | v1 | readable | `false` | supported; preserves v1 encoding |
+| v1-only | v2 | `null` | `false` | throws: unreadable paper record |
+| upgraded | v2 | readable | `true` only for exact terms and locked status | supported; preserves v2 encoding |
+
+An existing record occupies the same note location in both versions: another
+`lock()` for that contract MUST fail rather than replace it, even when the reader
+cannot decode it. Rejected lifecycle operations leave the stored record unchanged.
+For v1 records, upgraded readers preserve claim/refund recovery but cannot resume
+an exact-verification-dependent workflow. Do not bypass verification or rewrite a
+v1 record as v2 to continue a rehearsal: its missing terms were never recorded.
+
+These are PaperRail note-record versions, not a change to the `tclk/1` signed frame
+format. PaperRail remains a rehearsal rail and transfers no value.
+
 ## 6. A2A and Virtuals ACP compatibility
 
 The protocol deliberately reuses the job vocabulary agents already speak, so a tclk contract is
