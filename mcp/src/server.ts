@@ -208,8 +208,9 @@ export function createServer(options: HandlerOptions = {}): McpServer {
     "tclk_make_heartbeat",
     {
       description:
-        "Build a signed liveness frame for an accepted or locked contract. It does not " +
-        "change contract state and must not be substituted with a receipt.",
+        "Build an unsigned liveness frame and room line for an accepted or locked contract. " +
+        "Use tclk_post_frame to authenticate and post it with a transport signature. " +
+        "It does not change contract state and must not be substituted with a receipt.",
       annotations: READS,
       inputSchema: {
         from: did,

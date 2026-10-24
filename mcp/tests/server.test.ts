@@ -48,6 +48,24 @@ describe("createServer", () => {
     await client.close();
   });
 
+  it("advertises heartbeat as an unsigned builder requiring transport signing", async () => {
+    const client = await connect();
+    const heartbeat = (await client.listTools()).tools.find((tool) => tool.name === "tclk_make_heartbeat");
+    expect(heartbeat?.description).toContain("unsigned");
+    expect(heartbeat?.description).toContain("tclk_post_frame");
+
+    const result = await client.callTool({
+      name: "tclk_make_heartbeat",
+      arguments: { from: HASH_OFFER.from, contract: `0x${"11".repeat(32)}`, nonce: "0123456789abcdef" },
+    });
+    expect(result.isError).toBeFalsy();
+    const built = JSON.parse((result.content as { text: string }[])[0].text);
+    expect(Object.keys(built).sort()).toEqual(["frame", "line"]);
+    expect(built.frame.type).toBe("heartbeat");
+    expect(built.frame).not.toHaveProperty("sig");
+    await client.close();
+  });
+
   it("returns a tool result for a good call and a readable error for a bad one", async () => {
     const client = await connect();
 
