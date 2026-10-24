@@ -315,6 +315,47 @@ describe("tclk state machine", () => {
     }, REFUND_AFTER).ok).toBe(true);
   });
 
+  it("rejects accept once the refund window is open, even when expiresMs is later (#75)", () => {
+    // An offer where expiresMs extends well past refundAfterMs. Before the fix, accept
+    // succeeded after refundAfterMs because only the expiry guard was present; the
+    // resulting "accepted" state could never advance to "locked" (lock rejects with
+    // "refund window is already open"), leaving a permanently stuck contract.
+    const longExpiryOffer = makeOffer({
+      from: PAYER_DID, role: "payer", amount: "1000000", asset: "USDC", lock: "hash",
+      rails: ["flop-htlc"],
+      claimByMs:     T0 + 3_600_000,   // +1 h
+      refundAfterMs: T0 + 7_200_000,   // +2 h
+      expiresMs:     T0 + 36_000_000,  // +10 h — long expiry, the tricky case
+    });
+    const lock = generateHashLock();
+    const lateAccept = makeAccept(longExpiryOffer, { from: PAYEE_DID, statement: lock.hash });
+
+    // Exactly at refundAfterMs: rejected
+    const atRefund = applyFrame(openContract(longExpiryOffer), lateAccept, T0 + 7_200_000);
+    expect(atRefund.ok).toBe(false);
+    expect(atRefund.reason).toBe("refund window is already open");
+    expect(atRefund.state.status).toBe("proposed");
+
+    // After refundAfterMs but before expiresMs: also rejected
+    const afterRefund = applyFrame(openContract(longExpiryOffer), lateAccept, T0 + 10_800_000);
+    expect(afterRefund.ok).toBe(false);
+    expect(afterRefund.reason).toBe("refund window is already open");
+
+    // Before refundAfterMs: still accepted and lockable (no regression)
+    const earlyAccept = applyFrame(openContract(longExpiryOffer), lateAccept, T0 + 5_400_000);
+    expect(earlyAccept.ok).toBe(true);
+    expect(earlyAccept.state.status).toBe("accepted");
+    const earlyLock = applyFrame(earlyAccept.state, {
+      type: "lock", from: PAYER_DID, contract: lateAccept.contract, rail: "flop-htlc", ref: "r",
+    }, T0 + 5_400_000);
+    expect(earlyLock.ok).toBe(true);
+    expect(earlyLock.state.status).toBe("locked");
+
+    // Control: normal offer (expiresMs < refundAfterMs) is unaffected
+    const { offer, accept: normalAccept } = accepted();
+    expect(applyFrame(openContract(offer), normalAccept, EXPIRES).ok).toBe(false); // expiry guard still works
+  });
+
   it("payee-initiated offers assign roles correctly at accept", () => {
     const offer = makeOffer({
       from: PAYEE_DID, role: "payee", amount: "5", asset: "USDC", lock: "hash",
