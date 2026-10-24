@@ -49,8 +49,10 @@ All keys come from the environment; none is ever accepted as a tool argument or 
 
 **Frames** — `tclk_make_lock`, `tclk_make_reveal`, `tclk_make_refund`, `tclk_make_cancel`,
 `tclk_make_receipt`, `tclk_make_heartbeat`. Reveal and refund take the preceding lock's
-rail `ref`; heartbeat is a state-neutral liveness signal. Each returns `{ frame, line }`,
-not a transport signature. Use `tclk_post_frame` to authenticate and post the line.
+rail `ref`; heartbeat is a state-neutral liveness signal. All `tclk_make_*` builders,
+including offers, return unsigned frames. Each Frames tool returns `{ frame, line }`,
+not a transport signature. Use `tclk_post_frame` to submit a caller-signed frame, sign
+locally when configured, or receive a signing challenge.
 
 **Reading** — `tclk_decode` (one line → frame, or a structured reason),
 `tclk_apply_transcript` (authenticate and fold complete records with a per-record verdict),
