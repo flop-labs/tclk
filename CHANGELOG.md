@@ -22,6 +22,15 @@ All notable changes to this project are documented here. Format follows
   nominal millisecond conversion; chain stalls can delay refunds and changed block
   rates can shift the effective expiry. The client rechecks the claim window and
   anchor freshness after journaling, before submitting a lock.
+- `@flop-labs/tclk-flop`: an opt-in `symmetry` option that makes `FlopRail` apply the
+  yellow paper's R10.2 timelock-symmetry minimum,
+  `T_other + max(ceil(T_other * p / 100), max_finality_stall + current_finality_lag)`, as
+  an admission check: `lock` refuses before journaling or submitting, and `verifyLock`
+  returns `false`, when the submitted timeout is shorter. The parameters have no defaults
+  and must come from the live runtime; without the option nothing changes. It is a
+  testnet-only approximation (`claimByMs` stands in for the counter-chain duration,
+  measured from the finalized anchor at the nominal `blockTimeMs`), not mainnet
+  conformance. The pure `timelockSymmetryMinimum` helper is exported.
 - A schema-owned tclk/1 frame field contract, canonical settlement-rail registry and
   intersection-based, order-independent rail matching helpers. Generated decoder fields
   and the normative `SPEC.md` table are checked for drift in CI.

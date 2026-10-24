@@ -59,6 +59,7 @@ are supported. PTLC/adaptor signing is not used.
 | `blockTimeMs` | `1000` | Nominal block interval agreed by both parties |
 | `refundMarginBlocks` | `30` | Extra refund blocks and maximum accepted inclusion delay |
 | `transactionTimeoutMs` | `120000` | Time to await finalized transaction execution |
+| `symmetry` | none (no check) | Opt-in R10.2 admission check; see [Timelock symmetry](#timelock-symmetry-r102-opt-in) |
 
 Testnet and mainnet require **both** `rpcUrl` and `expectedGenesisHash`. FLOP's
 current network registry marks these networks as planned; a configuration label
@@ -122,6 +123,54 @@ on-chain claim path until its block deadline. Agree these rail semantics and
 sufficient margins before accepting a deal; they do not provide a hard real-time
 refund or automatic cross-chain timelock safety. The RPC must retain the anchor
 state for the contract's lifetime (use an archive endpoint for long-lived locks).
+
+## Timelock symmetry (R10.2, opt-in)
+
+The yellow paper's R10.2 (v0.5.0 §10) admits a FLOP HTLC only if, with the
+counter-chain duration `T_other` converted to FLOP blocks,
+
+```
+T_FLOP >= T_other + max(ceil(T_other * p / 100), max_finality_stall + current_finality_lag)
+```
+
+where `p` is `htlc_timelock_symmetry_safety_margin_percent`. `FlopRail` checks
+this only when it is given both runtime parameters:
+
+```ts
+const connection = await connectFlopRail({
+  signer,
+  symmetry: {
+    marginPercent: runtimeMarginPercent, // htlc_timelock_symmetry_safety_margin_percent
+    maxFinalityStallBlocks: runtimeMaxFinalityStall, // max_finality_stall, in blocks
+  },
+});
+```
+
+There are no defaults: without `symmetry` the rail behaves exactly as described
+above. With it, the operands are derived from the reference's finalized anchor
+(timestamp `A`), so the payer's `lock` and the payee's `verifyLock` reach the same
+verdict:
+
+| Term | Value used |
+| --- | --- |
+| `T_other` | `ceil((claimByMs - A) / blockTimeMs)` |
+| `current_finality_lag` | anchor height minus the runtime finality prefix read at it |
+| `T_FLOP` | the submitted relative timeout (above), margin included |
+
+`lock` throws before journaling or submitting anything when `T_FLOP` is short,
+with both numbers in the message, and `verifyLock` returns `false`. `claim` and
+`refund` ignore the option. Malformed parameters are rejected when the rail is
+constructed. The exported pure helper `timelockSymmetryMinimum` computes the
+minimum and throws on any operand that is not a non-negative safe integer rather
+than reading it as zero.
+
+**This is a testnet-only approximation of R10.2, not conformance.** tclk has no
+counter-chain leg: `claimByMs`, the payee's reveal deadline, stands in for
+`T_other`, converted at the nominal `blockTimeMs`, and the lag is measured at the
+anchor rather than at the inclusion block. Both parameters must come from the
+live runtime constants; this package neither reads them nor ships values for
+them. Passing the check does not claim mainnet R10.2 conformance, and the margin
+is an admission condition, not a guarantee of timely inclusion.
 
 ## Recovery
 

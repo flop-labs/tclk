@@ -136,6 +136,43 @@ describe("configuration", () => {
   ])("rejects malformed config %j", (config) => {
     expect(() => resolveFlopConfig(config as any)).toThrow();
   });
+  it("supplies no symmetry option by default and keeps an explicit one as a frozen copy", () => {
+    expect(resolveFlopConfig()).not.toHaveProperty("symmetry");
+    expect(resolveFlopConfig({ symmetry: undefined })).not.toHaveProperty(
+      "symmetry",
+    );
+    const input = { marginPercent: 0, maxFinalityStallBlocks: 0 };
+    const config = resolveFlopConfig({ symmetry: input });
+    input.maxFinalityStallBlocks = 3_600;
+    expect(config.symmetry).toEqual({
+      marginPercent: 0,
+      maxFinalityStallBlocks: 0,
+    });
+    expect(Object.isFrozen(config.symmetry)).toBe(true);
+    // connectFlopRail hands the resolved config back to FlopRail.
+    expect(resolveFlopConfig(config)).toEqual(config);
+  });
+  it.each([
+    null,
+    [],
+    {},
+    { marginPercent: 20 },
+    { maxFinalityStallBlocks: 3_600 },
+    { marginPercent: 20, maxFinalityStall: 3_600 },
+    { marginPercent: 20, maxFinalityStallBlocks: 3_600, extra: 1 },
+    { marginPercent: undefined, maxFinalityStallBlocks: 3_600 },
+    { marginPercent: NaN, maxFinalityStallBlocks: 3_600 },
+    { marginPercent: -1, maxFinalityStallBlocks: 3_600 },
+    { marginPercent: "20", maxFinalityStallBlocks: 3_600 },
+    { marginPercent: 20, maxFinalityStallBlocks: 1.5 },
+    { marginPercent: 20, maxFinalityStallBlocks: Infinity },
+    { marginPercent: 20, maxFinalityStallBlocks: 2 ** 32 },
+  ])("rejects a malformed symmetry option %j", (symmetry) => {
+    expect(() => resolveFlopConfig({ symmetry } as any)).toThrow("symmetry");
+    expect(() => new FlopRail(new Chain(), { symmetry } as any)).toThrow(
+      "symmetry",
+    );
+  });
 });
 describe("FlopRail", () => {
   it("locks integer base units with exactly two hash leaves and a conservative block deadline", async () => {
@@ -529,5 +566,117 @@ describe("pending reference validation", () => {
     await rail.lock(terms());
     await expect(rail.claim(pending, secret)).rejects.toThrow("agreed terms");
     expect(chain.claims).toBe(0);
+  });
+});
+
+describe("R10.2 timelock symmetry (opt-in)", () => {
+  // Test inputs only (yellow paper v0.5.0 Appendix A); the package ships no values.
+  const symmetry = { marginPercent: 20, maxFinalityStallBlocks: 3_600 };
+  // The anchor is height 100 at T0 with runtime finality prefix 99 (lag 1). With
+  // claimByMs 3600 blocks out, R10.2 requires 3600 + max(720, 3600 + 1) = 7201.
+  const withTimeout = (blocks: number): LockTerms => ({
+    ...terms(),
+    claimByMs: T0 + 3_600_000,
+    refundAfterMs: T0 + (blocks - 30) * 1000, // timeout = ceil(...) + margin 30
+  });
+  const clockOf = (chain: Chain) => () => chain.head.timestampMs;
+
+  it("is off unless configured: a short timeout locks and verifies as before", async () => {
+    const { chain, rail } = setup();
+    const t = withTimeout(7_200);
+    const ref = await rail.lock(t);
+    expect(chain.request!.deadlineBlocks).toBe(7_200);
+    expect(await rail.verifyLock(t, ref)).toBe(true);
+  });
+
+  it("refuses a timeout one block short before journaling or sending, and admits the minimum", async () => {
+    const chain = new Chain();
+    const journal: string[] = [];
+    const rail = new FlopRail(
+      chain,
+      { symmetry },
+      clockOf(chain),
+      async (pending) => {
+        journal.push(pending);
+      },
+    );
+    await expect(rail.lock(withTimeout(7_200))).rejects.toThrow(
+      "7200 blocks offered, 7201 required (T_other 3600, finality lag 1)",
+    );
+    expect(journal).toHaveLength(0);
+    expect(chain.opens).toBe(0);
+    // The refusal took neither the duplicate guard nor a journal entry.
+    const t = withTimeout(7_201);
+    const ref = await rail.lock(t);
+    expect(journal).toHaveLength(1);
+    expect(chain.request!.deadlineBlocks).toBe(7_201);
+    expect(await rail.verifyLock(t, ref)).toBe(true);
+  });
+
+  it("takes current_finality_lag from the anchor's runtime finality prefix", async () => {
+    const chain = new Chain();
+    chain.head.finalizedNumber = 90; // lag 10 at the anchor block
+    chain.history.set(chain.head.hash, structuredClone(chain.head));
+    const rail = new FlopRail(chain, { symmetry }, clockOf(chain));
+    await expect(rail.lock(withTimeout(7_201))).rejects.toThrow(
+      "7201 blocks offered, 7210 required (T_other 3600, finality lag 10)",
+    );
+    const t = withTimeout(7_210);
+    expect(await rail.verifyLock(t, await rail.lock(t))).toBe(true);
+  });
+
+  it("converts claimByMs at the configured blockTimeMs, not at one block per second", async () => {
+    const chain = new Chain();
+    const rail = new FlopRail(
+      chain,
+      { blockTimeMs: 500, symmetry },
+      clockOf(chain),
+    );
+    // 1_800_000 ms is 3600 blocks at 500 ms; at one second it would be 1800, and
+    // 7200 blocks would clear the 5401 that would then be required.
+    const at500 = (blocks: number): LockTerms => ({
+      ...terms(),
+      claimByMs: T0 + 1_800_000,
+      refundAfterMs: T0 + (blocks - 30) * 500,
+    });
+    await expect(rail.lock(at500(7_200))).rejects.toThrow(
+      "7200 blocks offered, 7201 required (T_other 3600, finality lag 1)",
+    );
+    const t = at500(7_201);
+    expect(await rail.verifyLock(t, await rail.lock(t))).toBe(true);
+  });
+
+  it("makes the payee's verifyLock refuse a short escrow, while claim and refund ignore the option", async () => {
+    for (const settle of ["claim", "refund"] as const) {
+      const chain = new Chain();
+      const unchecked = new FlopRail(chain, {}, clockOf(chain));
+      const checked = new FlopRail(chain, { symmetry }, clockOf(chain));
+      const t = withTimeout(7_200);
+      const ref = await unchecked.lock(t);
+      expect(await unchecked.verifyLock(t, ref)).toBe(true);
+      expect(await checked.verifyLock(t, ref)).toBe(false);
+      if (settle === "claim") {
+        await checked.claim(ref, secret);
+        expect(chain.claims).toBe(1);
+      } else {
+        chain.tick(7_202); // finalized 7302 >= deadline 7301, wall time past refundAfterMs
+        await checked.refund(ref);
+        expect(chain.refunds).toBe(1);
+      }
+    }
+  });
+
+  it("decides from the anchor, so the verdict does not move with the tip's finality lag", async () => {
+    const chain = new Chain();
+    const payer = new FlopRail(chain, { symmetry }, clockOf(chain));
+    const payee = new FlopRail(chain, { symmetry }, clockOf(chain));
+    const t = withTimeout(7_201);
+    const ref = await payer.lock(t);
+    expect(await payee.verifyLock(t, ref)).toBe(true);
+    chain.tick(2_000);
+    // Lag 1000 at the tip, still 1 at the anchor. A check on the tip's lag would
+    // now require 3600 + 4600 = 8200 blocks and refuse this escrow.
+    chain.head.finalizedNumber = chain.head.number - 1_000;
+    expect(await payee.verifyLock(t, ref)).toBe(true);
   });
 });
