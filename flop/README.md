@@ -125,7 +125,10 @@ state for the contract's lifetime (use an archive endpoint for long-lived locks)
 
 ## Recovery
 
-Transactions are never automatically retried. The transport currently signs
+Transactions are never automatically retried. Read-only snapshots are: a failed read
+is retried twice more with 250 ms and 500 ms waits before the error surfaces, because
+devnet RPCs drop by-hash header lookups transiently and a failed read makes a healthy
+escrow fail `verifyLock`. The transport currently signs
 immortal extrinsics: an uncertain transaction can remain eligible for inclusion
 much later, even after the client stops waiting. A manual replacement using the
 same account nonce can usurp it, so a timeout alone does not establish either

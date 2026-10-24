@@ -113,9 +113,18 @@ export class PolkadotFlopChain implements FlopChain {
     readonly api: ApiPromise,
     private readonly signer?: KeyringPair,
     private readonly timeoutMs = 120_000,
+    private readonly readAttempts = 3,
+    private readonly readBackoffMs = 250,
   ) {
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1)
       throw new Error("flop: invalid transaction timeout");
+    if (
+      !Number.isSafeInteger(readAttempts) ||
+      readAttempts < 1 ||
+      !Number.isSafeInteger(readBackoffMs) ||
+      readBackoffMs < 0
+    )
+      throw new Error("flop: invalid read retry policy");
     if (signer) {
       if (signer.type !== "ed25519" || signer.publicKey.length !== 32)
         throw new Error("flop: signer must use the party's Ed25519 DID key");
@@ -132,7 +141,29 @@ export class PolkadotFlopChain implements FlopChain {
         "flop: runtime lacks the required typed escrow/finality API",
       );
   }
+  /**
+   * Retries the whole read with linear backoff: devnet RPCs drop by-hash header lookups
+   * transiently, which would otherwise read a healthy escrow as unverifiable. Every read
+   * error is retried, this transport's own validation included, and the last error
+   * surfaces. Reads only; a write is never retried (see finalizedTransaction),
+   * and the retry waits run outside the write's timeout.
+   */
   async snapshot(escrowId?: string, at?: string): Promise<FlopSnapshot> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.readSnapshot(escrowId, at);
+      } catch (error) {
+        if (attempt >= this.readAttempts) throw error;
+        await new Promise((resolve) =>
+          setTimeout(resolve, this.readBackoffMs * attempt),
+        );
+      }
+    }
+  }
+  private async readSnapshot(
+    escrowId?: string,
+    at?: string,
+  ): Promise<FlopSnapshot> {
     const hash = at ?? (await this.api.rpc.chain.getFinalizedHead()).toHex();
     const [view, header, genesis] = await Promise.all([
       this.api.at(hash),

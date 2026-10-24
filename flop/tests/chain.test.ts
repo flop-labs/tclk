@@ -160,3 +160,80 @@ describe("metadata transport", () => {
     await expect(chain.snapshot(h)).rejects.toThrow("canonical finalized");
   });
 });
+describe("snapshot read retry", () => {
+  function readOnlyApi() {
+    const view = {
+      query: {
+        timestamp: {
+          now: vi.fn(async () => ({ toString: () => "1790000000000" })),
+        },
+        aleph: { lastFinalized: vi.fn(async () => ({ toJSON: () => null })) },
+      },
+    };
+    const api: any = {
+      tx: {
+        hasStation: {
+          openEscrow: vi.fn(),
+          satisfyEscrow: vi.fn(),
+          refundEscrow: vi.fn(),
+        },
+      },
+      query: {
+        hasStation: { escrows: vi.fn() },
+        aleph: { lastFinalized: vi.fn() },
+      },
+      rpc: {
+        chain: {
+          getFinalizedHead: vi.fn(async () => ({ toHex: () => h })),
+          getHeader: vi.fn(async () => ({ number: { toString: () => "100" } })),
+          getBlockHash: vi.fn(async () => ({ toHex: () => h })),
+        },
+      },
+      at: vi.fn(async () => view),
+    };
+    return api;
+  }
+  it("retries a transient by-hash header failure", async () => {
+    const api = readOnlyApi();
+    const header = api.rpc.chain.getHeader.getMockImplementation();
+    api.rpc.chain.getHeader
+      .mockImplementationOnce(async () => {
+        throw new Error("RPC: header unavailable");
+      })
+      .mockImplementation(header);
+    const chain = new PolkadotFlopChain(api, undefined, 120_000, 3, 0);
+    await expect(chain.snapshot(undefined, h)).resolves.toMatchObject({
+      hash: h,
+      number: 100,
+    });
+    expect(api.at).toHaveBeenCalledTimes(2);
+  });
+  it("gives up after the configured attempts and surfaces the last error", async () => {
+    const api = readOnlyApi();
+    api.rpc.chain.getHeader.mockImplementation(async () => {
+      throw new Error("RPC: header unavailable");
+    });
+    const chain = new PolkadotFlopChain(api, undefined, 120_000, 3, 0);
+    await expect(chain.snapshot(undefined, h)).rejects.toThrow(
+      "header unavailable",
+    );
+    expect(api.at).toHaveBeenCalledTimes(3);
+  });
+  it.each([
+    [0, 0],
+    [1.5, 0],
+    [3, -1],
+    [3, NaN],
+  ])("rejects a retry policy of %s attempts / %s ms", (attempts, backoff) => {
+    expect(
+      () =>
+        new PolkadotFlopChain(
+          readOnlyApi(),
+          undefined,
+          120_000,
+          attempts,
+          backoff,
+        ),
+    ).toThrow("retry policy");
+  });
+});
