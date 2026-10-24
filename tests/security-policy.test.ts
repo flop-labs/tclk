@@ -15,12 +15,14 @@ describe("security policy contract", () => {
     const packageName = JSON.parse(read("../flop/package.json")).name;
 
     expect(packageName).toBe("@flop-labs/tclk-flop");
+    expect(policy).toContain(`\`${packageName}\``);
     expect(rail).toContain("export class FlopRail");
     expect(chain).toContain("openEscrow");
     expect(policy).toContain("PaperRail");
     expect(policy).toContain("FlopRail");
     expect(policy).toContain("devnet");
     expect(policy).toContain("escrow");
+    expect(policy).toContain('see "Custody in the MCP server" below');
     expect(policy).toMatch(/private advisory/i);
     expect(policy).not.toMatch(/No rail here holds value/i);
   });
