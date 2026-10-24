@@ -26,6 +26,8 @@ import {
   makeAccept,
   makeOffer,
   MemoryRail,
+  MemoryNoteStore,
+  PaperRail,
   openContract,
   parseStateNoteValue,
   OFFER_ROOM,
@@ -33,9 +35,12 @@ import {
   parseCapabilityToken,
   stateNote,
   stateNoteValue,
+  lossyStateNoteValue,
+  lossyStateNoteValueDetails,
   tclkStatusToA2A,
   tclkStatusToAcpPhase,
   tryDecodeFrame,
+  validateFrame,
   validateDeadlines,
   verifyHashPreimage,
   verifyPointWitness,
@@ -106,6 +111,66 @@ describe("tclk frames — wire codec", () => {
     const line = encodeFrame(offer);
     expect(/^[\x20-\x7e]*$/.test(line)).toBe(true);
     expect((decodeFrame(line) as OfferFrame).job?.id).toBe("tâche-1");
+  });
+
+  it.each([
+    ["ordinary", "escrow-7"],
+    ["maximum note ref", "x".repeat(256)],
+    ["space", "escrow 7"],
+    ["overlong note ref", "x".repeat(257)],
+    ["non-ASCII", "café-7"],
+    ["tab", "escrow\ttab"],
+  ])("preserves a historical tclk/1 %s ref through wire and state-machine use", (_case, ref) => {
+    const { state, lock, accept } = accepted();
+    const frame = {
+      type: "lock" as const,
+      from: PAYER_DID,
+      contract: accept.contract,
+      rail: "x402",
+      ref,
+    };
+
+    expect(validateFrame(frame)).toEqual(frame);
+    const line = encodeFrame(frame);
+    expect(line.replace(/[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Zl}\p{Zp}]/gu, " ").trim()).toBe(line);
+    const decoded = decodeFrame(line);
+    expect(decoded).toEqual(frame);
+    if (decoded.type !== "lock") throw new Error("test setup decoded a non-lock frame");
+
+    const locked = applyFrame(state, decoded, T0);
+    expect(locked.ok).toBe(true);
+    expect(locked.state.railRef).toBe(ref);
+
+    const reveal = {
+      type: "reveal" as const,
+      from: PAYEE_DID,
+      contract: accept.contract,
+      ref,
+      secret: lock.preimage,
+    };
+    expect(applyFrame(locked.state, reveal, T0).ok).toBe(true);
+    expect(applyFrame(locked.state, { ...reveal, ref: `${ref}!` }, T0).ok).toBe(false);
+
+    const refund = {
+      type: "refund" as const,
+      from: PAYER_DID,
+      contract: accept.contract,
+      ref,
+    };
+    const refunded = applyFrame(locked.state, refund, REFUND_AFTER);
+    expect(refunded.ok).toBe(true);
+    expect(applyFrame(locked.state, { ...refund, ref: `${ref}!` }, REFUND_AFTER).ok).toBe(false);
+
+    const receipt = {
+      type: "receipt" as const,
+      from: PAYEE_DID,
+      contract: accept.contract,
+      outcome: "refunded" as const,
+      rail: "x402",
+      ref,
+    };
+    expect(applyFrame(refunded.state, receipt, REFUND_AFTER).ok).toBe(true);
+    expect(applyFrame(refunded.state, { ...receipt, ref: `${ref}!` }, REFUND_AFTER).ok).toBe(false);
   });
 
   it("fails closed on unknown fields, missing fields, and bad values", () => {
@@ -521,7 +586,10 @@ describe("tclk venue binding", () => {
 
   it("state-note values round-trip and parse fail-closed", () => {
     const maxRailRef = "x".repeat(256);
-    expect(parseStateNoteValue(stateNoteValue("locked", "escrow-42"))).toEqual({ status: "locked", railRef: "escrow-42" });
+    expect(stateNoteValue("locked", "escrow-7")).toBe("locked escrow-7");
+    expect(lossyStateNoteValue("locked", "escrow-7")).toBe("locked escrow-7");
+    expect(parseStateNoteValue(stateNoteValue("locked", "escrow-7"))).toEqual({ status: "locked", railRef: "escrow-7" });
+    expect(stateNoteValue("locked", maxRailRef)).toBe(`locked ${maxRailRef}`);
     expect(parseStateNoteValue(stateNoteValue("locked", maxRailRef))).toEqual({ status: "locked", railRef: maxRailRef });
     expect(parseStateNoteValue(stateNoteValue("claimed"))).toEqual({ status: "claimed" });
     expect(parseStateNoteValue("owned by nobody at all")).toBeNull();
@@ -530,7 +598,67 @@ describe("tclk venue binding", () => {
     expect(parseStateNoteValue("locked \n")).toBeNull();
     expect(parseStateNoteValue("locked \u2603")).toBeNull();
     expect(parseStateNoteValue(`locked ${"x".repeat(257)}`)).toBeNull();
-    expect(() => stateNoteValue("locked", "has space")).toThrow(/printable ASCII/);
+  });
+
+  it.each([
+    ["empty", ""],
+    ["space", "escrow 7"],
+    ["overlong", "x".repeat(257)],
+    ["non-ASCII", "café-7"],
+    ["tab", "escrow\ttab"],
+  ])("degrades a state note with an unrepresentable %s ref only when explicitly requested", (_case, ref) => {
+    expect(() => stateNoteValue("locked", ref)).toThrow(/printable ASCII/);
+    expect(lossyStateNoteValueDetails("locked", ref)).toEqual({ value: "locked", droppedRef: true });
+    expect(lossyStateNoteValueDetails("claimed", ref)).toEqual({ value: "claimed", droppedRef: true });
+
+    const lockedExpected = lossyStateNoteValue("locked", ref);
+    const claimedNext = lossyStateNoteValue("claimed", ref);
+
+    expect(lockedExpected).toBe("locked");
+    expect(claimedNext).toBe("claimed");
+    expect(parseStateNoteValue(lockedExpected)).toEqual({ status: "locked" });
+    expect(parseStateNoteValue(claimedNext)).toEqual({ status: "claimed" });
+  });
+
+  it.each(["escrow-7", "x".repeat(256), "0x" + "a".repeat(64)])(
+    "preserves a representable ref with observable loss metadata: %s", (ref) => {
+      for (const status of ["locked", "claimed"] as const) {
+        const result = lossyStateNoteValueDetails(status, ref);
+        expect(result).toEqual({ value: `${status} ${ref}`, droppedRef: false });
+        expect(lossyStateNoteValue(status, ref)).toBe(result.value);
+        expect(stateNoteValue(status, ref)).toBe(result.value);
+      }
+    },
+  );
+
+  it("rejects invalid statuses before validating or dropping refs on every serializer", () => {
+    const invalid = "exploded" as TclkStatus;
+    expect(() => stateNoteValue(invalid)).toThrow(/status must be/);
+    for (const ref of ["escrow-7", "escrow 7"]) {
+      // Status validation takes precedence over ref validation, matching PR #160.
+      expect(() => stateNoteValue(invalid, ref)).toThrow(/status must be/);
+      expect(() => lossyStateNoteValue(invalid, ref)).toThrow(/status must be/);
+      expect(() => lossyStateNoteValueDetails(invalid, ref)).toThrow(/status must be/);
+    }
+  });
+
+  it("strictly serializes PaperRail refs through the locked → claimed note CAS chain", async () => {
+    const notes = new MemoryNoteStore();
+    const rail = new PaperRail(notes, () => T0);
+    const { state, lock } = accepted();
+    const ref = await rail.lock(lockTerms(state));
+    expect(ref).toBe(state.contract);
+    expect(ref).toMatch(/^0x[0-9a-f]{64}$/);
+    const note = stateNote(state.contract!);
+    expect(await notes.set(note.ns, note.key, stateNoteValue("accepted"), { ifAbsent: true })).toBe(true);
+    const lockedValue = stateNoteValue("locked", ref);
+    expect(lockedValue).toBe(`locked ${ref}`);
+    expect(await notes.set(note.ns, note.key, lockedValue, { if: stateNoteValue("accepted") })).toBe(true);
+    await rail.claim(ref, lock.preimage);
+    const claimedValue = stateNoteValue("claimed", ref);
+    expect(claimedValue).toBe(`claimed ${ref}`);
+    expect(await notes.set(note.ns, note.key, claimedValue, { if: stateNoteValue("locked", ref) })).toBe(true);
+    expect(await notes.get(note.ns, note.key)).toBe(claimedValue);
   });
 });
 
