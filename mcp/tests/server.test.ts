@@ -59,6 +59,8 @@ describe("createServer", () => {
     const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
     const framesSection = readme.split("**Frames** —")[1]?.split("**Reading** —")[0] ?? "";
     expect(framesSection).toContain("tclk_make_heartbeat");
+    expect(framesSection).toContain("All `tclk_make_*` builders");
+    expect(framesSection).toContain("including offers, return unsigned frames");
     expect(framesSection).toContain("not a transport signature");
     expect(framesSection).toContain("tclk_post_frame");
 
