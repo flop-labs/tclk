@@ -71,8 +71,15 @@ export function stateNote(contract: string): { ns: string; key: string } {
   return { ns: `tclk-${id.slice(2, 4)}`, key: id.slice(4, 18) };
 }
 
+function requireStatus(status: TclkStatus): void {
+  if (!STATUSES.has(status)) {
+    throw new Error("tclk: status must be proposed|accepted|locked|claimed|refunded|cancelled");
+  }
+}
+
 /** Serialize a status (plus optional rail ref) as the state-note value. Single line. */
 export function stateNoteValue(status: TclkStatus, railRef?: string): string {
+  requireStatus(status);
   if (railRef !== undefined) {
     if (!RAIL_REF.test(railRef)) {
       throw new Error("tclk: rail ref must be printable ASCII without spaces (max 256 chars)");
@@ -87,7 +94,20 @@ export function stateNoteValue(status: TclkStatus, railRef?: string): string {
  * omitted. The signed transcript and rail must remain the authority for the exact ref.
  */
 export function lossyStateNoteValue(status: TclkStatus, railRef: string): string {
-  return RAIL_REF.test(railRef) ? `${status} ${railRef}` : status;
+  return lossyStateNoteValueDetails(status, railRef).value;
+}
+
+/**
+ * Serialize with explicit ref-loss metadata. droppedRef describes only note serialization;
+ * it says nothing about signature verification, authority, or verified settlement.
+ */
+export function lossyStateNoteValueDetails(
+  status: TclkStatus,
+  railRef: string,
+): { value: string; droppedRef: boolean } {
+  requireStatus(status);
+  const droppedRef = !RAIL_REF.test(railRef);
+  return { value: droppedRef ? status : `${status} ${railRef}`, droppedRef };
 }
 
 /** Parse a state-note value. Null on anything malformed (world-writable input). */

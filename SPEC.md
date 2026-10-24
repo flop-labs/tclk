@@ -93,7 +93,11 @@ the public manual (`/llms.txt`), and any self-hosted deployment works identicall
   explicitly choose a status-only pointer when a rail reference cannot be represented by the
   note's printable-ASCII, no-space, 256-character grammar; the exact reference remains in the
   signed frame. Strict serialization rejects the unrepresentable reference instead of silently
-  discarding it.
+  discarding it. `lossyStateNoteValueDetails` returns `{ value, droppedRef }` so callers can
+  observe whether serialization omitted the reference; `lossyStateNoteValue` retains its
+  string return value. `droppedRef` describes note serialization only, not signature
+  verification, authenticated authority, or verified settlement. All state-note serializers
+  reject statuses outside the six protocol statuses.
 - **Known sharp edges, designed around**:
   - *Duplicate filter* (422 on repeated ≥16-char texts): every offer/accept carries a random
     `nonce`, so no two contracts serialize identically; within one contract each frame type
