@@ -224,6 +224,15 @@ export class FlopSubmissionError extends Error {
     if (typeof hash === "string" && HEX32.test(hash)) this.txHash = hash;
   }
 }
+/** One reference's outcome from `FlopRail.sweep`. */
+export interface FlopSweepEntry {
+  ref: string;
+  /** Finalized escrow status ("Open", "Released", "Refunded", ...), "pending" for a zero-escrow journal entry, or "failed". */
+  status: string;
+  /** True only when this sweep submitted the refund and observed it finalized. */
+  refunded: boolean;
+  error?: string;
+}
 /** Complete a journaled reference using ONLY the escrow ID from the finalized open event. */
 export function recoverFlopReference(
   pendingRef: string,
@@ -406,17 +415,61 @@ export class FlopRail implements SettlementRail {
     if (after.genesis !== ref.genesis || after.escrow?.status !== "Released")
       throw new Error("flop: claim not observed in finalized state");
   }
+  private refundOpen(
+    ref: Reference,
+    snapshot: FlopSnapshot,
+    escrow: FlopEscrow,
+  ): boolean {
+    return (
+      escrow.status === "Open" &&
+      snapshot.finalizedNumber >= escrow.deadline &&
+      this.now() >= ref.terms.refundAfterMs &&
+      snapshot.timestampMs >= ref.terms.refundAfterMs
+    );
+  }
+  /**
+   * Refund each Open escrow in `values` that this signer funded and whose refund
+   * window is open; report the finalized status of the rest. References are
+   * handled one at a time, so one account never races itself for a nonce. A
+   * failed or uncertain refund is reported, never retried, and a repeated
+   * reference gets one entry. A zero-escrow pending reference is reported as
+   * "pending": complete it with recoverFlopReference.
+   */
+  async sweep(values: readonly string[]): Promise<FlopSweepEntry[]> {
+    const entries: FlopSweepEntry[] = [];
+    for (const ref of new Set(values)) {
+      try {
+        const parsed = parseRef(ref);
+        this.checkRef(parsed);
+        if (parsed.escrow === `0x${"0".repeat(64)}`) {
+          entries.push({ ref, status: "pending", refunded: false });
+          continue;
+        }
+        const { snapshot, escrow } = await this.inspect(parsed, false);
+        if (
+          this.chain.account === escrow.funder &&
+          this.refundOpen(parsed, snapshot, escrow)
+        ) {
+          await this.refund(ref);
+          entries.push({ ref, status: "Refunded", refunded: true });
+        } else entries.push({ ref, status: escrow.status, refunded: false });
+      } catch (error) {
+        entries.push({
+          ref,
+          status: "failed",
+          refunded: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return entries;
+  }
   async refund(value: string): Promise<void> {
     const ref = parseRef(value);
     const { snapshot, escrow } = await this.inspect(ref, false);
     if (this.chain.account !== escrow.funder)
       throw new Error("flop: signer is not the payer");
-    if (
-      escrow.status !== "Open" ||
-      snapshot.finalizedNumber < escrow.deadline ||
-      this.now() < ref.terms.refundAfterMs ||
-      snapshot.timestampMs < ref.terms.refundAfterMs
-    )
+    if (!this.refundOpen(ref, snapshot, escrow))
       throw new Error("flop: refund window is not open");
     await this.chain.refund(ref.escrow);
     const after = await this.snapshot(ref.escrow);

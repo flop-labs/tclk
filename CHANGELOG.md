@@ -22,6 +22,9 @@ All notable changes to this project are documented here. Format follows
   nominal millisecond conversion; chain stalls can delay refunds and changed block
   rates can shift the effective expiry. The client rechecks the claim window and
   anchor freshness after journaling, before submitting a lock.
+- `FlopRail.sweep(refs)` refunds the due Open escrows among a wallet's journaled
+  references and reports the finalized status of the rest, so a restarted wallet can
+  recover escrows a failed or interrupted lock left Open. Refunds are never retried.
 - A schema-owned tclk/1 frame field contract, canonical settlement-rail registry and
   intersection-based, order-independent rail matching helpers. Generated decoder fields
   and the normative `SPEC.md` table are checked for drift in CI.
