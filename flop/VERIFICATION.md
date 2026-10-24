@@ -64,8 +64,13 @@ a pending reference, and connection-timeout cleanup. Rejected preflight attempts
 submit no escrow and release the local duplicate guard for a fresh attempt.
 
 The runtime uses the same public-key bytes via `bytesToHex`, recovery documentation
-explains late inclusion of immortal extrinsics, and the new package and its block
+explains late inclusion within an extrinsic's mortal period, and the new package and its block
 deadline limitations are recorded under `[Unreleased]` in the tclk changelog.
+
+Re-checked on 2026-10-24 by decoding the claim and refund extrinsics above from
+devnet (blocks 1796302 and 1796429, runtime spec `1014003` at the time of the
+read): both are mortal with a 512-block period. The transport passes no `era`,
+so `@polkadot/api` chose it from `blockHashCount` (4096) and the block time.
 
 ## Design evidence and limits
 

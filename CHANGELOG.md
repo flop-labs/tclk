@@ -8,6 +8,11 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `@flop-labs/tclk-flop`: the README and VERIFICATION.md said the transport signs
+  immortal extrinsics. It signs mortal ones: with no `era`, `@polkadot/api` picks the
+  period, measured at 512 blocks on devnet. The Recovery section now says when an
+  uncertain transaction can no longer execute.
+
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
@@ -15,6 +20,10 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- `@flop-labs/tclk-flop`: `transactionEraBlocks` sets how many blocks a signed
+  transaction stays valid for. It must be a power of two from 4 to the runtime's
+  `blockHashCount`; any other value is refused rather than rounded. Unset, behaviour
+  is unchanged.
 - `@flop-labs/tclk-flop`: native FLOP HTLC settlement with devnet defaults and
   explicit testnet/mainnet RPC and genesis configuration. The rail binds terms to
   finalized escrow state, signs locally with the party's Ed25519 key, and supports

@@ -84,6 +84,82 @@ describe("finalized transaction lifecycle", () => {
     expect(tx.signAndSend).toHaveBeenCalledOnce();
   });
 });
+describe("transaction era", () => {
+  const ok = () =>
+    transaction(async (cb) => {
+      cb({
+        status: { isFinalized: true },
+        events: [event("system", "ExtrinsicSuccess")],
+      });
+      return vi.fn();
+    });
+  it("leaves the era to @polkadot/api when none is configured", async () => {
+    const tx = ok();
+    await finalizedTransaction(tx, signer, 100);
+    expect(vi.mocked(tx.signAndSend).mock.calls[0][1]).toEqual({ nonce: -1 });
+  });
+  it("signs with the configured era", async () => {
+    const tx = ok();
+    await finalizedTransaction(tx, signer, 100, 64);
+    expect(vi.mocked(tx.signAndSend).mock.calls[0][1]).toEqual({
+      nonce: -1,
+      era: 64,
+    });
+  });
+  const runtime = (blockHashCount?: number): any => ({
+    tx: {
+      hasStation: {
+        openEscrow: vi.fn(),
+        satisfyEscrow: vi.fn(),
+        refundEscrow: vi.fn(),
+      },
+    },
+    query: {
+      hasStation: { escrows: vi.fn() },
+      aleph: { lastFinalized: vi.fn() },
+    },
+    consts:
+      blockHashCount === undefined
+        ? {}
+        : { system: { blockHashCount: { toString: () => `${blockHashCount}` } } },
+  });
+  it.each([4, 64, 4096])("accepts a %i-block era", (era) => {
+    expect(
+      () => new PolkadotFlopChain(runtime(4096), undefined, 1000, era),
+    ).not.toThrow();
+  });
+  it.each([0, 2, 48, 64.5, -64, 131072, 8192])(
+    "refuses a %s-block era rather than rounding it",
+    (era) => {
+      expect(
+        () => new PolkadotFlopChain(runtime(4096), undefined, 1000, era),
+      ).toThrow("flop: invalid transaction era");
+    },
+  );
+  it("passes the configured era to every signed call", async () => {
+    const api = runtime(4096);
+    const txs = [ok(), ok()];
+    api.tx.hasStation.refundEscrow = vi.fn(() => txs[0]);
+    api.tx.hasStation.satisfyEscrow = vi.fn(() => txs[1]);
+    const key = { type: "ed25519", publicKey: new Uint8Array(32) } as any;
+    const chain = new PolkadotFlopChain(api, key, 1000, 64);
+    await chain.refund(h);
+    await chain.satisfy(h, [h]);
+    for (const tx of txs)
+      expect(vi.mocked(tx.signAndSend).mock.calls[0][1]).toEqual({
+        nonce: -1,
+        era: 64,
+      });
+  });
+  it("checks blockHashCount only when the runtime publishes it", () => {
+    expect(
+      () => new PolkadotFlopChain(runtime(), undefined, 1000, 65536),
+    ).not.toThrow();
+    expect(
+      () => new PolkadotFlopChain(runtime(1024), undefined, 1000, 2048),
+    ).toThrow("flop: invalid transaction era");
+  });
+});
 describe("metadata transport", () => {
   it("decodes u128 from the codec rather than lossy JSON, and reads a single finalized view", async () => {
     const amount = "340282366920938463463374607431768211455";
