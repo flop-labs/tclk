@@ -56,7 +56,9 @@ All notable changes to this project are documented here. Format follows
   encoding, but `verifyLock()` returns `false` for v1 records, including those
   in existing rehearsals. Upgrading does not convert existing records. See
   [PaperRail record migration](README.md#paperrail-record-migration) for cutover
-  guidance. The `tclk/1` frame format is unchanged.
+  guidance: do not upgrade mid-rehearsal. SPEC §5.1 now states the compatibility
+  matrix, pinned by a same-contract v1/v2 vector against a frozen v1 implementation.
+  The `tclk/1` frame format is unchanged.
 
 - Transcript folding now consumes complete signed records instead of bare `lines` plus
   optional positional metadata. A record keeps its exact line, room, sequence, venue
