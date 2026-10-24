@@ -208,6 +208,33 @@ describe("FlopRail", () => {
     expect(chain.refunds).toBe(1);
     await expect(rail.refund(ref)).rejects.toThrow();
   });
+  it("gates claim, refund and verifyLock on the runtime finality prefix, not the snapshot height", async () => {
+    // The #171 review case in FlopRail's terms: the height reaches the deadline while
+    // the runtime prefix lags 10 behind. A lagging prefix freezes the block deadline
+    // for both fund-releasing paths (yellow paper R2.2).
+    const { chain, rail, t } = setup();
+    const ref = await rail.lock(t); // deadline 191
+    const at = (number: number, prefix: number, timestampMs: number) => {
+      Object.assign(chain.head, {
+        number,
+        finalizedNumber: prefix,
+        timestampMs,
+        hash: h(number),
+      });
+      chain.history.set(chain.head.hash, structuredClone(chain.head));
+    };
+    // Blocks ran faster than nominal: height 191 before claimByMs, prefix 181.
+    at(191, 181, T0 + 20_000);
+    expect(await rail.verifyLock(t, ref)).toBe(true);
+    await expect(rail.claim(ref, h(7))).rejects.toThrow("secret"); // still open
+    // Past refundAfterMs and 109 blocks past the deadline, prefix still 190.
+    at(300, 190, T0 + 120_000);
+    await expect(rail.refund(ref)).rejects.toThrow("not open");
+    at(301, 191, T0 + 121_000);
+    await rail.refund(ref);
+    expect(chain.refunds).toBe(1);
+    expect(chain.claims).toBe(0);
+  });
   it("rejects a third-party refund but permits a relayed claim to the fixed payee", async () => {
     const { chain, rail, t } = setup();
     const ref = await rail.lock(t);
