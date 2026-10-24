@@ -4,6 +4,7 @@
 // contract clients program against, and a tool error must arrive as a readable message
 // rather than a dropped connection.
 
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -53,6 +54,13 @@ describe("createServer", () => {
     const heartbeat = (await client.listTools()).tools.find((tool) => tool.name === "tclk_make_heartbeat");
     expect(heartbeat?.description).toContain("unsigned");
     expect(heartbeat?.description).toContain("tclk_post_frame");
+
+    // Keep the README builder/posting boundary aligned with the advertised tool.
+    const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+    const framesSection = readme.split("**Frames** —")[1]?.split("**Reading** —")[0] ?? "";
+    expect(framesSection).toContain("tclk_make_heartbeat");
+    expect(framesSection).toContain("not a transport signature");
+    expect(framesSection).toContain("tclk_post_frame");
 
     const result = await client.callTool({
       name: "tclk_make_heartbeat",
