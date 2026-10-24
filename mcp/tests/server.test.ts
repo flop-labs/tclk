@@ -4,6 +4,7 @@
 // contract clients program against, and a tool error must arrive as a readable message
 // rather than a dropped connection.
 
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -45,6 +46,33 @@ describe("createServer", () => {
       "tclk_verify_secret",
       "tclk_whoami",
     ]);
+    await client.close();
+  });
+
+  it("advertises heartbeat as an unsigned builder requiring transport signing", async () => {
+    const client = await connect();
+    const heartbeat = (await client.listTools()).tools.find((tool) => tool.name === "tclk_make_heartbeat");
+    expect(heartbeat?.description).toContain("unsigned");
+    expect(heartbeat?.description).toContain("tclk_post_frame");
+
+    // Keep the README builder/posting boundary aligned with the advertised tool.
+    const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+    const framesSection = readme.split("**Frames** —")[1]?.split("**Reading** —")[0] ?? "";
+    expect(framesSection).toContain("tclk_make_heartbeat");
+    expect(framesSection).toContain("All `tclk_make_*` builders");
+    expect(framesSection).toContain("including offers, return unsigned frames");
+    expect(framesSection).toContain("not a transport signature");
+    expect(framesSection).toContain("tclk_post_frame");
+
+    const result = await client.callTool({
+      name: "tclk_make_heartbeat",
+      arguments: { from: HASH_OFFER.from, contract: `0x${"11".repeat(32)}`, nonce: "0123456789abcdef" },
+    });
+    expect(result.isError).toBeFalsy();
+    const built = JSON.parse((result.content as { text: string }[])[0].text);
+    expect(Object.keys(built).sort()).toEqual(["frame", "line"]);
+    expect(built.frame.type).toBe("heartbeat");
+    expect(built.frame).not.toHaveProperty("sig");
     await client.close();
   });
 

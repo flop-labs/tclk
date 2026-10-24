@@ -82,6 +82,14 @@ describe("handshake", () => {
 });
 
 describe("tools/list", () => {
+  it("advertises heartbeat as unsigned in the hosted manifest", async () => {
+    const { body } = await rpc("tools/list");
+    const heartbeat = body.result.tools.find((t: { name: string }) => t.name === "tclk_make_heartbeat");
+    expect(heartbeat).toBeDefined();
+    expect(heartbeat.description).toContain("unsigned");
+    expect(heartbeat.description).toContain("tclk_post_frame");
+  });
+
   it("lists exactly the stdio server's eighteen tools", async () => {
     const { body } = await rpc("tools/list");
     const names = body.result.tools.map((t: { name: string }) => t.name);
