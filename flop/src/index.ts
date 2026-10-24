@@ -5,6 +5,8 @@ export type {
   FlopRailConfig,
   ResolvedFlopConfig,
 } from "./config.js";
+export { timelockSymmetryMinimum } from "./symmetry.js";
+export type { FlopSymmetryParams } from "./symmetry.js";
 export {
   FlopRail,
   FlopLockError,

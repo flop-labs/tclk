@@ -15,6 +15,10 @@ import {
   type ResolvedFlopConfig,
   type FlopNetwork,
 } from "./config.js";
+import {
+  timelockSymmetryMinimum,
+  type FlopSymmetryParams,
+} from "./symmetry.js";
 
 export interface FlopEscrow {
   id: string;
@@ -185,6 +189,30 @@ function duration(ref: Reference, anchor: FlopSnapshot): number {
     throw new Error("flop: deadline exceeds block range");
   return blocks;
 }
+/**
+ * Opt-in R10.2 admission check, derived from the finalized anchor alone so the payer's
+ * lock and the payee's verifyLock reach the same verdict. T_FLOP is the relative timeout
+ * submitted to the pallet; T_other is the anchor-to-claimByMs span at the agreed
+ * blockTimeMs; current_finality_lag is the anchor height minus its runtime finality
+ * prefix. Testnet-only approximation: tclk has no counter-chain leg, so claimByMs stands
+ * in for T_other, and this claims no mainnet R10.2 conformance (see README).
+ */
+function checkSymmetry(
+  ref: Reference,
+  anchor: FlopSnapshot,
+  params: FlopSymmetryParams,
+): void {
+  const tOther = Math.ceil(
+    (ref.terms.claimByMs - anchor.timestampMs) / ref.blockTimeMs,
+  );
+  const lag = anchor.number - anchor.finalizedNumber;
+  const offered = duration(ref, anchor);
+  const required = timelockSymmetryMinimum(tOther, params, lag);
+  if (offered < required)
+    throw new Error(
+      `flop: timeout below the R10.2 symmetry minimum: ${offered} blocks offered, ${required} required (T_other ${tOther}, finality lag ${lag})`,
+    );
+}
 function checkSnapshot(s: FlopSnapshot): void {
   if (
     !HEX32.test(s.genesis) ||
@@ -303,6 +331,8 @@ export class FlopRail implements SettlementRail {
     const deadlineBlocks = duration(ref, anchor);
     if (anchor.number + deadlineBlocks + ref.refundMarginBlocks > 0xffffffff)
       throw new Error("flop: deadline overflows chain height");
+    // Before the duplicate guard and the journal: a refused lock leaves no trace.
+    if (this.config.symmetry) checkSymmetry(ref, anchor, this.config.symmetry);
     // Check again after asynchronous preflight; preserve the guard on uncertain submission.
     if (this.submitted.has(terms.contract))
       throw new Error(
@@ -347,7 +377,11 @@ export class FlopRail implements SettlementRail {
   private async inspect(
     ref: Reference,
     requireTimely = true,
-  ): Promise<{ snapshot: FlopSnapshot; escrow: FlopEscrow }> {
+  ): Promise<{
+    snapshot: FlopSnapshot;
+    anchor: FlopSnapshot;
+    escrow: FlopEscrow;
+  }> {
     this.checkRef(ref);
     const snapshot = await this.snapshot(ref.escrow);
     const anchor = await this.snapshot(undefined, ref.anchor);
@@ -373,14 +407,16 @@ export class FlopRail implements SettlementRail {
     ) {
       throw new Error("flop: escrow does not match the agreed terms");
     }
-    return { snapshot, escrow };
+    return { snapshot, anchor, escrow };
   }
   async verifyLock(terms: LockTerms, value: string): Promise<boolean> {
     try {
       validateTerms(terms);
       const ref = parseRef(value);
       if (canonicalJson(ref.terms) !== canonicalJson(terms)) return false;
-      const { snapshot, escrow } = await this.inspect(ref);
+      const { snapshot, anchor, escrow } = await this.inspect(ref);
+      if (this.config.symmetry)
+        checkSymmetry(ref, anchor, this.config.symmetry);
       return (
         escrow.status === "Open" &&
         snapshot.finalizedNumber < escrow.deadline &&
