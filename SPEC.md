@@ -180,6 +180,10 @@ The counterparty supplies the **statement** and closes the contract terms.
   included) and the acceptance (`ref`, `from`, `statement`, `paymentKey`, `nonce`). Both sides
   recompute it; a mismatch rejects the frame. From here on every frame names the contract by
   this id.
+- `contract` is required, not advisory. The accepting party derives it from the offer and the
+  accept-core above; it is not a value supplied later by the offer sender. A decoder or validator
+  MUST reject an `accept` that omits it, before the frame is signed, posted, or used to attempt a
+  lock.
 
 ### 3.3 `lock`
 

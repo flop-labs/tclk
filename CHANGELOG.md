@@ -38,6 +38,8 @@ All notable changes to this project are documented here. Format follows
 
 ### Changed
 
+- Clarified that `accept.contract` is mandatory and locally derived, and documented a
+  validate-before-signing-or-posting preflight for accept frames (#142).
 - Transcript folding now consumes complete signed records instead of bare `lines` plus
   optional positional metadata. A record keeps its exact line, room, sequence, venue
   timestamp, sender, nonce and signature together; `foldTranscript` verifies the signature
