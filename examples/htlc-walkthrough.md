@@ -44,6 +44,10 @@ go in the accept frame.** Only its hash (the statement) does:
 FRAME='tclk1 {"contract":"0x3c9e1a05d92f7b6c1e4a8d0f3b6c9e2a5d8f1b4c7e0a3d6f97a1ec7e2d9b6a4","from":"did:key:z6MkPayeeExampleDid2222222222222222222","nonce":"b3e7f1a9c2d5e8f0","ref":"0x7a1ec7e2d9b6a4f3c8e1a05d92f7b6c1e4a8d0f3b6c9e2a5d8f1b4c7e0a3d6f9","statement":"0x5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d","type":"accept"}'
 ```
 
+In a real frame, `makeAccept` derives `contract` from the validated offer and accept-core. The
+literal above is only an illustrative placeholder for this hand-run walkthrough, not a golden
+derived value.
+
 Before the accept is signed or posted, pass the complete frame through `decodeFrame` (or
 `tclk_decode`) and stop if validation fails. In particular, `contract` is required: the accepting
 party derives it from the offer plus the accept-core, rather than waiting for the offer sender to
