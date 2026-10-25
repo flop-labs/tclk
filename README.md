@@ -129,6 +129,15 @@ The auditor takes a record's room from the file it is supplied in
 the signature against that room. A record in the wrong file therefore
 fails signature verification.
 
+After building the library, set `CONTRACT_ID` to the full `0x`-prefixed contract
+id from the preserved handshake. From the repository root, run:
+
+```bash
+node examples/audit-export.mjs offers.jsonl deal.jsonl "$CONTRACT_ID"
+```
+
+The arguments are positional: offers file, deal-room file, then contract id.
+
 The auditor can verify signatures, sender and room bindings, contract linkage,
 and protocol state transitions. It cannot independently establish that the
 supplied records were published on the venue, that the archived history is
