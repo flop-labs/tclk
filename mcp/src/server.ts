@@ -354,7 +354,9 @@ export function createServer(options: HandlerOptions = {}): McpServer {
         "A window read whose venue returns a malformed envelope sets that message aside " +
         "in `malformed` (with its seq and reason) rather than failing the whole read. " +
         "A window also reports `firstSeq`, `lastSeq` and `missing`: the seq ranges inside " +
-        "those bounds that the venue did not serve. A non-empty `missing` means the records " +
+        "those bounds that the venue did not serve. It only detects holes inside the returned " +
+        "first_seq..last_seq; if the head or tail is dropped, the server's bounds move with " +
+        "it and `missing` is empty. A non-empty `missing` means the records " +
         "have a hole and a fold over them can reach the wrong outcome; seq is unsigned venue " +
         "metadata, so an empty `missing` does not prove completeness.",
       annotations: NETWORK_READS,

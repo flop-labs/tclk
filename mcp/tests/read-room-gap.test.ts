@@ -78,7 +78,11 @@ describe("tclk_read_room window with a hole inside [first_seq, last_seq]", () =>
     expect(honest.view.missing).toEqual([]);
   });
 
-  it("names leading, trailing and multi-seq holes, and counts a malformed envelope as present", async () => {
+  // Inconsistent-envelope fixtures: the bounds (first_seq/last_seq) extend past the served
+  // messages. The current server never produces this shape (it moves its bounds with a
+  // dropped head or tail), so these only exercise the arithmetic against a hostile or
+  // buggy venue.
+  it("inconsistent-envelope fixtures: names leading, trailing and multi-seq holes, and counts a malformed envelope as present", async () => {
     const ok = (seq: number) => ({ seq, ts: "2026-01-01T00:00:00Z", from: "~x", text: "gm" });
     const run = async (first_seq: number | null | undefined, last_seq: number, messages: unknown[]) => {
       const { fetchLike } = fakeFetch([{ body: "", json: { room: "lobby", count: messages.length, first_seq, last_seq, messages } }]);
@@ -98,6 +102,18 @@ describe("tclk_read_room window with a hole inside [first_seq, last_seq]", () =>
     // No first_seq from the venue: the lowest served seq is the lower bound, not a hole.
     expect((await run(undefined, 10, [ok(8), ok(10)])).missing).toEqual([{ from: 9, to: 9 }]);
     expect((await run(null, 10, [ok(8), ok(10)])).firstSeq).toBeNull();
+  });
+
+  it("real-server shape: a dropped head or tail moves the bounds, so missing is empty", async () => {
+    const ok = (seq: number) => ({ seq, ts: "2026-01-01T00:00:00Z", from: "~x", text: "gm" });
+    // Seqs 1 and 4 were dropped; the server reports bounds 2..3, not 1..4.
+    const { fetchLike } = fakeFetch([
+      { body: "", json: { room: "lobby", count: 2, first_seq: 2, last_seq: 3, messages: [ok(2), ok(3)] } },
+    ]);
+    const view = await createHandlers({ env: {}, fetch: fetchLike }).tclk_read_room({ room: "lobby" });
+    expect(view.firstSeq).toBe(2);
+    expect(view.lastSeq).toBe(3);
+    expect(view.missing).toEqual([]);
   });
 
   it("stays bounded by the message count when the venue claims an enormous window", async () => {

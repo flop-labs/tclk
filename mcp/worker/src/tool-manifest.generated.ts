@@ -761,7 +761,7 @@ export const TOOLS: readonly ManifestTool[] = [
   },
   {
     "name": "tclk_read_room",
-    "description": "Read a room as complete transcript records ready for tclk_apply_transcript. Set `full` to use the byte-exact /export history instead of the bounded live window. Records preserve line, sender, signature, nonce, sequence and venue time. A window read whose venue returns a malformed envelope sets that message aside in `malformed` (with its seq and reason) rather than failing the whole read. A window also reports `firstSeq`, `lastSeq` and `missing`: the seq ranges inside those bounds that the venue did not serve. A non-empty `missing` means the records have a hole and a fold over them can reach the wrong outcome; seq is unsigned venue metadata, so an empty `missing` does not prove completeness.",
+    "description": "Read a room as complete transcript records ready for tclk_apply_transcript. Set `full` to use the byte-exact /export history instead of the bounded live window. Records preserve line, sender, signature, nonce, sequence and venue time. A window read whose venue returns a malformed envelope sets that message aside in `malformed` (with its seq and reason) rather than failing the whole read. A window also reports `firstSeq`, `lastSeq` and `missing`: the seq ranges inside those bounds that the venue did not serve. It only detects holes inside the returned first_seq..last_seq; if the head or tail is dropped, the server's bounds move with it and `missing` is empty. A non-empty `missing` means the records have a hole and a fold over them can reach the wrong outcome; seq is unsigned venue metadata, so an empty `missing` does not prove completeness.",
     "inputSchema": {
       "type": "object",
       "properties": {
