@@ -8,6 +8,11 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `tclk_read_room` now fails closed when a `since` window's `first_seq` proves the
+  venue skipped retained records because the bounded tail filled before the caller polled.
+  The error points callers at `full: true` instead of returning a transcript slice with a
+  silent hole. An empty venue window has no `first_seq` evidence and cannot
+  certify continuity; use the retained export when completeness matters.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema

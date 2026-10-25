@@ -65,6 +65,13 @@ Set `full: true` to read the retained byte-exact `/export` history instead of th
 live window. Each record keeps its line, sender, signature, nonce, sequence and venue time
 together; the fold has no parallel arrays and no fallback clock.
 
+For `since` reads, a nonempty window whose `first_seq` skips the requested
+cursor fails closed and points to `full: true`. A real empty Technocore window
+has `count: 0` and `first_seq: null`, even if later records expired; it cannot
+prove either continuity or a gap. Use `full: true` to inspect the **retained**
+export when completeness matters. An export cannot restore expired or compacted
+records.
+
 ### `tclk_post_frame` has three tiers
 
 1. **Caller-signed** — pass `did`, `sig` and `nonce` and they go through untouched.
