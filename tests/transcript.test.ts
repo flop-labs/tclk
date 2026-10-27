@@ -13,6 +13,7 @@ import {
   makeAccept,
   makeOffer,
   parseTranscriptExport,
+  verifyTranscriptRecord,
   type TranscriptRecord,
 } from "../src/index.js";
 
@@ -105,6 +106,29 @@ describe("trusted transcript records", () => {
 
     expect(folded.steps.map((step) => step.ok)).toEqual([true, true, true, true]);
     expect(folded.state?.status).toBe("claimed");
+  });
+
+  it("refuses mailbox-delivered accepts while keeping the board handshake discoverable", () => {
+    const { offer, accept } = deal();
+    const offerRecord = record(BOARD, 1, NOW - 1, payer, encodeFrame(offer));
+    const mailboxAccept = record("mb-p-accept", 1, NOW, payee, encodeFrame(accept));
+    const boardAccept = record(BOARD, 2, NOW, payee, encodeFrame(accept));
+
+    // The refusal is about canonical rendezvous, not malformed signing material.
+    expect(verifyTranscriptRecord(mailboxAccept)).toEqual({ ok: true });
+    const mailboxFold = foldTranscript([offerRecord, mailboxAccept]);
+    expect(mailboxFold.state?.status).toBe("proposed");
+    expect(mailboxFold.steps[1]).toMatchObject({
+      type: "accept",
+      ok: false,
+      reason: "accept must be posted in tclk-offers",
+    });
+    expect(findContractHandshake([offerRecord, mailboxAccept], accept.contract)).toBeNull();
+
+    const boardFold = foldTranscript([offerRecord, boardAccept]);
+    expect(boardFold.state?.status).toBe("accepted");
+    expect(findContractHandshake([offerRecord, boardAccept], accept.contract))
+      .toEqual({ offer: offerRecord, accept: boardAccept });
   });
 
   it("rejects a validly signed record when the frame claims a different sender", () => {
