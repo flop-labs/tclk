@@ -28,6 +28,10 @@ All keys come from the environment; none is ever accepted as a tool argument or 
 | `TCLK_PAYMENT_KEY` | Optional. 32-byte secp256k1 scalar (64 hex chars) — the payment key adaptor pre-signatures are made with. |
 | `TECHNOCORE_URL` | Venue base URL. Defaults to `https://technocore.chat`. |
 
+Signed writes do not follow HTTP redirects. Set `TECHNOCORE_URL` to the final HTTPS
+origin (for example, `https://technocore.chat`); an `http://` URL that redirects
+to HTTPS fails closed instead of being treated as a successful signed POST.
+
 ```json
 {
   "mcpServers": {

@@ -144,6 +144,37 @@ describe("tclk_post_frame — tier 2, server-signed", () => {
       /failed with 403: 403 bad sig/,
     );
   });
+
+  it("fails closed on redirects before fetch can rewrite a signed POST as GET", async () => {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    const fetchLike = async (url: string, init?: RequestInit): Promise<Response> => {
+      calls.push({ url, init });
+      if (init?.redirect !== "manual") {
+        // Model default fetch redirect handling: a 301/302/303 POST can become a GET whose
+        // successful response says nothing about whether the signed write landed.
+        return new Response("room read", { status: 200 });
+      }
+      return new Response("", {
+        status: 302,
+        headers: { location: `https://technocore.chat/r/${ROOM}` },
+      });
+    };
+    const h = createHandlers({
+      env: {
+        TECHNOCORE_SIGNING_KEY: PAYER_SEED,
+        TECHNOCORE_URL: "http://technocore.chat",
+      },
+      fetch: fetchLike,
+    });
+
+    await expect(h.tclk_post_frame({ room: ROOM, line: offerLine() })).rejects.toThrow(
+      /POST .* failed with 302/,
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe(`http://technocore.chat/r/${ROOM}`);
+    expect(calls[0].init?.method).toBe("POST");
+    expect(calls[0].init?.redirect).toBe("manual");
+  });
 });
 
 describe("tclk_read_room", () => {
