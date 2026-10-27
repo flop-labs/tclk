@@ -56,8 +56,18 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "nonce": { "$ref": "#/$defs/hex33" },
-        "s": { "type": "string", "pattern": "^0x(?:[0-9a-f]{2}){1,32}$" }
+        "nonce": {
+          "type": "string",
+          "pattern": "^0x(?:02|03)[0-9a-f]{64}$",
+          "description": "33-byte SEC1-compressed secp256k1 nonce point. JSON Schema enforces the compressed encoding; the runtime decoder additionally requires the point to be on-curve.",
+          "x-tclk-runtimeConstraint": "secp256k1-compressed-point-on-curve"
+        },
+        "s": {
+          "type": "string",
+          "pattern": "^0x(?:[0-9a-f]{2}){1,32}$",
+          "description": "Adaptor scalar encoding. JSON Schema enforces whole-byte lowercase hex; the runtime decoder additionally requires the numeric value to be in [1, n).",
+          "x-tclk-runtimeConstraint": "secp256k1-scalar-[1,n)"
+        }
       },
       "required": ["nonce", "s"]
     },

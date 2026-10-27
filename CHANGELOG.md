@@ -8,6 +8,7 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Lock-frame `presig` validation now rejects nonce encodings that are not actual secp256k1 points and scalar values outside `[1, n)`, so a frame cannot enter the state machine with an adaptor pre-signature the public adaptor helpers cannot use. The shipped schema now marks these cryptographic checks as runtime constraints while retaining portable lexical validation (#176).
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
