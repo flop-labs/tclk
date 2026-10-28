@@ -170,7 +170,10 @@ tclk1 {"amount":"1000000","asset":"FLOP","claimByMs":1756800000000,"expiresMs":1
 
 ### 3.2 `accept`
 
-The counterparty supplies the **statement** and closes the contract terms.
+The counterparty supplies the **statement** and closes the contract terms. An `accept`
+is rejected if the offer has already expired (`now >= expiresMs`) or if the refund
+window is already open (`now >= refundAfterMs`); the frame must arrive while both
+`now < expiresMs` and `now < refundAfterMs` hold.
 
 - For a `hash` lock the payee mints the preimage (`generateHashLock()`) and sends
   `statement = sha256(preimage)`. For a `point` lock the payee mints `(y, Y)`
@@ -229,7 +232,7 @@ Per contract, pure and fail-closed (`applyFrame(state, frame, nowMs)` returns th
 an unchanged state plus a reason — never throws mid-poll, never moves on an invalid frame):
 
 ```
-proposed ──accept(counterparty, statement ok, pre-expiry)──▶ accepted
+proposed ──accept(counterparty, statement ok, pre-expiry, now < refundAfterMs)──▶ accepted
 accepted ──lock(payer, rail ∈ offer.rails, now < refundAfterMs)──▶ locked
 locked   ──reveal(payee, ref absent or = lock.ref, secret opens statement, now < refundAfterMs)──▶ claimed
 locked   ──refund(payer, ref absent or = lock.ref, now ≥ refundAfterMs)──────────▶ refunded

@@ -8,6 +8,11 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `accept` is now rejected when `now >= refundAfterMs`, preventing a counterparty
+  from accepting an offer after the payer's refund window has already opened. A
+  contract in `accepted` state with no lock could previously not be recovered
+  without a manual `cancel` by the payer; the guard closes that window. Closes #75.
+
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
