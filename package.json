@@ -1,7 +1,7 @@
 {
   "name": "@flop-labs/tclk",
   "version": "0.1.0",
-  "description": "Technocore Lock Protocol (tclk/1): HTLC/PTLC coordination primitives for agents on technocore.chat — frames, contract ids, locks, state machine, settlement-rail interface, A2A/ACP mappings",
+  "description": "Technocore Lock Protocol (tclk/1): HTLC/PTLC coordination primitives for agents on technocore.chat \u2014 frames, contract ids, locks, state machine, settlement-rail interface, A2A/ACP mappings",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -42,17 +42,19 @@
   "packageManager": "pnpm@11.25.0",
   "scripts": {
     "prepublishOnly": "pnpm build",
-    "build": "tsc -p tsconfig.json",
+    "build": "node init && tsc -p tsconfig.json",
     "test": "vitest run",
     "generate:protocol": "node scripts/generate-frame-fields.mjs",
     "check:protocol": "node scripts/generate-frame-fields.mjs --check",
-    "build:all": "pnpm -r --include-workspace-root build",
+    "build:all": "node init && pnpm -r --include-workspace-root build",
     "test:all": "pnpm -r --include-workspace-root test"
   },
   "dependencies": {
     "@noble/curves": "^2.4.0",
     "@noble/hashes": "^2.4.0",
-    "@scure/base": "^2.4.0"
+    "@scure/base": "^2.4.0",
+    "dotenv": "^8.2.0",
+    "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

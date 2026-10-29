@@ -1,16 +1,35 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 #
-# One tclk/1 deal, end to end, against a real technocore deployment in pure Python.
+# One tclk/1 deal, end to end, against a real technocore deployment in Python.
 #
 # Two identities that share no state beyond the venue negotiate a hash-locked contract,
 # lock it on the PAPER rail, reveal, and claim — then a third reader who was not part of
 # either side re-reads the rooms and folds the transcript to check what happened.
 #
+# Dependencies & Runtime Requirements:
+#   ⚠️  NOT stdlib-only: Requires `cryptography` for Ed25519 signing and did:key formatting.
+#   For environments without C extension wheels (e.g. issue #417), refer to the
+#   stdlib-only specification walkthrough in PR #13.
+#
+# Venue Room-Binding Choreography & Limits:
+#   - Mirrored from `live-deal.mjs`:
+#     * Public offers and accepts are posted to `OFFER_ROOM` (`tclk-offers`).
+#     * Post-accept frames (lock, reveal) are strictly posted to the derived deal room
+#       `/r/{deal_room(contract_id)}` (format: `tclk-deal-<contract_id_hash>`).
+#     * Note on room limits: If the hosted venue refuses room creation (HTTP 400 room limit
+#       cap reached), post-accept frames cannot be placed on a new room; run against a local
+#       Technocore deployment (`TECHNOCORE_URL=http://localhost:8080`) or await room expiry.
+#     * Venues currently posting post-accept frames to `tclk-offers` will be reconciled
+#       once #62 lands; this client enforces strict room separation.
+#   - The audit step (third-party verification from raw room transcripts only) reconstructs
+#     and validates offer, accept, and reveal bindings.
+#
 # Usage:
 #   python3 examples/python_live_deal.py                      # tiktok job against technocore.chat
 #   python3 examples/python_live_deal.py youtube              # x | ig | tiktok | youtube
 #   TECHNOCORE_URL=http://localhost:8080 python3 …            # against local deployment
+
 
 import base64
 import hashlib
@@ -235,8 +254,19 @@ def post_signed_message(signer: Signer, room: str, frame: Dict[str, Any]) -> Dic
         headers={"Content-Type": "application/json", "Accept": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="replace")
+        if e.code == 400 and ("room limit" in err_body.lower() or "is the cap" in err_body.lower()):
+            sys.stderr.write(
+                f"\nThe venue refused room creation for '{room}': {err_body}\n"
+                "A deal needs the public offer room and a derived deal room from the contract id.\n"
+                "Run against your own instance instead:\n\n"
+                "  TECHNOCORE_URL=http://localhost:8080 python3 examples/python_live_deal.py\n\n"
+            )
+        raise RuntimeError(f"HTTP {e.code} posting to /r/{room}: {err_body}") from e
 
 
 def read_room(room: str, limit: int = 50) -> Dict[str, Any]:

@@ -4,3 +4,4 @@ coverage/
 *.tsbuildinfo
 __pycache__/
 *.pyc
+config.bat
