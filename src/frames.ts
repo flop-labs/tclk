@@ -12,6 +12,7 @@
 // Spec: technocore-lock-protocol.md
 
 import { sha256 } from "@noble/hashes/sha2.js";
+import { base58 } from "@scure/base";
 import { FRAME_FIELDS, TCLK1_RAIL_PATTERN } from "./frame-fields.generated.js";
 import { randomU8a, stringToU8a, u8aToHex } from "./hex.js";
 import { isValidPointStatement } from "./points.js";
@@ -195,6 +196,20 @@ function requireKeys(
   }
 }
 
+/**
+ * An Ed25519 `did:key`, as the venue verifies it. The `z6Mk` + 44-char shape is necessary but
+ * not sufficient: that range of base58 also covers tails decoding to other multicodecs
+ * (`z6Mk111…` is 0xecfe, `z6Mkzzz…` is 0xed02), which the venue refuses on the signed lane.
+ */
+function requireDid(v: unknown, name: string): string {
+  const did = requireString(v, name, DID);
+  const tagged = base58.decode(did.slice("did:key:z".length));
+  if (tagged.length !== 34 || tagged[0] !== 0xed || tagged[1] !== 0x01) {
+    fail(`${name} is not an Ed25519 did:key (multicodec ed25519-pub)`);
+  }
+  return did;
+}
+
 function validateJob(v: unknown): JobRef {
   if (!v || typeof v !== "object" || Array.isArray(v)) fail("job must be an object");
   const job = v as Record<string, unknown>;
@@ -291,7 +306,7 @@ export function validateFrame(value: unknown): TclkFrame {
   const keys = FRAME_FIELDS[type];
   if (!keys) fail(`unknown frame type: ${String(frame.type)}`);
   requireKeys(frame, new Set(keys.allowed), keys.required);
-  requireString(frame.from, "from", DID);
+  requireDid(frame.from, "from");
 
   switch (type) {
     case "offer": {

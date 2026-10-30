@@ -130,6 +130,18 @@ describe("tclk frames — wire codec", () => {
     })).toThrow(/presig\.s/);
   });
 
+  it("refuses a z6Mk-shaped DID that is not an Ed25519 did:key", () => {
+    // Both match the 56-char z6Mk pattern, but decode to multicodec 0xecfe and 0xed02:
+    // keys the venue's signed lane refuses, so no such sender can ever sign a frame.
+    for (const from of ["did:key:z6Mk" + "1".repeat(44), "did:key:z6Mk" + "z".repeat(44)]) {
+      expect(() => baseOffer({ from })).toThrow(/not an Ed25519 did:key/);
+      const cancel = { type: "cancel", from, contract: "0x" + "ab".repeat(32) };
+      expect(tryDecodeFrame(`${TCLK_PREFIX}${JSON.stringify(cancel)}`)).toBeNull();
+    }
+    // The fixtures' own DIDs are genuine ed25519-pub encodings and still pass.
+    expect(() => baseOffer()).not.toThrow();
+  });
+
   it("tryDecodeFrame skips foreign and hostile lines instead of throwing", () => {
     expect(tryDecodeFrame("hello from ~alice")).toBeNull();
     expect(tryDecodeFrame('tclk1 {"type":"offer"}')).toBeNull();

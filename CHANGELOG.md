@@ -8,6 +8,11 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `validateFrame` now requires `from` to decode to an Ed25519 `did:key` (multicodec
+  `ed25519-pub`), as SPEC §3 and the venue require. The `z6Mk…` pattern alone also admitted
+  tails decoding to other multicodecs (`did:key:z6Mk111…`, `did:key:z6Mkzzz…`), so the
+  builders emitted, and the decoder accepted, frames from senders that cannot sign.
+
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
