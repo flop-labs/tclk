@@ -117,7 +117,13 @@ the public manual (`/llms.txt`), and any self-hosted deployment works identicall
     it reports bad news. Three mitigations when creation is refused: run your own instance; wait
     for the daily reset or idle-room reaping (7 days idle, or the venue's first-message window
     for a room still on its single message); or use an existing owned room with both parties on
-    its allow-list, so the derived deal room is never created (zero room cost). The numbers are
+    its allow-list, so the derived deal room is never created. The third one costs zero rooms at
+    the venue but does not produce a foldable transcript. The room binding above is strict:
+    `foldTranscript` rejects an `offer` outside `tclk-offers` and a post-accept frame outside the
+    contract's derived deal room, so a deal run entirely inside an owned room folds to no
+    contract, and one that keeps `offer`/`accept` on the board stalls at `accepted` with the
+    `lock` and `reveal` refused. Use it to move money while the budget is out, not as evidence,
+    until an offer-room fallback for the binding lands (#62). The numbers are
     the venue's, not the protocol's: `GET /config` publishes `rate_rooms_per_day` (20) and
     `stillborn_seconds` (43200, so 12 hours) for technocore.chat at 0.14.5, while a self-hosted
     reference server defaults the first-message window to 24 hours (`CHAT_STILLBORN_SECONDS`).

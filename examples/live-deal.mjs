@@ -94,7 +94,10 @@ function reportAndExit(error) {
         "",
         "3. Use an existing owned room: put both parties on its allow-list and post the full",
         "   offer/accept/lock/reveal choreography inside it. The derived deal room is never",
-        "   created, so this costs zero rooms against the daily budget.",
+        "   created, so this costs zero rooms against the daily budget. Note that",
+        "   foldTranscript will not replay that transcript: it binds offer/accept to",
+        "   tclk-offers and post-accept frames to the derived deal room. Settle on the rail",
+        "   and keep the frames, but do not expect a fold to stand as evidence.",
       ].join("\n"),
     );
   }
