@@ -218,7 +218,7 @@ export class FlopSubmissionError extends Error {
     error: unknown,
   ) {
     super(
-      "flop: lock submission failed or outcome unknown; inspect txHash before retrying",
+      "flop: lock submission failed or outcome unknown; retain pendingRef for recovery",
     );
     const hash = (error as { txHash?: unknown } | null)?.txHash;
     if (typeof hash === "string" && HEX32.test(hash)) this.txHash = hash;

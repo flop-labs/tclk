@@ -131,14 +131,19 @@ much later, even after the client stops waiting. A manual replacement using the
 same account nonce can usurp it, so a timeout alone does not establish either
 execution or cancellation. An RPC timeout can also mean a signed transaction
 was included even though its receipt was lost. `FlopTransactionError`
-contains `txHash`; inspect its finalized events before resubmitting. A wallet
-should pass `persistPending: async (pendingRef) => { /* durable wallet journal */ }`
+contains `txHash` once sending has been attempted; inspect its finalized events
+before resubmitting. Signing and finality share one `transactionTimeoutMs` budget.
+If signing fails or times out before sending, the transport omits `txHash` and
+does not send the transaction even if the pending signing read later completes.
+Wallets should pass `persistPending: async (pendingRef) => { /* durable wallet journal */ }`
 to `connectFlopRail`. This hook completes before signing/sending; if it fails,
 no transaction is submitted. After the hook finishes, the rail rechecks the
 claim window and the anchor against the latest finalized snapshot. A closed
 claim window or exhausted inclusion allowance aborts before submission and
 allows the wallet to prepare a fresh attempt. The library itself does not persist state.
 `FlopSubmissionError` carries that same `pendingRef` and, when available, `txHash`.
+A signing failure or timeout leaves no `txHash` because nothing was sent, so `pendingRef`
+is the only handle. A failure after sending carries both, and `txHash` is the one to look up on chain.
 Use `recoverFlopReference(pendingRef, escrowIdFromFinalizedEvent)` to reconstruct
 the reference after a lost receipt, then verify it against the chain. Do not
 substitute an escrow ID from a chat message.

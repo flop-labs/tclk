@@ -13,10 +13,12 @@ const event = (section: string, method: string) => ({
   event: { section, method },
 });
 function transaction(run: (cb: (r: any) => void) => Promise<() => void>) {
-  return {
+  const tx = {
     hash: { toHex: () => h },
-    signAndSend: vi.fn((_s, _o, cb) => run(cb)),
-  } as unknown as SubmittableExtrinsic<"promise">;
+    signAsync: vi.fn(async () => tx),
+    send: vi.fn((cb) => run(cb)),
+  };
+  return tx as unknown as SubmittableExtrinsic<"promise">;
 }
 afterEach(() => vi.useRealTimers());
 describe("finalized transaction lifecycle", () => {
@@ -31,8 +33,8 @@ describe("finalized transaction lifecycle", () => {
       return stop;
     });
     await finalizedTransaction(tx, signer, 100);
-    expect(stop).toHaveBeenCalledOnce();
-    expect(tx.signAndSend).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(stop).toHaveBeenCalledOnce());
+    expect(tx.send).toHaveBeenCalledOnce();
   });
   it.each(["isInvalid", "isDropped", "isUsurped", "isFinalityTimeout"])(
     "rejects %s without retry",
@@ -45,7 +47,7 @@ describe("finalized transaction lifecycle", () => {
       await expect(
         finalizedTransaction(tx, signer, 100),
       ).rejects.toBeInstanceOf(FlopTransactionError);
-      expect(tx.signAndSend).toHaveBeenCalledOnce();
+      expect(tx.send).toHaveBeenCalledOnce();
       expect(stop).toHaveBeenCalledOnce();
     },
   );
@@ -81,7 +83,7 @@ describe("finalized transaction lifecycle", () => {
     await vi.advanceTimersByTimeAsync(11);
     expect((await result).message).toContain("inspect txHash");
     expect(stop).toHaveBeenCalledOnce();
-    expect(tx.signAndSend).toHaveBeenCalledOnce();
+    expect(tx.send).toHaveBeenCalledOnce();
   });
 });
 describe("metadata transport", () => {
