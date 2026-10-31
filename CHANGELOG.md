@@ -15,6 +15,16 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- `foldTranscript` now returns `terminalEvidence` on the result, either `"coordination-only"` or
+  `"rail-required"`. A terminal status is always `"rail-required"`: the fold has no
+  rail-authoritative input, so a terminal verdict rests on the signed transcript plus the
+  record's unsigned venue timestamp. Null and every non-terminal status is `"coordination-only"`.
+  Read this field for the trust boundary, not `state.status` and not a clean strict fold.
+- `foldTranscript` accepts `{ strictDeadlines: true }`, which declines to advance into `claimed`
+  or `refunded` when that verdict turns on the record's unsigned venue timestamp (#96) and holds
+  the state at `locked`. The scope is exactly the reveal and refund verdicts. `accept` and `lock`
+  read the same unsigned timestamp and are not guarded, so a clean accept or lock step is not
+  proof those deadlines held on trusted time. Off by default.
 - `@flop-labs/tclk-flop`: native FLOP HTLC settlement with devnet defaults and
   explicit testnet/mainnet RPC and genesis configuration. The rail binds terms to
   finalized escrow state, signs locally with the party's Ed25519 key, and supports

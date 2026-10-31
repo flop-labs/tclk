@@ -13,6 +13,7 @@ import {
   makeAccept,
   makeOffer,
   parseTranscriptExport,
+  verifyTranscriptRecord,
   type TranscriptRecord,
 } from "../src/index.js";
 
@@ -283,6 +284,11 @@ describe("strict deadline folding (#96)", () => {
     // Only timestampMs changed. The signature covers room|nonce|line, so the record still
     // authenticates, and the plain fold now rejects the reveal and holds at locked. Same
     // signed bytes, a different terminal outcome, decided entirely by venue time. That is #96.
+    // Assert the signature at the record level, which is the claim in the title. Reading it
+    // off the fold's refusal reason is indirect: it only shows which check foldTranscript
+    // reported first, not that the edited record authenticates on its own.
+    expect(verifyTranscriptRecord(records[3])).toEqual({ ok: true });
+    expect(verifyTranscriptRecord(forged)).toEqual({ ok: true });
     const plain = foldTranscript([records[0], records[1], records[2], forged]);
     expect(plain.steps[3]).toMatchObject({ ok: false, reason: expect.stringMatching(/refund window/) });
     expect(plain.state?.status).toBe("locked");
