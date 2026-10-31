@@ -23,6 +23,10 @@ describe("published package surface", () => {
     expect(realpathSync(nodeRequire.resolve(SCHEMA_SPECIFIER))).toBe(realpathSync(shipped));
 
     const schema = JSON.parse(readFileSync(nodeRequire.resolve(SCHEMA_SPECIFIER), "utf8"));
+    // The `$id` below is pinned on purpose, not read off whatever the file happens to say.
+    // It is the retrieval URI other implementations `$ref` and cache the schema under, so
+    // editing it is a published-contract change and has to be a deliberate edit here too.
+    // Changing the file without changing this line fails the suite, which is the point.
     expect(schema.$id).toBe("https://github.com/flop-labs/tclk/schema/tclk1-frames.schema.json");
     expect(schema.$defs.offer).toBeDefined();
   });
