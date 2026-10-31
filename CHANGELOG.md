@@ -15,6 +15,13 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- `@flop-labs/tclk-flop`: native FLOP HTLC settlement with devnet defaults and
+  explicit testnet/mainnet RPC and genesis configuration. The rail binds terms to
+  finalized escrow state, signs locally with the party's Ed25519 key, and supports
+  recovery after uncertain submission. Deadlines use finalized block heights with
+  nominal millisecond conversion; chain stalls can delay refunds and changed block
+  rates can shift the effective expiry. The client rechecks the claim window and
+  anchor freshness after journaling, before submitting a lock.
 - `SPEC.md` §3 now pins the canonical-JSON escape forms the ids depend on: lowercase hex, the
   five JSON short escapes, `\u00xx` for the remaining C0 controls, `\uxxxx` per UTF-16 code unit
   (so an astral character is two escapes and there is no `\u{…}` form), `/` left unescaped, and
