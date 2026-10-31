@@ -49,6 +49,11 @@ export function lockTerms(state: ContractState): LockTerms {
  * both directions, so a guard is skipped rather than failed, and a negative or infinite
  * reading answers the comparison confidently about a time that never existed. This is the
  * rule `applyFrame` already applies to its own `nowMs`.
+ *
+ * For the `SettlementRail` implementations in this package, not a general-purpose clock
+ * validator. It is deliberately absent from `src/index.ts`, so it is not on the published
+ * surface and no installed consumer can reach it. A rail implemented outside this package
+ * states its own clock rule.
  */
 export function railNow(clock: () => number): number {
   const now = clock();
