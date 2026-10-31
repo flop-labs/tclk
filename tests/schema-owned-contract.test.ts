@@ -7,7 +7,7 @@
 // same *set* of fields at all? Value sampling cannot see a key the decoder allows and the
 // schema does not, or a nested object the generator never reached.
 //
-// The generator owns the nine frame types (`FRAME_FIELDS`) and CI gates them with
+// The generator owns the eight frame types (`FRAME_FIELDS`) and CI gates them with
 // `--check`. It does not reach inside them: `Object.keys(definition.properties)` is one
 // level deep, so the allowed-key sets for `job` and `presig` are written out by hand in
 // `src/frames.ts` beside a schema that states them too. Two sources for one contract is how
@@ -83,7 +83,19 @@ describe("the schema owns the field contract, including inside a frame", () => {
     // What the generator reaches today, stated as a fact rather than assumed: exactly the
     // `oneOf` members. If a frame type is added to the schema and not to `oneOf`, or the
     // generator starts emitting nested sets, this is the line that notices.
-    const frameTypes = schema.oneOf.map((entry: { $ref: string }) => entry.$ref.split("/").at(-1));
+    //
+    // Every `oneOf` member is a `$ref` today, and the type name is the last path segment.
+    // An inline member carries no `$ref`, so say that instead of dereferencing `undefined`
+    // and failing with "Cannot read properties of undefined (reading 'split')".
+    const frameTypes = schema.oneOf.map((entry: { $ref?: unknown }, index: number) => {
+      const ref = entry.$ref;
+      if (typeof ref !== "string") {
+        throw new Error(
+          `schema oneOf[${index}] is not a $ref (${JSON.stringify(entry)}); this test reads frame type names out of the refs, so an inline member needs its name read another way`,
+        );
+      }
+      return ref.split("/").at(-1);
+    });
     expect(Object.keys(FRAME_FIELDS).sort()).toEqual([...frameTypes].sort());
   });
 

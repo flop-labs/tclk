@@ -27,7 +27,7 @@ All notable changes to this project are documented here. Format follows
   and the normative `SPEC.md` table are checked for drift in CI.
 - `tests/schema-owned-contract.test.ts`, which pins the parity the schema-owned field contract
   does not yet cover. The generator reads `Object.keys(definition.properties)` one level deep, so
-  it owns the nine frame types and reaches inside none of them: the allowed and required key sets
+  it owns the eight frame types and reaches inside none of them: the allowed and required key sets
   for `job` and `presig` are written out by hand in `src/frames.ts` beside a schema that declares
   them too. The new checks assert that those hand-written sets equal the schema's, that the
   generated contract covers exactly the `oneOf` frame types, and that the only definitions left to
