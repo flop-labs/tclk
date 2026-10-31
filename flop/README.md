@@ -142,6 +142,8 @@ claim window and the anchor against the latest finalized snapshot. A closed
 claim window or exhausted inclusion allowance aborts before submission and
 allows the wallet to prepare a fresh attempt. The library itself does not persist state.
 `FlopSubmissionError` carries that same `pendingRef` and, when available, `txHash`.
+A signing failure or timeout leaves no `txHash` because nothing was sent, so `pendingRef`
+is the only handle. A failure after sending carries both, and `txHash` is the one to look up on chain.
 Use `recoverFlopReference(pendingRef, escrowIdFromFinalizedEvent)` to reconstruct
 the reference after a lost receipt, then verify it against the chain. Do not
 substitute an escrow ID from a chat message.
