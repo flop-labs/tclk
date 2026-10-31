@@ -118,6 +118,18 @@ describe("live-wire conformance gaps", () => {
     expect(() => encodeFrame(frame)).toThrow(/lexical order/);
   });
 
+  it("names the first out-of-order rail position in the refusal", () => {
+    // A client that sees only "rails must be in lexical order" has to diff the whole array.
+    // The message names the first index that differs from sorted order, so index 0 being
+    // already correct does not hide the real position.
+    const { id: _id, ...fields } = offer(["flop-htlc", "paper", "x402"]);
+    const unsorted = { ...fields, rails: ["flop-htlc", "x402", "paper"] };
+    const frame = { ...unsorted, id: offerId(unsorted) };
+    expect(() => encodeFrame(frame)).toThrow(
+      "tclk: rails must be in lexical order: index 1 is x402, expected paper",
+    );
+  });
+
   it("rejects an unknown rail id loudly", () => {
     expect(() => offer(["combat"])).toThrow(/unknown rail id/);
     expect(() => matchingRails(["combat"], ["paper"])).toThrow(/unknown rail id/);
