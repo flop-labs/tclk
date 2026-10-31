@@ -19,7 +19,8 @@ import { HEX32, resolveFlopConfig, type FlopRailConfig } from "./config.js";
 export class FlopTransactionError extends Error {
   constructor(
     message: string,
-    readonly txHash: string,
+    /** Signed transaction hash, absent when no send was attempted. */
+    readonly txHash?: string,
   ) {
     super(message);
   }
@@ -32,69 +33,80 @@ export function finalizedTransaction(
 ): Promise<ISubmittableResult> {
   return new Promise((resolve, reject) => {
     let settled = false;
+    let txHash: string | undefined;
     let unsubscribe: (() => void) | undefined;
     const finish = (error?: string, result?: ISubmittableResult) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       unsubscribe?.();
-      if (error) reject(new FlopTransactionError(error, tx.hash.toHex()));
+      if (error) reject(new FlopTransactionError(error, txHash));
       else resolve(result!);
     };
     const timer = setTimeout(
-      () => finish("flop: finality timeout; inspect txHash before retrying"),
+      () => finish(
+        txHash
+          ? "flop: finality timeout; inspect txHash before retrying"
+          : "flop: signing timed out; transaction was not submitted",
+      ),
       timeoutMs,
     );
     // Reject using our own messages: provider errors may echo the signed preimage calldata.
+    const failed = () => finish(
+      txHash
+        ? "flop: submission failed or outcome unknown; inspect txHash before retrying"
+        : "flop: signing failed; transaction was not submitted",
+    );
     try {
-      tx.signAndSend(signer, { nonce: -1 }, (result) => {
-        try {
-          if (
-            result.status.isInvalid ||
-            result.status.isDropped ||
-            result.status.isUsurped ||
-            result.status.isFinalityTimeout
-          ) {
-            finish(
-              "flop: transaction rejected or finality unknown; inspect txHash before retrying",
-            );
-          } else if (result.status.isFinalized) {
+      // A pending nonce/header read can outlive our timer. Do not let its later
+      // completion submit anything or report an unsigned call hash as a tx id.
+      tx.signAsync(signer, { nonce: -1 }).then((signed) => {
+        if (settled) return;
+        txHash = signed.hash.toHex();
+        return signed.send((result) => {
+          try {
             if (
-              result.dispatchError ||
-              result.events.some(
-                ({ event }) =>
-                  event.section === "system" &&
-                  event.method === "ExtrinsicFailed",
-              )
+              result.status.isInvalid ||
+              result.status.isDropped ||
+              result.status.isUsurped ||
+              result.status.isFinalityTimeout
             ) {
-              finish("flop: finalized extrinsic failed");
-            } else if (
-              !result.events.some(
-                ({ event }) =>
-                  event.section === "system" &&
-                  event.method === "ExtrinsicSuccess",
-              )
-            ) {
-              finish("flop: finalized extrinsic has no success event");
-            } else finish(undefined, result);
+              finish(
+                "flop: transaction rejected or finality unknown; inspect txHash before retrying",
+              );
+            } else if (result.status.isFinalized) {
+              if (
+                result.dispatchError ||
+                result.events.some(
+                  ({ event }) =>
+                    event.section === "system" &&
+                    event.method === "ExtrinsicFailed",
+                )
+              ) {
+                finish("flop: finalized extrinsic failed");
+              } else if (
+                !result.events.some(
+                  ({ event }) =>
+                    event.section === "system" &&
+                    event.method === "ExtrinsicSuccess",
+                )
+              ) {
+                finish("flop: finalized extrinsic has no success event");
+              } else finish(undefined, result);
+            }
+          } catch {
+            finish("flop: malformed transaction result");
           }
-        } catch {
-          finish("flop: malformed transaction result");
-        }
+        });
       }).then(
         (stop) => {
           unsubscribe = stop;
-          if (settled) stop();
+          if (settled) stop?.();
         },
-        () =>
-          finish(
-            "flop: submission failed or outcome unknown; inspect txHash before retrying",
-          ),
+        failed,
       );
     } catch {
-      finish(
-        "flop: submission failed or outcome unknown; inspect txHash before retrying",
-      );
+      failed();
     }
   });
 }
