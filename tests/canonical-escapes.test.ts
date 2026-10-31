@@ -92,6 +92,12 @@ describe("canonical JSON escape forms (SPEC §3)", () => {
   it("hashes the escaped form: the id is over the bytes the wire carries", () => {
     // The escaper, written independently of src/. If the two ever disagree, one of them
     // moved and the offer id moved with it.
+    //
+    // Do not copy it as the whole canonical rule. `[^\x20-\x7e]` also matches U+007F, so it
+    // escapes DEL to `\u007f`, while `encodeFrame` refuses any frame carrying DEL outright
+    // (`tclk: frame line contains non-printable-ASCII characters`). The test above pins that
+    // refusal. The escaper models the escape forms, not the one code point the spec excludes
+    // from a frame, so a port needs both halves: these forms, and no U+007F at all.
     const escape = (json: string) =>
       json.replace(/[^\x20-\x7e]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`);
     const { id, ...fields } = offerWith("é\u{1f600}");
@@ -142,7 +148,8 @@ describe("canonical JSON escape forms (SPEC §3)", () => {
 
     // A cross-language port has no encoder of ours to agree with, so the frozen id is also
     // recomputed through the file's independent escaper, the way the previous test does. Now
-    // the constant rests on the escape rule rather than on our encoder alone.
+    // the constant rests on the escape rule rather than on our encoder alone. The same
+    // caveat applies: the escaper escapes U+007F, a frame may not carry it at all.
     const escape = (json: string) =>
       json.replace(/[^\x20-\x7e]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`);
     const { id: _id, ...fields } = complexOffer;
