@@ -53,6 +53,10 @@ function lockWithPresigScalar(s: string) {
   return { type: "lock", from: PAYER_DID, contract: CONTRACT, rail: "paper", ref: "escrow-1", presig: { nonce: PRESIG_NONCE, s } };
 }
 
+function acceptWithStatement(statement: string) {
+  return { type: "accept", from: PAYER_DID, ref: CONTRACT, statement, contract: CONTRACT, nonce: "0011223344556677" };
+}
+
 describe("protocol schema", () => {
   it("has current generated decoder fields and SPEC documentation", () => {
     expect(() => execFileSync(
@@ -81,6 +85,42 @@ describe("protocol schema", () => {
       expect(schemaAdmits("presig", "s", s), `schema rejects presig.s ${s}`).toBe(true);
       expect(() => validateFrame(lockWithPresigScalar(s))).not.toThrow();
     }
+  });
+
+  it("rejects an accept whose point statement is off the curve", () => {
+    // A 66-hex statement is a point. The decoder on-curve-checks paymentKey but not the
+    // statement, so an off-curve 66-hex value round-trips as a well-formed accept while the
+    // same value is refused as paymentKey. A hash statement is 64-hex and is not a point,
+    // so it is left alone. The schema pattern only bounds shape, so both halves are asserted.
+    const offCurve = "0x02" + "ff".repeat(32); // 66 hex, x = 2^256 - 1 is past the field prime
+    const onCurve = "0x0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"; // G
+    const hash = "0x" + "11".repeat(32); // 64 hex, a hash statement, not a point
+    expect(() => validateFrame(acceptWithStatement(offCurve))).toThrow(/statement is not a valid secp256k1 point/);
+    expect(() => validateFrame(acceptWithStatement(onCurve))).not.toThrow();
+    expect(() => validateFrame(acceptWithStatement(hash))).not.toThrow();
+  });
+
+  it("rejects an accept whose point statement encodes no curve point", () => {
+    // Off-curve x is one way to miss the curve. These are the others a 66-hex field admits:
+    // an all-zero 33-byte value, a valid 0x02/0x03 prefix over x = 0, and x at the field
+    // prime. None of them is a point, so none may stand as a point statement. The SEC1
+    // encoding of the identity is the single byte 0x00, which the 64/66-hex shape rule
+    // refuses before the curve check. A 64-hex all-zero value is a hash statement, not a
+    // point, so it stays accepted and pins that this guard does not reach the hash lane.
+    const fieldPrime = "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f";
+    const notPoints = [
+      "0x" + "00".repeat(33),
+      "0x02" + "00".repeat(32),
+      "0x03" + "00".repeat(32),
+      "0x02" + fieldPrime,
+    ];
+    for (const statement of notPoints) {
+      expect(() => validateFrame(acceptWithStatement(statement))).toThrow(
+        /statement is not a valid secp256k1 point/,
+      );
+    }
+    expect(() => validateFrame(acceptWithStatement("0x00"))).toThrow(/statement is malformed/);
+    expect(() => validateFrame(acceptWithStatement("0x" + "00".repeat(32)))).not.toThrow();
   });
 
   it("admits no job reference the decoder rejects", () => {

@@ -318,7 +318,13 @@ export function validateFrame(value: unknown): TclkFrame {
     }
     case "accept": {
       requireString(frame.ref, "ref", HEX32);
-      requireString(frame.statement, "statement", /^0x(?:[0-9a-f]{64}|[0-9a-f]{66})$/);
+      const statement = requireString(frame.statement, "statement", /^0x(?:[0-9a-f]{64}|[0-9a-f]{66})$/);
+      // A 66-hex statement is a point (a hash statement is 64-hex); enforce it is
+      // on-curve, the same fail-closed rule paymentKey uses, so a malformed accept is
+      // rejected at decode rather than round-tripped as a well-formed handshake.
+      if (HEX33.test(statement) && !isValidPointStatement(statement)) {
+        fail("statement is not a valid secp256k1 point");
+      }
       requireString(frame.contract, "contract", HEX32);
       if (frame.paymentKey !== undefined) validatePaymentKey(frame.paymentKey, "paymentKey");
       requireString(frame.nonce, "nonce", NONCE);
