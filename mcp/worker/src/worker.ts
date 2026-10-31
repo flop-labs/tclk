@@ -240,6 +240,40 @@ function typeMatches(expected: string, actual: string): boolean {
  * reimplementation of the stdio server's zod schemas and does not try to be one; the
  * schemas it checks against ARE those schemas, compiled to JSON Schema.
  */
+function checkProperty(key: string, property: Record<string, unknown>, value: unknown): string | null {
+  if (Array.isArray(property.anyOf)) {
+    const matches = property.anyOf.some(
+      (branch) => isPlainObject(branch) && checkProperty(key, branch, value) === null,
+    );
+    if (!matches) {
+      return `argument \`${key}\` does not match allowed schema`;
+    }
+    return null;
+  }
+
+  const actual = jsonTypeOf(value);
+  if (typeof property.type === "string" && !typeMatches(property.type, actual)) {
+    return `argument \`${key}\` must be a ${property.type}, got ${actual}`;
+  }
+  if (Array.isArray(property.enum) && !property.enum.includes(value as never)) {
+    return `argument \`${key}\` must be one of ${JSON.stringify(property.enum)}`;
+  }
+  if (typeof value === "number") {
+    if (typeof property.minimum === "number" && value < property.minimum) {
+      return `argument \`${key}\` must be >= ${property.minimum}, got ${value}`;
+    }
+    if (typeof property.maximum === "number" && value > property.maximum) {
+      return `argument \`${key}\` must be <= ${property.maximum}, got ${value}`;
+    }
+  }
+  if (typeof value === "string" && typeof property.pattern === "string") {
+    if (!new RegExp(property.pattern).test(value)) {
+      return `argument \`${key}\` must match pattern /${property.pattern}/`;
+    }
+  }
+  return null;
+}
+
 function checkArguments(tool: ManifestTool, args: Record<string, unknown>): string | null {
   const schema = tool.inputSchema;
   const required = Array.isArray(schema.required) ? (schema.required as string[]) : [];
@@ -251,13 +285,8 @@ function checkArguments(tool: ManifestTool, args: Record<string, unknown>): stri
     if (value === undefined) continue;
     const property = properties[key];
     if (!isPlainObject(property)) continue;
-    const actual = jsonTypeOf(value);
-    if (typeof property.type === "string" && !typeMatches(property.type, actual)) {
-      return `argument \`${key}\` must be a ${property.type}, got ${actual}`;
-    }
-    if (Array.isArray(property.enum) && !property.enum.includes(value as never)) {
-      return `argument \`${key}\` must be one of ${JSON.stringify(property.enum)}`;
-    }
+    const reason = checkProperty(key, property, value);
+    if (reason !== null) return reason;
   }
   return null;
 }

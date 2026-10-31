@@ -43,7 +43,7 @@ export function sweep(text: string): string {
 }
 
 /** The string an Ed25519 room-message signature covers, UTF-8. */
-export function canonicalMessage(room: string, nonce: number, sweptText: string): string {
+export function canonicalMessage(room: string, nonce: number | string, sweptText: string): string {
   return `${room}|${nonce}|${sweptText}`;
 }
 

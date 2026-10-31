@@ -113,7 +113,7 @@ export interface PostFrameInput {
   line: string;
   did?: string;
   sig?: string;
-  nonce?: number;
+  nonce?: number | string;
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
@@ -375,6 +375,14 @@ export function createHandlers(options: HandlerOptions = {}) {
       const supplied = [input.did, input.sig, input.nonce].filter((v) => v !== undefined).length;
       if (supplied > 0 && supplied < 3) {
         fail("pass all three of `did`, `sig` and `nonce`, or none of them");
+      }
+
+      if (input.nonce !== undefined) {
+        const isSafe = typeof input.nonce === "number" && Number.isSafeInteger(input.nonce) && input.nonce >= 0;
+        const isDecimal = typeof input.nonce === "string" && /^[0-9]{1,19}$/.test(input.nonce);
+        if (!isSafe && !isDecimal) {
+          fail("`nonce` must be a non-negative safe integer or a 1-19 decimal digit string");
+        }
       }
 
       if (supplied === 3) {

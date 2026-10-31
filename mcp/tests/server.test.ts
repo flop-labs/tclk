@@ -65,4 +65,50 @@ describe("createServer", () => {
 
     await client.close();
   });
+
+  it("validates tclk_post_frame nonce: accepts safe int or 1-19 digit string, rejects unsafe numbers and malformed strings", async () => {
+    const client = await connect();
+
+    // 1. Safe integer is accepted (schema validation passes; error comes from frame validation)
+    const safeInt = await client.callTool({
+      name: "tclk_post_frame",
+      arguments: { room: "lobby", line: "gm", did: "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX", sig: "x".repeat(86), nonce: 7 },
+    });
+    expect(safeInt.isError).toBe(true);
+    expect((safeInt.content as { text: string }[])[0].text).toMatch(/not a tclk\/1 line/);
+
+    // 2. Unsafe number > MAX_SAFE_INTEGER is rejected at schema level
+    const unsafeNum = await client.callTool({
+      name: "tclk_post_frame",
+      arguments: { room: "lobby", line: "gm", did: "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX", sig: "x".repeat(86), nonce: 9007199254740992 },
+    });
+    expect(unsafeNum.isError).toBe(true);
+    expect((unsafeNum.content as { text: string }[])[0].text).toMatch(/Number must be less than or equal to 9007199254740991/);
+
+    // 3. Malformed string (non-decimal) is rejected
+    const badStr = await client.callTool({
+      name: "tclk_post_frame",
+      arguments: { room: "lobby", line: "gm", did: "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX", sig: "x".repeat(86), nonce: "123bad" },
+    });
+    expect(badStr.isError).toBe(true);
+    expect((badStr.content as { text: string }[])[0].text).toMatch(/Invalid arguments/);
+
+    // 4. String exceeding 19 digits is rejected
+    const tooLongStr = await client.callTool({
+      name: "tclk_post_frame",
+      arguments: { room: "lobby", line: "gm", did: "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX", sig: "x".repeat(86), nonce: "12345678901234567890" },
+    });
+    expect(tooLongStr.isError).toBe(true);
+    expect((tooLongStr.content as { text: string }[])[0].text).toMatch(/Invalid arguments/);
+
+    // 5. Valid 19-digit string passes schema validation (fails later on frame decoding)
+    const validStr = await client.callTool({
+      name: "tclk_post_frame",
+      arguments: { room: "lobby", line: "gm", did: "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX", sig: "x".repeat(86), nonce: "1730000000000000001" },
+    });
+    expect(validStr.isError).toBe(true);
+    expect((validStr.content as { text: string }[])[0].text).toMatch(/not a tclk\/1 line/);
+
+    await client.close();
+  });
 });
