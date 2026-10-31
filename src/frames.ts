@@ -403,6 +403,14 @@ function validateEmissionRails(frame: TclkFrame): void {
   if (frame.type === "offer") {
     for (const rail of frame.rails) requireCanonicalRail(rail);
     if (new Set(frame.rails).size !== frame.rails.length) fail("rails must not contain duplicates");
+    const sorted = [...frame.rails].sort();
+    const outOfOrder = frame.rails.findIndex((rail, i) => rail !== sorted[i]);
+    if (outOfOrder !== -1) {
+      fail(
+        `rails must be in lexical order: index ${outOfOrder} is ${frame.rails[outOfOrder]}, ` +
+          `expected ${sorted[outOfOrder]}`,
+      );
+    }
   } else if (frame.type === "lock") {
     requireCanonicalRail(frame.rail);
   } else if (frame.type === "receipt" && frame.rail !== undefined) {

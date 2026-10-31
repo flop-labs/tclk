@@ -17,6 +17,7 @@ import {
   matchingRails,
   MAX_FRAME_CHARS,
   offerId,
+  validateFrame,
   openContract,
   parseCapabilityToken,
   railSetsMatch,
@@ -101,6 +102,31 @@ describe("live-wire conformance gaps", () => {
     const aliased = { ...fields, rails: ["PaperRail"] };
     expect(() => encodeFrame({ ...aliased, id: offerId(aliased) })).toThrow(
       /non-canonical rail id.*use paper/,
+    );
+  });
+
+  it("refuses to emit an offer whose canonical rails are not in lexical order", () => {
+    // SPEC section 5: builders emit rails in lexical order before computing the id, so two
+    // conforming implementations agree on the offer id. validateEmissionRails deduplicated
+    // but did not sort, so a hand-built offer with canonical, deduplicated, unsorted rails
+    // emitted a line whose id commits to the wire order, while a builder that sorts derives a
+    // different id for the same set. Decode preserves historical order, so this is emission only.
+    const { id: _id, ...fields } = offer(["flop-htlc", "x402"]);
+    const unsorted = { ...fields, rails: ["x402", "flop-htlc"] };
+    const frame = { ...unsorted, id: offerId(unsorted) };
+    expect(() => validateFrame(frame)).not.toThrow();
+    expect(() => encodeFrame(frame)).toThrow(/lexical order/);
+  });
+
+  it("names the first out-of-order rail position in the refusal", () => {
+    // A client that sees only "rails must be in lexical order" has to diff the whole array.
+    // The message names the first index that differs from sorted order, so index 0 being
+    // already correct does not hide the real position.
+    const { id: _id, ...fields } = offer(["flop-htlc", "paper", "x402"]);
+    const unsorted = { ...fields, rails: ["flop-htlc", "x402", "paper"] };
+    const frame = { ...unsorted, id: offerId(unsorted) };
+    expect(() => encodeFrame(frame)).toThrow(
+      "tclk: rails must be in lexical order: index 1 is x402, expected paper",
     );
   });
 

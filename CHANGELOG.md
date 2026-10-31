@@ -8,6 +8,11 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `encodeFrame` now refuses an offer whose canonical rails are not in lexical order, and the
+  refusal names the first out-of-order index. This is a builder-side guard, not a network rule:
+  `validateFrame` and `decodeFrame` still accept any order, because a historical offer id commits
+  to the exact array, so a caller that posts a hand-built line without `encodeFrame` can still put
+  unsorted rails on the wire. Builder output does not change, `normalizeRailIds` already sorted.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
