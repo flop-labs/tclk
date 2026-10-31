@@ -627,7 +627,15 @@ describe("fundingOutlook — derived, never signed (#41)", () => {
       actionable: true,
       code: "awaiting-accept",
       msRemaining: EXPIRES - T0,
+      // Not "a lock would still be accepted": while the offer is only proposed there is no
+      // contract id for a lock to name, and the guard refuses status `proposed` even when one
+      // is supplied. What is still open here is the accept and the lock that can follow it.
+      reason: "the offer can still be accepted and funded",
     });
+    expect(state.contract).toBeUndefined();
+    const { state: withContract } = accepted();
+    expect(applyFrame({ ...withContract, status: "proposed" }, lockFrame(withContract), T0))
+      .toMatchObject({ ok: false, reason: "lock in status proposed" });
     expect(fundingOutlook(state, EXPIRES).code).toBe("offer-expired");
 
     // Nothing requires expiresMs < refundAfterMs, so an offer can still be acceptable at a clock

@@ -256,7 +256,11 @@ export type FundingOutlookCode =
   | "unreadable-clock";
 
 export interface FundingOutlook {
-  /** True only while a `lock` frame would still be accepted at `nowMs`. */
+  /**
+   * True only while funding can still complete at `nowMs`. For an accepted contract that is
+   * a `lock` being accepted; for a still-proposed offer it is an `accept` followed by a `lock`,
+   * since `applyFrame` refuses a lock in status `proposed`.
+   */
   actionable: boolean;
   code: FundingOutlookCode;
   /** Milliseconds until funding stops being actionable, 0 once it has. */
@@ -324,7 +328,7 @@ export function fundingOutlook(state: ContractState, nowMs: number): FundingOutl
         actionable: true,
         code: "awaiting-accept",
         msRemaining: Math.min(expiresMs, refundAfterMs) - nowMs,
-        reason: "offer is open and a lock would still be accepted",
+        reason: "the offer can still be accepted and funded",
       };
     }
 
