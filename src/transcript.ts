@@ -52,6 +52,7 @@ export interface TranscriptStep {
 export interface TranscriptFoldResult {
   state: ContractState | null;
   steps: TranscriptStep[];
+  warnings: string[];
 }
 
 export interface ContractHandshake {
@@ -235,7 +236,48 @@ export function findContractHandshake(
  */
 export function foldTranscript(records: readonly TranscriptRecord[]): TranscriptFoldResult {
   const steps: TranscriptStep[] = [];
+  const warnings: string[] = [];
   let state: ContractState | null = null;
+
+  // Detect sequence and timestamp anomalies per room, only on signed records
+  const roomState = new Map<string, { prevSeq: number; prevTimestampMs: number; seenGap: boolean; seenOrderViolation: boolean; seenBackwards: boolean }>();
+  let hasSuccessfulDeadlineFrame = false;
+
+  // First pass: check for anomalies on signed records only
+  for (let i = 0; i < records.length; i++) {
+    const record = records[i];
+    const isSigned = record?.signature !== null && record?.nonce !== null;
+
+    // Only check anomalies on signed records
+    if (!isSigned) continue;
+
+    const room = record.room ?? "";
+    let state = roomState.get(room);
+    if (!state) {
+      state = { prevSeq: record.seq, prevTimestampMs: record.timestampMs, seenGap: false, seenOrderViolation: false, seenBackwards: false };
+      roomState.set(room, state);
+      continue;
+    }
+
+    if (record?.seq !== undefined && Number.isSafeInteger(record.seq)) {
+      if (record.seq <= state.prevSeq && !state.seenOrderViolation) {
+        warnings.push(`seq ordering: record ${i} has seq ${record.seq} which is not greater than previous seq ${state.prevSeq}`);
+        state.seenOrderViolation = true;
+      } else if (record.seq !== state.prevSeq + 1 && !state.seenGap) {
+        warnings.push(`seq gap: record ${i} jumps from seq ${state.prevSeq} to ${record.seq} in room ${room}`);
+        state.seenGap = true;
+      }
+      state.prevSeq = record.seq;
+    }
+
+    if (record?.timestampMs !== undefined && Number.isSafeInteger(record.timestampMs)) {
+      if (record.timestampMs < state.prevTimestampMs && !state.seenBackwards) {
+        warnings.push(`backwards timestamp: record ${i} has timestampMs ${record.timestampMs} which is earlier than previous ${state.prevTimestampMs}`);
+        state.seenBackwards = true;
+      }
+      state.prevTimestampMs = record.timestampMs;
+    }
+  }
 
   records.forEach((record, index) => {
     const base = { index, room: record?.room ?? "", seq: record?.seq ?? -1 };
@@ -308,7 +350,18 @@ export function foldTranscript(records: readonly TranscriptRecord[]): Transcript
     const result = applyFrame(state, frame, record.timestampMs);
     state = result.state;
     steps.push({ ...base, type: frame.type, ok: result.ok, reason: result.reason });
+
+    // Track successful deadline-sensitive frames
+    if (result.ok && ["accept", "lock", "reveal", "refund"].includes(frame.type)) {
+      hasSuccessfulDeadlineFrame = true;
+    }
   });
 
-  return { state, steps };
+  // Emit generic warning when deadline-sensitive frames succeeded
+  // because timestampMs and seq are venue metadata NOT covered by signatures
+  if (hasSuccessfulDeadlineFrame) {
+    warnings.push("unsigned metadata: transcript contains deadline-sensitive frames (accept/lock/reveal/refund) but some records lack signatures; seq and timestampMs are not authenticated and may be forged");
+  }
+
+  return { state, steps, warnings };
 }

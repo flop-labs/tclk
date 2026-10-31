@@ -38,6 +38,14 @@ if (handshake === null) {
 }
 
 const folded = foldTranscript([handshake.offer, handshake.accept, ...deal]);
+
+if (folded.warnings.length > 0) {
+  console.error("\nWARNINGS:");
+  for (const warning of folded.warnings) {
+    console.error(`  ${warning}`);
+  }
+}
+
 for (const step of folded.steps) {
   const verdict = step.ok ? "ok " : "BAD";
   console.log(`${verdict} ${step.room}#${step.seq} ${step.type ?? "record"}${step.reason ? ` — ${step.reason}` : ""}`);
@@ -45,6 +53,14 @@ for (const step of folded.steps) {
 
 if (folded.state === null) {
   console.error("no authenticated contract could be opened");
+  process.exit(1);
+}
+
+const hasOrderingIssues = folded.warnings.some(w =>
+  w.includes("seq gap") || w.includes("seq ordering") || w.includes("backwards timestamp")
+);
+if (hasOrderingIssues) {
+  console.error("\nTranscript has sequence or timestamp ordering issues");
   process.exit(1);
 }
 

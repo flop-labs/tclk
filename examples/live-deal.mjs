@@ -26,7 +26,7 @@ import { randomBytes } from "node:crypto";
 import {
   OFFER_ROOM, PaperRail, applyFrame, dealRoom, encodeFrame, findContractHandshake, foldTranscript,
   generateHashLock, lockTerms, makeAccept, makeOffer, openContract, paperNote,
-  parseTranscriptExport, stateNote, stateNoteValue, transcriptRecord,
+  parseTranscriptExport, probeRoomCreation, stateNote, stateNoteValue, transcriptRecord,
 } from "../dist/index.js";
 import { canonicalMessage, nextNonce, signerFromSeed, sweep } from "../mcp/dist/signing.js";
 
@@ -249,6 +249,42 @@ if (BASE === DEFAULT_VENUE) {
 }
 log("", `payer    ${payer.did}`);
 log("", `payee    ${payee.did}`);
+console.log();
+
+// Pre-flight check: probe room creation capacity before attempting the deal.
+// Issue #3 documents that when the venue is at capacity (global room cap or per-client
+// daily budget), tclk-offers cannot be created and no deal can bootstrap. Probing up front
+// gives clear guidance instead of a raw 400 mid-choreography.
+log("", "Checking venue capacity...");
+const probe = await probeRoomCreation(BASE, fetch);
+if (!probe.available) {
+  console.error(
+    [
+      "",
+      `✗ Room creation refused: ${probe.reason}`,
+      "",
+      "A deal needs two rooms this venue will not create right now:",
+      "  - tclk-offers (the public rendezvous where strangers meet)",
+      "  - mb-p-tclk-<contract-id> (the derived deal room)",
+      "",
+      "When the venue refuses new room creation, no deal can start.",
+      "",
+      "Run against your own instance instead:",
+      "",
+      "  bash/zsh    TECHNOCORE_URL=http://localhost:8080 node examples/live-deal.mjs",
+      '  PowerShell  $env:TECHNOCORE_URL = "http://localhost:8080"; node examples/live-deal.mjs',
+      "  cmd.exe     set TECHNOCORE_URL=http://localhost:8080 && node examples/live-deal.mjs",
+      "",
+      "The hosted venue clears on its own:",
+      "  - Idle rooms are reclaimed after 7 days",
+      "  - Single-message rooms after 24 hours",
+      "  - Per-client daily budget (20 new rooms/day) resets at UTC midnight",
+      "",
+    ].join("\n"),
+  );
+  process.exit(1);
+}
+log("✓", "Venue accepting new rooms");
 console.log();
 
 // 0 — the job spec goes in a note, and the offer points at it. A frame carries the

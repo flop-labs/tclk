@@ -6,8 +6,24 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- `probeRoomCreation()` helper to check venue capacity before attempting a deal. When a venue
+  is at its room limit (global cap or per-client daily budget), `tclk-offers` cannot be created
+  and no deal can bootstrap. The probe attempts to create an ephemeral test room and reports
+  whether creation is available or refused. `examples/live-deal.mjs` now probes up front and
+  provides clear guidance when capacity is exhausted, addressing the bootstrap half of #3.
+- SPEC.md §2 now documents the bootstrap dependency on room creation as a known sharp edge,
+  including the two capacity mechanisms venues typically enforce and mitigation guidance.
+
 ### Fixed
 
+- `foldTranscript` now emits warnings when transcript metadata anomalies (sequence gaps,
+  ordering violations, backwards timestamps) or deadline-sensitive transitions rely on
+  unsigned venue timestamps. Detects the exact attack from #96: tampered `timestampMs`
+  fields that flip claimed→refunded outcomes while all signatures remain valid. Anomaly
+  checks run only on signed records; unsigned records are skipped to avoid false positives
+  when partial transcripts are analyzed.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema

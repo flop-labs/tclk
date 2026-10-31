@@ -285,6 +285,7 @@ export function createHandlers(options: HandlerOptions = {}) {
         // caller already holds, and this server never republishes secret material.
         secretRevealed: open.secret !== undefined,
         steps: folded.steps,
+        warnings: folded.warnings,
       };
     },
 
