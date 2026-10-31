@@ -100,6 +100,29 @@ describe("protocol schema", () => {
     expect(() => validateFrame(acceptWithStatement(hash))).not.toThrow();
   });
 
+  it("rejects an accept whose point statement encodes no curve point", () => {
+    // Off-curve x is one way to miss the curve. These are the others a 66-hex field admits:
+    // an all-zero 33-byte value, a valid 0x02/0x03 prefix over x = 0, and x at the field
+    // prime. None of them is a point, so none may stand as a point statement. The SEC1
+    // encoding of the identity is the single byte 0x00, which the 64/66-hex shape rule
+    // refuses before the curve check. A 64-hex all-zero value is a hash statement, not a
+    // point, so it stays accepted and pins that this guard does not reach the hash lane.
+    const fieldPrime = "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f";
+    const notPoints = [
+      "0x" + "00".repeat(33),
+      "0x02" + "00".repeat(32),
+      "0x03" + "00".repeat(32),
+      "0x02" + fieldPrime,
+    ];
+    for (const statement of notPoints) {
+      expect(() => validateFrame(acceptWithStatement(statement))).toThrow(
+        /statement is not a valid secp256k1 point/,
+      );
+    }
+    expect(() => validateFrame(acceptWithStatement("0x00"))).toThrow(/statement is malformed/);
+    expect(() => validateFrame(acceptWithStatement("0x" + "00".repeat(32)))).not.toThrow();
+  });
+
   it("admits no job reference the decoder rejects", () => {
     const rejected: ReadonlyArray<[keyof JobRef, string, JobRef]> = [
       ["proto", "A2A", { proto: "A2A", id: "task-3f" }],

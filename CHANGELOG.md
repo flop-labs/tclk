@@ -8,6 +8,12 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `validateFrame` now on-curve checks a 66-hex `accept` statement, the same fail-closed rule
+  `paymentKey` already used, so an off-curve point statement is refused at decode instead of
+  round-tripping as a well-formed handshake. A 64-hex hash statement is untouched. This changes
+  the decode verdict for a 66-hex off-curve accept. No builder in this library could emit one:
+  `makeAccept` already required `isValidStatement("point", ...)`, and the MCP accept path mints
+  its statement from `generatePointLock`, so only a hand-built frame is affected.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
