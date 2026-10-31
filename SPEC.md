@@ -311,14 +311,18 @@ preserves it.
 `LockTerms` is derived from an accepted contract (id, lock kind, statement, amount, asset,
 parties, deadlines). The library ships `MemoryRail`, a reference implementation that enforces
 the lock/claim/refund predicates in-process — it is the executable spec of what a real rail must
-enforce and what the tests drive end-to-end. Real rails to bind later, none required by this
-layer:
+enforce and what the tests drive end-to-end. The optional `@flop-labs/tclk-flop` package
+binds the hash-lock subset to FLOP; other rails remain integrations outside this layer:
 
 - **`flop-htlc`** — the FLOP network's on-chain typed escrow, opened with an
   `And[Hash(h), Before(T)]` or `Point(Y)` policy leaf. The statement encodings here are chosen to
   be byte-identical to that escrow's: a 32-byte sha256 digest for `Hash`, a 33-byte
   SEC1-compressed point for `Point`. Block deadlines derive from the ms deadlines with a
-  timelock-symmetry margin.
+  timelock-symmetry margin. `FlopRail` v1 uses two hash leaves: the payment
+  statement plus a public witness committing all agreed terms, chain identity and
+  timing configuration. The pallet enforces its own escrow deadline; no additional
+  `Before` leaf is needed. See [the versioned binding](flop/README.md#binding-and-deadlines)
+  for the exact block conversion and recovery rules. It does not implement point locks.
 - **`x402`** — the lock statement rides the existing `X-Payment-Hash-Lock` /
   `X-Payment-Timeout-Blocks` headers; `ref` is the payment id.
 - **`evm-htlc` / `near-htlc` / BTC** — counterparty escrow contracts on other chains: an EVM
@@ -353,10 +357,15 @@ the *payment leg* of a job defined elsewhere, never a competing task schema:
   exactly once, as the claim. Pre-reveal secrecy is entirely client-side.
 - **Deadline discipline**: the venue clock is wall time and nobody's oracle; each party checks
   deadlines against its own clock with margin, and every rail re-enforces them in its own time
-  domain. The rail's window must sit strictly inside the coordination window — the same
-  staggering discipline multi-hop routing requires between consecutive legs.
-- **Transport signatures are Ed25519, payment crypto is secp256k1** — two key spaces on purpose.
-  The contract id binds a DID to a payment key for one contract; nothing global is asserted.
+  domain. Multi-hop routing requires explicit staggering between consecutive legs.
+  FLOP's current typed escrow uses finalized block heights; its nominal millisecond
+  conversion is not a wall-clock guarantee. The client enforces the coordination
+  deadlines locally, while the on-chain claim/refund boundary remains the block deadline.
+  Its safety margin deliberately delays the nominal refund. Accept that documented
+  rail behavior explicitly; do not infer hard real-time or cross-chain safety from it.
+- **Transport signatures are Ed25519; PTLC/adaptor crypto uses secp256k1.**
+  The FlopRail HTLC binding uses the transport public key directly as its native chain
+  account. It does not accept an unsigned mapping to an unrelated payment account.
 - **The adaptor module is unaudited reference crypto** (full-Schnorr, not BIP-340, random
   nonces). It exists so the pre-sign → adapt → extract cycle is testable end to end. PTLC value
   flows stay off mainnet until an audited signing stack lands.
