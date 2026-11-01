@@ -4,6 +4,10 @@
  * line byte for byte. Readers copy these lines and nothing else checks them; the walkthrough
  * carried five frames that never decoded until #49. A placeholder (`"id":"0x…"`) belongs in
  * prose or inline code, not in a fenced block.
+ *
+ * This ties the doc lines to the codec only. tests/walkthrough.test.ts ties the same five
+ * walkthrough frames to the state machine (they fold to `claimed` and to `refunded`, also as
+ * signed records). Keep both, so the page stays pinned to the encoder and to the contract logic.
  */
 
 import { readdirSync, readFileSync } from "node:fs";
@@ -13,7 +17,10 @@ import { TCLK_PREFIX, decodeFrame, encodeFrame } from "../src/index.js";
 
 const ROOT = new URL("../", import.meta.url);
 
-/** README.md and every Markdown file under examples/, as repository-relative paths. */
+/**
+ * README.md and every Markdown file under examples/, as repository-relative paths. SPEC.md is
+ * left out on purpose: its examples are illustrative frames with elided values (`"0x…"`).
+ */
 function docFiles(): string[] {
   const examples = readdirSync(new URL("examples/", ROOT), { recursive: true, encoding: "utf8" })
     .filter((name) => name.endsWith(".md"))
