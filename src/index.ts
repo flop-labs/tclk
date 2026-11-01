@@ -10,7 +10,7 @@
 
 export {
   TCLK_VERSION, TCLK_PREFIX, TCLK_DOMAIN, MAX_FRAME_CHARS,
-  canonicalJson, offerId, contractId, isValidStatement, validateFrame,
+  canonicalJson, toAscii, offerId, contractId, isValidStatement, validateFrame,
   makeOffer, makeAccept, makeHeartbeat,
   isTclkLine, encodeFrame, decodeFrame, tryDecodeFrame,
 } from "./frames.js";

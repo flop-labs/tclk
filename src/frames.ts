@@ -231,12 +231,46 @@ export function canonicalJson(value: unknown): string {
     .join(",")}}`;
 }
 
-/** Escape every non-ASCII char so the stored line equals the signed line. */
-function toAscii(json: string): string {
+/**
+ * The ASCII step of the canonical encoding (SPEC §3), applied to `canonicalJson` output by both
+ * the id hash and the wire line: every UTF-16 code unit from U+0080 to U+FFFF becomes `\u`
+ * followed by exactly four lowercase hex digits. It works per code unit, so an astral character
+ * is the two escapes of its surrogate pair (U+1F600 becomes `\ud83d\ude00`) and a lone
+ * surrogate is the one escape of itself. Everything below U+0080 passes through: `canonicalJson`
+ * has already escaped `"`, `\` and U+0000-U+001F, and U+007F is not permitted in a frame
+ * (`encodeFrame` refuses it, `decodeFrame` rejects it). Exported so a port can check its own
+ * escaper against this one: uppercase hex, or a `\u{...}` form, changes every id.
+ */
+export function toAscii(json: string): string {
   return json.replace(
     /[\u0080-\uffff]/g,
     (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`,
   );
+}
+
+const DEL = String.fromCharCode(0x7f);
+
+/**
+ * Refuses U+007F anywhere in a parsed frame, key or value. It is the one code point a decoded
+ * frame can carry that `encodeFrame` can never emit: JSON escapes only up to U+001F and
+ * `toAscii` starts at U+0080, so DEL would reach the wire raw, and the printable-ASCII guard
+ * refuses that. Spelled `\u007f`, six printable characters the venue stores as they are, it
+ * still parses back to a raw DEL, which the id then hashes. The reference would accept a frame it
+ * cannot re-encode, and a port that escaped DEL before hashing would see its own frame rejected
+ * as an id mismatch. Escaped C0 controls (`\n`, `\u0007` and the rest) are a different case and
+ * stay accepted: they are exactly what the encoder emits, so they round-trip (#48).
+ */
+function refuseDel(value: unknown, path: string): void {
+  if (typeof value === "string") {
+    if (value.includes(DEL)) fail(`${path} contains U+007F (DEL), which a frame may not carry`);
+  } else if (Array.isArray(value)) {
+    value.forEach((item, index) => refuseDel(item, `${path}[${index}]`));
+  } else if (value !== null && typeof value === "object") {
+    for (const [key, item] of Object.entries(value)) {
+      if (key.includes(DEL)) fail(`${path} has a key containing U+007F (DEL)`);
+      refuseDel(item, `${path}.${key}`);
+    }
+  }
 }
 
 /**
@@ -488,6 +522,8 @@ export function decodeFrame(text: string): TclkFrame {
   } catch {
     fail("frame is not valid JSON");
   }
+  // A frame may not carry U+007F, however the line spells it (refuseDel).
+  refuseDel(parsed, "frame");
   return validateFrame(parsed);
 }
 
