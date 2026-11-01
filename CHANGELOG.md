@@ -11,7 +11,8 @@ All notable changes to this project are documented here. Format follows
 - `verifyTranscriptRecord` (and so `foldTranscript` and `findContractHandshake`) now
   verifies Ed25519 under RFC 8032 rules instead of noble's ZIP-215 default, so it no longer
   accepts records the venue's libsodium check would refuse (small-order keys, non-canonical
-  point encodings). Under ZIP-215 a `did:key` built from a small-order point verified one
+  point encodings; a non-canonical `S >= L` was already refused and is now pinned by a
+  test). Under ZIP-215 a `did:key` built from a small-order point verified one
   fixed signature over every message, so an export could carry "authenticated" records
   the venue would have refused. This is stricter than before: an archived transcript whose
   records were signed under a small-order key no longer folds. It is not byte-for-byte

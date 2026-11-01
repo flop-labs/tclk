@@ -193,6 +193,27 @@ describe("trusted transcript records", () => {
     ).toBe(false);
   });
 
+  it("refuses a non-canonical S (S >= L), as RFC 8032 and libsodium do", () => {
+    // An honest record with S replaced by S + L: the same scalar mod L, so it would
+    // satisfy the verification equation if the range check were skipped. noble checks
+    // S < L in both modes; this pins that the strict path keeps doing so.
+    const L = 2n ** 252n + 27742317777372353535851937790883648493n;
+    const { offer } = deal();
+    const honest = record(BOARD, 1, NOW, payer, encodeFrame(offer));
+    expect(verifyTranscriptRecord(honest)).toEqual({ ok: true });
+
+    const sig = base64urlnopad.decode(honest.signature);
+    let s = 0n;
+    for (let i = 31; i >= 0; i--) s = (s << 8n) | BigInt(sig[32 + i]);
+    const malleated = sig.slice();
+    for (let i = 0; i < 32; i++) malleated[32 + i] = Number(((s + L) >> BigInt(8 * i)) & 0xffn);
+
+    expect(verifyTranscriptRecord({ ...honest, signature: base64urlnopad.encode(malleated) })).toEqual({
+      ok: false,
+      reason: "record signature does not verify",
+    });
+  });
+
   it("rejects a valid post-accept frame outside the contract's derived deal room", () => {
     const { offer, accept } = deal();
     const lockFrame = {
