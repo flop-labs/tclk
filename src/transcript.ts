@@ -101,7 +101,11 @@ export function verifyTranscriptRecord(record: TranscriptRecord): TranscriptReco
   try {
     const signature = base64urlnopad.decode(record.signature);
     const canonical = `${record.room}|${record.nonce}|${record.line}`;
-    if (!ed25519.verify(signature, new TextEncoder().encode(canonical), publicKey)) {
+    // RFC 8032 / libsodium rules, not noble's ZIP-215 default: the venue verifies with
+    // libsodium, which refuses small-order keys and non-canonical point encodings. Under
+    // ZIP-215 a small-order did:key verifies one fixed signature over *every* message, so
+    // a fold would authenticate records the venue could never have stored.
+    if (!ed25519.verify(signature, new TextEncoder().encode(canonical), publicKey, { zip215: false })) {
       return invalid("record signature does not verify");
     }
   } catch {
