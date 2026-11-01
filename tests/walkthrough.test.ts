@@ -2,8 +2,9 @@
  * The frames in examples/htlc-walkthrough.md are real, not illustrative: every
  * `FRAME='tclk1 …'` line decodes, the ids are the ones the library computes, and the
  * transcript folds to `claimed` on the reveal path and `refunded` on the alternative.
- * Each `from` is the did:key of a real (throwaway) Ed25519 key pair, so the same lines
- * also fold as signed technocore records, the way a reader of the rooms checks them.
+ * Each `from` is a real Ed25519 did:key (multicodec prefix 0xed 0x01, a point on the
+ * curve), and the same lines fold as the signed technocore records those keys made, the
+ * way a reader of the rooms checks them.
  * Its MCP section calls each tool with the arguments that tool's schema takes, and posts
  * each frame in the room a fold expects it in. Pinning that here keeps the walkthrough
  * from drifting from the code it demonstrates.
@@ -11,8 +12,7 @@
 
 import { readFileSync } from "node:fs";
 import { ed25519 } from "@noble/curves/ed25519.js";
-import { sha256 } from "@noble/hashes/sha2.js";
-import { base58, base64urlnopad } from "@scure/base";
+import { base58 } from "@scure/base";
 import { describe, it, expect } from "vitest";
 
 import {
@@ -51,20 +51,45 @@ const mcpCalls = [...markdown.matchAll(/`(tclk_[a-z_]+)`\s+`(\{[^`]*\})`/g)].map
 // of dropping out of the schema and room checks unnoticed.
 const argumentSpans = [...markdown.matchAll(/`(\{[^`]*\})`/g)].map((m) => m[1]);
 
-// The two parties: throwaway Ed25519 key pairs made for the walkthrough. Their seeds are
-// public (the sha256 of a label the prose names), so the DIDs are real did:keys that nobody
-// owns: `did:key:z` + base58btc(0xed 0x01 || public key), as the signed lane verifies them.
-function identity(label: string) {
-  const seed = sha256(new TextEncoder().encode(label));
-  const publicKey = ed25519.getPublicKey(seed);
-  return {
-    did: `did:key:z${base58.encode(Uint8Array.from([0xed, 0x01, ...publicKey]))}`,
-    sign: (canonical: string) =>
-      base64urlnopad.encode(ed25519.sign(new TextEncoder().encode(canonical), seed)),
-  };
+// The two parties: Ed25519 key pairs made for the walkthrough. Their private keys were
+// discarded after signing the records below, so nobody can sign as either DID again.
+const PAYER = "did:key:z6Mkms1BZpFLeJhsCm9FhtSFCs1JKy6gXhknjNbBA2J7FpLR";
+const PAYEE = "did:key:z6MkivQpJ5k1SM5Y6D9WaD2CnxK9seKJKAwu1mmRozfvanKq";
+
+/**
+ * The Ed25519 public key behind a did:key, or a throw naming the check that failed. The
+ * frame regex only sees 56 characters of the right alphabet; a signed lane needs
+ * `did:key:z` + base58btc(0xed 0x01 || public key), and the key has to be a curve point.
+ */
+function ed25519KeyOf(did: string): Uint8Array {
+  const encoded = did.startsWith("did:key:z") ? did.slice("did:key:z".length) : "";
+  if (!/^[1-9A-HJ-NP-Za-km-z]+$/.test(encoded)) throw new Error("not a base58btc did:key");
+  const tagged = base58.decode(encoded);
+  if (tagged.length !== 34) throw new Error(`multicodec key is ${tagged.length} bytes, not 34`);
+  if (tagged[0] !== 0xed || tagged[1] !== 0x01) {
+    const prefix = [tagged[0], tagged[1]].map((b) => `0x${b.toString(16).padStart(2, "0")}`);
+    throw new Error(`multicodec prefix is ${prefix.join(" ")}, not 0xed 0x01`);
+  }
+  const key = tagged.slice(2);
+  let point: ReturnType<typeof ed25519.Point.fromBytes>;
+  try {
+    point = ed25519.Point.fromBytes(key);
+  } catch {
+    throw new Error("public key is not a point on the curve");
+  }
+  if (point.isSmallOrder()) throw new Error("public key is a small-order point");
+  return key;
 }
-const payer = identity("tclk walkthrough payer");
-const payee = identity("tclk walkthrough payee");
+
+// Each frame as its sender signed it over `<room>|<nonce>|<line>` before the keys were
+// discarded, with nonce = seq: offer and accept on the board, the rest in the deal room.
+const SIGNED = {
+  offer: { seq: 1, signature: "6ljVq4VO5i2gtcyoIVTe3sibo1BJLQ8lb4qehes5mE6-8c51fGDi1x3clIqN5q1lbHJnSk2hOo-huFf_8m--Cw" },
+  accept: { seq: 2, signature: "Clp1cRQ3J63UsFYoeZKGSKhwIQiZus7khued7EZF9S6l0tLaes_2uZI53KPaMS6ZfN92ljCVLtIGITMJLQnABg" },
+  lock: { seq: 3, signature: "3NgZkiV274meLSBzbXsQ7DRyPuwZN8ZTkyCI4h6h2AR__e-r8_wwUWqnymRrC6MojNiYpHxPlNqYh6cvzd5nDQ" },
+  reveal: { seq: 4, signature: "7zI8CQIfBlwNDBKJZRhYxBpNqWnBka08KwMlYbELn8mpS8rY_lt_S6rv1b8cN8xCHH4LhpRDHBjgkQirETkkBg" },
+  refund: { seq: 5, signature: "LgPmfTC5z8iE6Cdne9b4TJ4pf1O1q2hKCdJuK5oiAzqVgsa2jwReT_K50ptrhvrM9NeTvUGDC5ROvj_7dDaOCg" },
+};
 
 describe("examples/htlc-walkthrough.md", () => {
   it("carries five frames that all decode, in walkthrough order", () => {
@@ -96,56 +121,67 @@ describe("examples/htlc-walkthrough.md", () => {
     expect(refunded.state.status).toBe("refunded");
   });
 
-  it("names the two throwaway key pairs as `from`, and the prose names their seeds", () => {
-    expect(lines.map((line) => decodeFrame(line).from)).toEqual([
-      payer.did, payee.did, payer.did, payee.did, payer.did,
-    ]);
-    expect(markdown).toContain("`tclk walkthrough payer`");
-    expect(markdown).toContain("`tclk walkthrough payee`");
+  it("is sent by two real Ed25519 did:keys: prefix 0xed 0x01 and a point on the curve", () => {
+    const senders = lines.map((line) => decodeFrame(line).from);
+    for (const did of senders) expect(ed25519KeyOf(did)).toHaveLength(32);
+    expect(senders).toEqual([PAYER, PAYEE, PAYER, PAYEE, PAYER]);
+  });
+
+  it("refuses the earlier placeholder DIDs, each for the check it fails", () => {
+    // Until this example was regenerated: `l` is not base58, and 37 characters follow the `z`.
+    expect(() => ed25519KeyOf("did:key:z6MkPayerExampleDid1111111111111111111")).toThrow(
+      "not a base58btc did:key",
+    );
+    // A placeholder that passes the frame regex (56 characters, base58) has the wrong prefix.
+    expect(() => ed25519KeyOf("did:key:z6MkPayer111111111111111111111111111111111111111")).toThrow(
+      "multicodec prefix is 0xed 0x00, not 0xed 0x01",
+    );
+    // The right prefix in front of those same 32 bytes: still not a key, as they are off the curve.
+    expect(() => ed25519KeyOf("did:key:z6MkgpJ2Lnkbo3jma5nREBBJCDoXFVeKkD56V3xKrvRmWxFH")).toThrow(
+      "public key is not a point on the curve",
+    );
   });
 
   it("folds as signed records, offer and accept on the board and the rest in the deal room", () => {
     const [offerLine, acceptLine, lockLine, revealLine, refundLine] = lines;
     const offer = decodeFrame(offerLine) as OfferFrame;
     const room = dealRoom((decodeFrame(acceptLine) as AcceptFrame).contract);
-    // Each side posts its own frames, signed over `<room>|<nonce>|<line>`; the fold checks
-    // the signature against the sender's did:key and the frame's `from` against the sender.
-    // seq and timestamp are venue metadata.
+    // Each side posted its own frames; the fold checks the signature against the sender's
+    // did:key and the frame's `from` against the sender. timestamp is venue metadata.
     const record = (
-      seq: number, inRoom: string, timestampMs: number, by: typeof payer, line: string,
-    ): TranscriptRecord => {
-      const nonce = String(seq);
-      const signature = by.sign(`${inRoom}|${nonce}|${line}`);
-      return { room: inRoom, seq, timestampMs, sender: by.did, nonce, signature, line };
-    };
+      signed: { seq: number; signature: string }, inRoom: string, timestampMs: number,
+      sender: string, line: string,
+    ): TranscriptRecord => ({
+      room: inRoom, seq: signed.seq, timestampMs, sender, nonce: String(signed.seq),
+      signature: signed.signature, line,
+    });
     const opening = [
-      record(1, OFFER_ROOM, offer.expiresMs - 60_000, payer, offerLine),
-      record(2, OFFER_ROOM, offer.expiresMs - 1, payee, acceptLine),
-      record(3, room, offer.expiresMs, payer, lockLine),
+      record(SIGNED.offer, OFFER_ROOM, offer.expiresMs - 60_000, PAYER, offerLine),
+      record(SIGNED.accept, OFFER_ROOM, offer.expiresMs - 1, PAYEE, acceptLine),
+      record(SIGNED.lock, room, offer.expiresMs, PAYER, lockLine),
     ];
 
     const claimed = foldTranscript([
-      ...opening, record(4, room, offer.refundAfterMs - 1, payee, revealLine),
+      ...opening, record(SIGNED.reveal, room, offer.refundAfterMs - 1, PAYEE, revealLine),
     ]);
     expect(claimed.steps.filter((step) => !step.ok)).toEqual([]);
     expect(claimed.state?.status).toBe("claimed");
 
     const refunded = foldTranscript([
-      ...opening, record(4, room, offer.refundAfterMs, payer, refundLine),
+      ...opening, record(SIGNED.refund, room, offer.refundAfterMs, PAYER, refundLine),
     ]);
     expect(refunded.steps.filter((step) => !step.ok)).toEqual([]);
     expect(refunded.state?.status).toBe("refunded");
   });
 
-  it("reveals the stand-in preimage the prose describes, and it opens the statement", () => {
+  it("reveals the preimage the accept's statement commits to, as the prose recomputes it", () => {
     const accept = decodeFrame(lines[1]) as AcceptFrame;
     const reveal = decodeFrame(lines[3]) as RevealFrame;
-    // "correct horse battery staple" is 28 ASCII bytes; zero-padded to the 32 a hash lock needs.
-    const padded = new Uint8Array(32);
-    padded.set(new TextEncoder().encode("correct horse battery staple"));
-    const lock = hashLockFromPreimage(padded);
-    expect(reveal.secret).toBe(lock.preimage);
-    expect(accept.statement).toBe(lock.hash);
+    expect(hashLockFromPreimage(reveal.secret).hash).toBe(accept.statement);
+    // The note under step 2 names this statement and hashes exactly these 32 bytes.
+    const { statement } = accept;
+    expect(markdown).toContain(`\`${statement.slice(0, 6)}…${statement.slice(-4)}\` is the sha256`);
+    expect(markdown).toContain(`bytes.fromhex("${reveal.secret.slice(2)}")`);
   });
 
   it("parses every argument object in the walkthrough as a tool call", () => {

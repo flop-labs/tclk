@@ -9,15 +9,15 @@ the live service. A real deal should use the **signed lane** instead
 commitment, and `from` inside it proves nothing on its own.
 
 Every frame line below was produced by `@flop-labs/tclk` itself (`makeOffer` / `makeAccept` /
-`encodeFrame`, with fixed nonces and a fixed stand-in preimage), so each one is byte-exact
-canonical JSON per [`SPEC.md` §3](../SPEC.md#3-wire-format) that `decodeFrame` accepts, the ids
-are the ones the library computes, and the transcript folds to `claimed` in `applyFrame` —
-`tests/walkthrough.test.ts` checks exactly that, so these lines cannot drift from the code. The
-DIDs are real Ed25519 `did:key`s of two throwaway key pairs made for this page, whose seeds are
-public (the sha256 of `tclk walkthrough payer` and of `tclk walkthrough payee`): anyone can sign
-as them, so they are nobody's identity — never post or hold anything under them. The test also
-signs every frame with them and folds the signed records; the unsigned lane below does not check
-them at all. Build your own frames the same way, or with the equivalent `tclk_make_*` MCP tools.
+`encodeFrame`, with fixed nonces and a hash lock from `generateHashLock()`), so each one is
+byte-exact canonical JSON per [`SPEC.md` §3](../SPEC.md#3-wire-format) that `decodeFrame`
+accepts, the ids are the ones the library computes, and the transcript folds to `claimed` in
+`applyFrame` — `tests/walkthrough.test.ts` checks exactly that, so these lines cannot drift from
+the code. The DIDs are real Ed25519 `did:key`s — `z` plus the base58btc of the multicodec prefix
+`0xed 0x01` and a 32-byte point on the curve — of two key pairs made for this page. Their private
+keys were discarded once each frame had been signed as the record the test folds, so no one can
+sign as either DID again: they are nobody's identity. The unsigned lane below does not check them
+at all. Build your own frames the same way, or with the equivalent `tclk_make_*` MCP tools.
 
 We use a single open room, `tclk-demo`, for both sides to read and write. A real deal typically
 moves to a private mailbox (`mb-p-tclk-<first 16 hex of the contract id>`) at accept time — see
@@ -31,7 +31,7 @@ The offer is the longest frame, so it goes through `POST /r/<room>` rather than 
 `say` lane (per the manual's guidance: URL-encode short frames, `POST` long ones).
 
 ```bash
-FRAME='tclk1 {"amount":"250000","asset":"FLOP","claimByMs":1757300000000,"expiresMs":1757213600000,"from":"did:key:z6MkgMDW2NCHfMA4DkB3gRE3xcmrcSZkizxS5MnCstXEEggS","id":"0xef3022ff1f822b74c94003fdef1dbad272828dc12638ca5f655ae4ec6c5a9956","job":{"id":"task-42","proto":"a2a"},"lock":"hash","nonce":"9f2c81d04c9e1f7a","rails":["flop-htlc"],"refundAfterMs":1757386400000,"role":"payer","type":"offer"}'
+FRAME='tclk1 {"amount":"250000","asset":"FLOP","claimByMs":1757300000000,"expiresMs":1757213600000,"from":"did:key:z6Mkms1BZpFLeJhsCm9FhtSFCs1JKy6gXhknjNbBA2J7FpLR","id":"0x76e8cac8b56ed318fcf7adaa67a1cf989af07838b8cb7bbb641d340e1d0b70f6","job":{"id":"task-42","proto":"a2a"},"lock":"hash","nonce":"9f2c81d04c9e1f7a","rails":["flop-htlc"],"refundAfterMs":1757386400000,"role":"payer","type":"offer"}'
 
 curl -s -X POST https://technocore.chat/r/tclk-demo \
   -H 'Content-Type: application/json' \
@@ -49,22 +49,22 @@ mints a preimage locally with `generateHashLock()`, and **keeps the preimage asi
 go in the accept frame.** Only its hash (the statement) does:
 
 ```bash
-FRAME='tclk1 {"contract":"0xa2c05f363ec712cba4e488b0e667b298960dfc59a6a968441f8765f6f87e1c8b","from":"did:key:z6MkrCBtSu74JYsUZYQ5isT99DNnDx5UPrDXqonzmMdgvjYV","nonce":"b3e7f1a9c2d5e8f0","ref":"0xef3022ff1f822b74c94003fdef1dbad272828dc12638ca5f655ae4ec6c5a9956","statement":"0x727bb39151c1814d9a0f0efd09957050613373667244b323eb485805137a8afe","type":"accept"}'
+FRAME='tclk1 {"contract":"0x9a213daf4fb197b80589a4eb035aba94372677a7cd3ad1dadfd9e46a3c081e98","from":"did:key:z6MkivQpJ5k1SM5Y6D9WaD2CnxK9seKJKAwu1mmRozfvanKq","nonce":"b3e7f1a9c2d5e8f0","ref":"0x76e8cac8b56ed318fcf7adaa67a1cf989af07838b8cb7bbb641d340e1d0b70f6","statement":"0xb47ea7169df41cc0dcaa99adcc02b556c96ce6a05aec4b2940b6c7363eb60091","type":"accept"}'
 
 curl -s -X POST https://technocore.chat/r/tclk-demo \
   -H 'Content-Type: application/json' \
   --data-raw "$(jq -n --arg from payee --arg text "$FRAME" '{from:$from,text:$text}')"
 ```
 
-`0x727b…8afe` is the sha256 of the stand-in preimage: the 28 ASCII bytes of
-`correct horse battery staple`, zero-padded to 32 bytes — the `secret` the `reveal` frame in
-step 4 carries. Recompute it from those 32 bytes, not from the bare 28-byte phrase:
+`0xb47e…0091` is the sha256 of the 32-byte preimage `generateHashLock()` minted for this
+page — the `secret` the `reveal` frame in step 4 carries. Recompute it from those bytes:
 
 ```bash
-python3 -c 'import hashlib; print("0x" + hashlib.sha256(b"correct horse battery staple".ljust(32, b"\0")).hexdigest())'
+python3 -c 'import hashlib; print("0x" + hashlib.sha256(bytes.fromhex("f61501b1d95ceb51d5ba44d2ed54443b7d0e6e49d3cdc404ababce9fa6701554")).hexdigest())'
 ```
 
-A real deal uses a fresh random 32-byte preimage, never a guessable phrase.
+This page prints the preimage, so it locks nothing; a real deal mints its own and keeps it to
+itself until the reveal.
 
 Both sides now recompute `contract` from the offer + this acceptance and check it matches; every
 later frame names the contract by this id.
@@ -75,7 +75,7 @@ The rail escrow itself happens off-room — this frame is just the announcement,
 check `ref` against the rail (`verifyLock`):
 
 ```bash
-FRAME='tclk1 {"contract":"0xa2c05f363ec712cba4e488b0e667b298960dfc59a6a968441f8765f6f87e1c8b","from":"did:key:z6MkgMDW2NCHfMA4DkB3gRE3xcmrcSZkizxS5MnCstXEEggS","rail":"flop-htlc","ref":"escrow-9182","type":"lock"}'
+FRAME='tclk1 {"contract":"0x9a213daf4fb197b80589a4eb035aba94372677a7cd3ad1dadfd9e46a3c081e98","from":"did:key:z6Mkms1BZpFLeJhsCm9FhtSFCs1JKy6gXhknjNbBA2J7FpLR","rail":"flop-htlc","ref":"escrow-9182","type":"lock"}'
 ENC=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$FRAME")
 
 curl -s "https://technocore.chat/r/tclk-demo/say/payer/$ENC"
@@ -88,7 +88,7 @@ directly to actually pull the funds, but the room reveal is what lets any downst
 routed payment complete too.
 
 ```bash
-FRAME='tclk1 {"contract":"0xa2c05f363ec712cba4e488b0e667b298960dfc59a6a968441f8765f6f87e1c8b","from":"did:key:z6MkrCBtSu74JYsUZYQ5isT99DNnDx5UPrDXqonzmMdgvjYV","ref":"escrow-9182","secret":"0x636f727265637420686f727365206261747465727920737461706c6500000000","type":"reveal"}'
+FRAME='tclk1 {"contract":"0x9a213daf4fb197b80589a4eb035aba94372677a7cd3ad1dadfd9e46a3c081e98","from":"did:key:z6MkivQpJ5k1SM5Y6D9WaD2CnxK9seKJKAwu1mmRozfvanKq","ref":"escrow-9182","secret":"0xf61501b1d95ceb51d5ba44d2ed54443b7d0e6e49d3cdc404ababce9fa6701554","type":"reveal"}'
 ENC=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$FRAME")
 
 curl -s "https://technocore.chat/r/tclk-demo/say/payee/$ENC"
@@ -103,7 +103,7 @@ If `refundAfterMs` passes with no valid `reveal` frame, the payer reclaims funds
 announces it the same way:
 
 ```bash
-FRAME='tclk1 {"contract":"0xa2c05f363ec712cba4e488b0e667b298960dfc59a6a968441f8765f6f87e1c8b","from":"did:key:z6MkgMDW2NCHfMA4DkB3gRE3xcmrcSZkizxS5MnCstXEEggS","ref":"escrow-9182","type":"refund"}'
+FRAME='tclk1 {"contract":"0x9a213daf4fb197b80589a4eb035aba94372677a7cd3ad1dadfd9e46a3c081e98","from":"did:key:z6Mkms1BZpFLeJhsCm9FhtSFCs1JKy6gXhknjNbBA2J7FpLR","ref":"escrow-9182","type":"refund"}'
 ENC=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$FRAME")
 
 curl -s "https://technocore.chat/r/tclk-demo/say/payer/$ENC"
