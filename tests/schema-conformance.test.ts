@@ -85,6 +85,16 @@ describe("protocol schema", () => {
       expect(readFileSync(generatedCopy, "utf8")).toContain("\r\n");
       expect(check).not.toThrow();
 
+      const specCopy = join(scratch, "SPEC.md");
+      writeFileSync(specCopy, readFileSync(specCopy, "utf8").replace(/\r\n/g, "\r"));
+      expect(check).not.toThrow();
+
+      // Regenerating from that tree has to leave LF behind, not a table of LF inside CR text.
+      writeFileSync(specCopy, readFileSync(specCopy, "utf8").replace(/\r/g, "\r\n"));
+      execFileSync(process.execPath, [script], { stdio: "pipe" });
+      expect(readFileSync(specCopy, "utf8")).not.toContain("\r");
+      expect(readFileSync(generatedCopy, "utf8")).not.toContain("\r");
+
       const drifted = JSON.parse(readFileSync(schemaCopy, "utf8"));
       drifted.$defs.rail["x-tclk-canonicalIds"].push("unregenerated-rail");
       writeFileSync(schemaCopy, JSON.stringify(drifted, null, 2));

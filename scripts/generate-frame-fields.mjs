@@ -47,7 +47,12 @@ const table = [
   "<!-- END GENERATED FRAME FIELDS -->",
 ].join("\n");
 
-const spec = readFileSync(specPath, "utf8");
+// Line endings belong to the checkout, not to the schema. Read with CRLF and bare CR folded to
+// LF, so a working tree that stores them that way neither reads as protocol drift nor reaches
+// the write below: patching the table into its CRLF text would leave SPEC.md half and half.
+const readLf = (path) => readFileSync(path, "utf8").replace(/\r\n?/g, "\n");
+
+const spec = readLf(specPath);
 const nextSpec = spec.replace(
   /<!-- BEGIN GENERATED FRAME FIELDS -->[\s\S]*?<!-- END GENERATED FRAME FIELDS -->/,
   table,
@@ -56,12 +61,8 @@ if (nextSpec === spec && !spec.includes(table)) {
   throw new Error("SPEC.md has no generated frame-field markers");
 }
 
-// Line endings belong to the checkout, not to the schema. Compare with CRLF folded to LF so
-// a working tree that stores them that way does not read as protocol drift; writes stay LF.
-const sameContent = (a, b) => a.replaceAll("\r\n", "\n") === b.replaceAll("\r\n", "\n");
-
 if (process.argv.includes("--check")) {
-  if (!sameContent(readFileSync(generatedPath, "utf8"), generated) || !sameContent(spec, nextSpec)) {
+  if (readLf(generatedPath) !== generated || spec !== nextSpec) {
     console.error("generated protocol fields are stale; run pnpm generate:protocol");
     process.exit(1);
   }
