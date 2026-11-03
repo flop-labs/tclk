@@ -14,8 +14,8 @@ backs the opt-in `commit-msg` hook in `.githooks/`. **Do not put a session URL i
 message.** They resolve for nobody but the account that made them, and a public history cannot
 take one back — this repository's was squashed once to remove them.
 
-`--include-workspace-root` is not optional: the library **is** the root package (`mcp/` is
-the only child), and a plain `pnpm -r` skips the root, so the library would silently never
+`--include-workspace-root` is not optional: the library **is** the root package (`mcp/` and `flop/` are
+workspace children), and a plain `pnpm -r` skips the root, so the library would silently never
 build and `mcp/` would fail against a stale `dist/`.
 
 ## Layout
@@ -24,6 +24,7 @@ build and `mcp/` would fail against a stale `dist/`.
   except the `nowMs` a caller passes in.
 - `mcp/` — the MCP server (`@flop-labs/tclk-mcp`), a client of the library. Wraps it as tool
   calls and is the only half that talks to technocore over HTTP.
+- `flop/` — optional FLOP HTLC settlement transport. Network and signing stay here, outside the pure library and hosted MCP server.
 - `SPEC.md` — the normative protocol. Code follows the spec; when they disagree, fix the one
   that is wrong, and say which in the PR.
 
