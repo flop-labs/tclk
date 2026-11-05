@@ -146,6 +146,28 @@ describe("tclk_post_frame — tier 2, server-signed", () => {
   });
 });
 
+describe("tclk_post_frame — room name", () => {
+  // The signature covers `<room>|<nonce>|<text>` (SPEC §2, "Fold records, not detached
+  // lines"), and that tuple parses one way only because a room name cannot hold `|`.
+  // Nothing here enforced the grammar: `assertRoomName` ran first inside `postSigned`, a
+  // round trip later, so tier 3 handed back a challenge for `tclk-offers|1` byte-identical
+  // to a legal post in `tclk-offers` with an attacker-chosen nonce and text.
+  it("refuses a room the grammar rejects before minting a canonical string", async () => {
+    const line = offerLine();
+    expect(canonicalMessage("tclk-offers|1", 5, line)).toBe(canonicalMessage("tclk-offers", 1, `5|${line}`));
+
+    for (const room of ["tclk-offers|1", "Lobby!"]) {
+      const { calls, fetchLike } = fakeFetch([]);
+      const noKey = createHandlers({ env: {}, fetch: fetchLike });
+      const serverKey = createHandlers({ env: { TECHNOCORE_SIGNING_KEY: PAYER_SEED }, fetch: fetchLike });
+
+      await expect(noKey.tclk_post_frame({ room, line })).rejects.toThrow(/bad room name/);
+      await expect(serverKey.tclk_post_frame({ room, line })).rejects.toThrow(/bad room name/);
+      expect(calls).toHaveLength(0);
+    }
+  });
+});
+
 describe("tclk_read_room", () => {
   it("returns complete records without dropping unsigned or malformed frame lines", async () => {
     const line = offerLine();
