@@ -32,6 +32,7 @@
   "files": [
     "dist",
     "schema",
+    "vectors",
     "README.md",
     "SPEC.md",
     "NOTICE"
