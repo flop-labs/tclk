@@ -8,6 +8,11 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `@flop-labs/tclk-flop`: the README and VERIFICATION.md said the transport signs
+  immortal extrinsics. It signs mortal ones: with no `era`, `@polkadot/api` picks the
+  period, measured at 512 blocks on devnet. The Recovery section now says when an
+  uncertain transaction can no longer execute.
+
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.
@@ -18,6 +23,10 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- `@flop-labs/tclk-flop`: `transactionEraBlocks` sets how many blocks a signed
+  transaction stays valid for. It must be a power of two from 4 to the runtime's
+  `blockHashCount`; any other value, or any value when the runtime does not publish
+  `blockHashCount`, is refused rather than rounded. Unset, behaviour is unchanged.
 - `@flop-labs/tclk-flop`: native FLOP HTLC settlement with devnet defaults and
   explicit testnet/mainnet RPC and genesis configuration. The rail binds terms to
   finalized escrow state, signs locally with the party's Ed25519 key, and supports

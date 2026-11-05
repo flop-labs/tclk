@@ -59,6 +59,7 @@ are supported. PTLC/adaptor signing is not used.
 | `blockTimeMs` | `1000` | Nominal block interval agreed by both parties |
 | `refundMarginBlocks` | `30` | Extra refund blocks and maximum accepted inclusion delay |
 | `transactionTimeoutMs` | `120000` | Time to await finalized transaction execution |
+| `transactionEraBlocks` | `@polkadot/api`'s mortal period (512 on devnet) | Blocks a signed transaction stays valid for; a power of two from 4 to the runtime's `blockHashCount` |
 
 Testnet and mainnet require **both** `rpcUrl` and `expectedGenesisHash`. FLOP's
 current network registry marks these networks as planned; a configuration label
@@ -125,11 +126,17 @@ state for the contract's lifetime (use an archive endpoint for long-lived locks)
 
 ## Recovery
 
-Transactions are never automatically retried. The transport currently signs
-immortal extrinsics: an uncertain transaction can remain eligible for inclusion
-much later, even after the client stops waiting. A manual replacement using the
-same account nonce can usurp it, so a timeout alone does not establish either
-execution or cancellation. An RPC timeout can also mean a signed transaction
+Transactions are never automatically retried. Every transaction the transport
+signs is mortal: it is valid only for a fixed number of blocks after a recent
+checkpoint block, and no node includes it afterwards. Unless
+`transactionEraBlocks` sets the period, `@polkadot/api` derives it from the
+runtime's block time and `blockHashCount`; on devnet that is 512 blocks, about
+8.5 minutes at the targeted one-second blocks. Within that period an uncertain
+transaction can still be included after the client stops waiting, and a manual
+replacement using the same account nonce can usurp it, so a timeout alone does
+not establish either execution or cancellation. Once the finalized head is a
+full period past the head at signing time and the transaction is not in the
+chain, it can no longer execute. An RPC timeout can also mean a signed transaction
 was included even though its receipt was lost. `FlopTransactionError`
 contains `txHash`; inspect its finalized events before resubmitting. A wallet
 should pass `persistPending: async (pendingRef) => { /* durable wallet journal */ }`

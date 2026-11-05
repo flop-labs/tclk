@@ -24,4 +24,7 @@ export {
   PolkadotFlopChain,
   FlopTransactionError,
 } from "./chain.js";
-export type { ConnectFlopRailOptions } from "./chain.js";
+export type {
+  ConnectFlopRailOptions,
+  PolkadotFlopChainOptions,
+} from "./chain.js";

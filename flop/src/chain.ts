@@ -29,6 +29,7 @@ export function finalizedTransaction(
   tx: SubmittableExtrinsic<"promise">,
   signer: KeyringPair,
   timeoutMs: number,
+  eraBlocks?: number,
 ): Promise<ISubmittableResult> {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -47,7 +48,11 @@ export function finalizedTransaction(
     );
     // Reject using our own messages: provider errors may echo the signed preimage calldata.
     try {
-      tx.signAndSend(signer, { nonce: -1 }, (result) => {
+      // Without `era`, @polkadot/api still signs mortal, with a period it derives from the
+      // runtime (512 blocks on devnet); `eraBlocks` only makes that period explicit.
+      const options =
+        eraBlocks === undefined ? { nonce: -1 } : { nonce: -1, era: eraBlocks };
+      tx.signAndSend(signer, options, (result) => {
         try {
           if (
             result.status.isInvalid ||
@@ -107,15 +112,40 @@ function integer(value: unknown, field: string): number {
   return n;
 }
 
+/** Settings after the timeout, passed by name so adding one never shifts another. */
+export interface PolkadotFlopChainOptions {
+  /** Blocks a signed transaction stays valid for; unset leaves @polkadot/api's mortal default. */
+  eraBlocks?: number;
+}
+
 export class PolkadotFlopChain implements FlopChain {
   readonly account?: string;
+  private readonly eraBlocks?: number;
   constructor(
     readonly api: ApiPromise,
     private readonly signer?: KeyringPair,
     private readonly timeoutMs = 120_000,
+    options: PolkadotFlopChainOptions = {},
   ) {
+    const { eraBlocks } = options;
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1)
       throw new Error("flop: invalid transaction timeout");
+    if (eraBlocks !== undefined) {
+      // A mortal era is a power of two in [4, 65536]; @polkadot/api would round any other
+      // value, so refuse it instead. Past blockHashCount the checkpoint is unknown to the
+      // runtime and every transaction would be rejected, so an unknown bound is refused too.
+      const hashCount = Number(api.consts?.system?.blockHashCount?.toString());
+      if (
+        !Number.isSafeInteger(eraBlocks) ||
+        eraBlocks < 4 ||
+        eraBlocks > 65536 ||
+        (eraBlocks & (eraBlocks - 1)) !== 0 ||
+        !Number.isSafeInteger(hashCount) ||
+        eraBlocks > hashCount
+      )
+        throw new Error("flop: invalid transaction era");
+    }
+    this.eraBlocks = eraBlocks;
     if (signer) {
       if (signer.type !== "ed25519" || signer.publicKey.length !== 32)
         throw new Error("flop: signer must use the party's Ed25519 DID key");
@@ -233,7 +263,12 @@ export class PolkadotFlopChain implements FlopChain {
       throw new Error(
         "flop: this connection is read-only; provide a local Ed25519 signer",
       );
-    return finalizedTransaction(tx, this.signer, this.timeoutMs);
+    return finalizedTransaction(
+      tx,
+      this.signer,
+      this.timeoutMs,
+      this.eraBlocks,
+    );
   }
   async open(request: FlopOpenRequest): Promise<string> {
     const result = await this.send(
@@ -271,6 +306,8 @@ export class PolkadotFlopChain implements FlopChain {
 export interface ConnectFlopRailOptions extends FlopRailConfig {
   signer?: KeyringPair;
   transactionTimeoutMs?: number;
+  /** Blocks a signed transaction stays valid for; unset leaves @polkadot/api's mortal default. */
+  transactionEraBlocks?: number;
   /** Persist public recovery data before any signed open transaction is sent. */
   persistPending?: FlopPendingWriter;
 }
@@ -307,6 +344,7 @@ export async function connectFlopRail(
       api,
       options.signer,
       options.transactionTimeoutMs,
+      { eraBlocks: options.transactionEraBlocks },
     );
     const rail = new FlopRail(
       chain,
