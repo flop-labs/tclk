@@ -92,7 +92,24 @@ const a = await connectFlopRail({
     console.log(JSON.stringify({ stage: "prepared", pendingRef }));
   },
 });
+// Refund needs refundAfterMs, then refundMarginBlocks more blocks, then finality.
+async function refundWhenDue(rail, ref, refundAfterMs) {
+  const end = refundAfterMs + 120000;
+  while (true) {
+    try {
+      return await rail.refund(ref);
+    } catch (error) {
+      if (
+        error.message !== "flop: refund window is not open" ||
+        Date.now() >= end
+      )
+        throw error;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  }
+}
 let b;
+let locking; // Terms of the lock in flight, so a FlopLockError can be refunded.
 try {
   b = await connectFlopRail({
     ...config,
@@ -119,6 +136,7 @@ try {
     return { terms: lockTerms(state.state), preimage };
   };
   const deal = createTerms();
+  locking = deal.terms;
   const ref = await a.rail.lock(deal.terms);
   console.log(JSON.stringify({ stage: "locked", ref })); // Public recovery data; never log the preimage.
   if (!(await b.rail.verifyLock(deal.terms, ref)))
@@ -127,23 +145,13 @@ try {
   console.log(
     JSON.stringify({ stage: "claimed", contract: deal.terms.contract }),
   );
-  const expiry = createTerms(45000, 60000);
+  // Wide enough to clear the rail's 90 s claim-window floor: a 45 s window was consumed by
+  // inclusion and finality on devnet, leaving the escrow Open until a manual refund.
+  const expiry = createTerms(120000, 150000);
+  locking = expiry.terms;
   const refundRef = await a.rail.lock(expiry.terms);
   console.log(JSON.stringify({ stage: "refund-pending", ref: refundRef }));
-  const end = Date.now() + 120000;
-  while (true) {
-    try {
-      await a.rail.refund(refundRef);
-      break;
-    } catch (error) {
-      if (
-        error.message !== "flop: refund window is not open" ||
-        Date.now() >= end
-      )
-        throw error;
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-    }
-  }
+  await refundWhenDue(a.rail, refundRef, expiry.terms.refundAfterMs);
   console.log(
     JSON.stringify({
       stage: "refunded",
@@ -152,8 +160,23 @@ try {
     }),
   );
 } catch (error) {
-  if (error instanceof FlopLockError)
+  if (error instanceof FlopLockError) {
     console.error(JSON.stringify({ stage: "recovery", ref: error.ref }));
+    // The funds moved but the escrow failed verification: wait out its deadline and
+    // refund it rather than leave test tokens stranded in an Open escrow.
+    try {
+      await refundWhenDue(a.rail, error.ref, locking.refundAfterMs);
+      console.error(JSON.stringify({ stage: "recovered", ref: error.ref }));
+    } catch (refundError) {
+      console.error(
+        JSON.stringify({
+          stage: "recovery-failed",
+          ref: error.ref,
+          reason: refundError.message,
+        }),
+      );
+    }
+  }
   throw error;
 } finally {
   await b?.disconnect();

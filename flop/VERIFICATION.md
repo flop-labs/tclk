@@ -55,6 +55,26 @@ The live run exposed the runtime's `{and:null}` SCALE JSON encoding; its exact
 shape is now a regression fixture. The demo's claim window also includes time
 for real network finality and independent payee verification.
 
+## Measured latency
+
+Size `claimByMs` against these numbers, not against block time alone.
+
+- Post-review live run, 2026-10-22, reported on #210: inclusion took about 13
+  blocks, with a finality wait of 40 s or more. Inclusion, finality and the
+  payee's verification round-trips used up an entire 45 s claim window, so
+  `verifyLock` refused an escrow whose funds had already moved. A 180 s window
+  passed. `minClaimWindowMs` defaults to 90 s for this reason, and the example's
+  second scenario uses a 120 s claim window.
+- Read-only sample, 2026-10-25, runtime spec `1014003`, 16 samples over 85 s:
+  blocks arrived every 1,121 ms against the nominal `blockTimeMs` of 1000, and
+  the finalized head trailed the best head by 2 to 4 blocks (about 5 s). Finality
+  lag on an idle chain is therefore small; the 10-22 end-to-end figures are the
+  ones to size against.
+- Blocks slower than nominal put the on-chain refund deadline after
+  `refundAfterMs`: at 1,121 ms per block, by about 12% of the remaining window
+  plus the 30-block margin (about 34 s). The example's refund wait allows
+  `refundAfterMs` + 120 s.
+
 ## Review follow-up
 
 Nine additional regression tests cover journal delays past the local or chain

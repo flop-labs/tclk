@@ -21,6 +21,9 @@ const did = (n: number) =>
   `did:key:z${base58.encode(Uint8Array.from([0xed, 1, ...new Array(32).fill(n)]))}`;
 const secret = h(42);
 const T0 = 1_790_000_000_000;
+// These fixtures keep 30-60 s windows so the block arithmetic stays small; the
+// claim-window floor (default 90 s) has its own tests below.
+const TIGHT = { minClaimWindowMs: 0 };
 function terms(): LockTerms {
   return {
     contract: h(3),
@@ -92,7 +95,7 @@ class Chain implements FlopChain {
 }
 function setup() {
   const chain = new Chain();
-  const rail = new FlopRail(chain, {}, () => chain.head.timestampMs);
+  const rail = new FlopRail(chain, TIGHT, () => chain.head.timestampMs);
   return { chain, rail, t: terms() };
 }
 function rewrite(ref: string, update: (r: any) => void): string {
@@ -133,6 +136,9 @@ describe("configuration", () => {
     { blockTimeMs: 0 },
     { refundMarginBlocks: -1 },
     { refundMarginBlocks: 0.5 },
+    { minClaimWindowMs: -1 },
+    { minClaimWindowMs: 0.5 },
+    { minClaimWindowMs: NaN },
   ])("rejects malformed config %j", (config) => {
     expect(() => resolveFlopConfig(config as any)).toThrow();
   });
@@ -152,7 +158,7 @@ describe("FlopRail", () => {
     expect(chain.request!.policy.clauses[0]).toEqual({ Hash: t.statement });
     expect(await rail.verifyLock(t, ref)).toBe(true);
     // Another process can verify and claim without the payer's in-memory state.
-    const payee = new FlopRail(chain, {}, () => chain.head.timestampMs);
+    const payee = new FlopRail(chain, TIGHT, () => chain.head.timestampMs);
     await payee.claim(ref, secret);
     expect(chain.claims).toBe(1);
     expect(chain.witnesses?.[0]).toBe(secret);
@@ -337,7 +343,7 @@ describe("wallet recovery and duplicate submissions", () => {
     };
     const rail = new FlopRail(
       chain,
-      {},
+      TIGHT,
       () => chain.head.timestampMs,
       async (ref) => {
         expect(chain.opens).toBe(0);
@@ -361,7 +367,7 @@ describe("wallet recovery and duplicate submissions", () => {
     let fail = true;
     const rail = new FlopRail(
       chain,
-      {},
+      TIGHT,
       () => chain.head.timestampMs,
       async () => {
         if (fail) throw new Error("disk full");
@@ -391,7 +397,7 @@ describe("post-journal admission", () => {
     const t = terms();
     const rail = new FlopRail(
       chain,
-      {},
+      TIGHT,
       () => now,
       async () => {
         now = t.claimByMs;
@@ -406,7 +412,7 @@ describe("post-journal admission", () => {
     const chain = new Chain();
     const rail = new FlopRail(
       chain,
-      {},
+      TIGHT,
       () => T0,
       async () => {
         chain.tick(30);
@@ -426,7 +432,7 @@ describe("post-journal admission", () => {
     let delay = true;
     const rail = new FlopRail(
       chain,
-      {},
+      TIGHT,
       () => chain.head.timestampMs,
       async () => {
         if (delay) chain.tick(30);
@@ -449,7 +455,7 @@ describe("post-journal admission", () => {
     };
     const rail = new FlopRail(
       chain,
-      {},
+      TIGHT,
       () => chain.head.timestampMs,
       async () => {
         chain.tick(29);
@@ -464,7 +470,7 @@ describe("post-journal admission", () => {
     const chain = new Chain();
     const rail = new FlopRail(
       chain,
-      {},
+      TIGHT,
       () => T0,
       async () => {
         chain.head.genesis = h(7);
@@ -479,7 +485,7 @@ describe("post-journal admission", () => {
     let fail = true;
     const rail = new FlopRail(
       chain,
-      {},
+      TIGHT,
       () => T0,
       async () => {
         chain.fail = fail;
@@ -494,6 +500,65 @@ describe("post-journal admission", () => {
   });
 });
 
+describe("claim-window floor", () => {
+  const window = (claimMs: number): LockTerms => ({
+    ...terms(),
+    claimByMs: T0 + claimMs,
+    refundAfterMs: T0 + claimMs + 30_000,
+  });
+  it("defaults to 90 s and refuses a shorter window before journaling or signing", async () => {
+    const chain = new Chain();
+    let journaled = 0;
+    const rail = new FlopRail(
+      chain,
+      {},
+      () => T0,
+      async () => {
+        journaled++;
+      },
+    );
+    expect(rail.config.minClaimWindowMs).toBe(90_000);
+    await expect(rail.lock(window(89_999))).rejects.toThrow("too short");
+    expect(journaled).toBe(0);
+    expect(chain.opens).toBe(0);
+    await rail.lock(window(90_000));
+    expect(chain.opens).toBe(1);
+  });
+  it("measures the window from the later of the local and chain clocks", async () => {
+    const chain = new Chain();
+    let now = T0 - 60_000;
+    const rail = new FlopRail(chain, {}, () => now);
+    await expect(rail.lock(window(89_999))).rejects.toThrow("too short");
+    now = T0;
+    chain.head.timestampMs = T0 - 60_000;
+    await expect(rail.lock(window(89_999))).rejects.toThrow("too short");
+    expect(chain.opens).toBe(0);
+  });
+  it("rechecks the floor after journaling and releases the duplicate guard", async () => {
+    const chain = new Chain();
+    let now = T0;
+    const rail = new FlopRail(
+      chain,
+      {},
+      () => now,
+      async () => {
+        now += 1;
+      },
+    );
+    await expect(rail.lock(window(90_000))).rejects.toThrow("too short");
+    expect(chain.opens).toBe(0);
+    now = T0;
+    await rail.lock(window(90_001));
+    expect(chain.opens).toBe(1);
+  });
+  it("keeps the closed-window error distinct, and 0 disables the floor", async () => {
+    const chain = new Chain();
+    const rail = new FlopRail(chain, TIGHT, () => T0);
+    await expect(rail.lock(window(0))).rejects.toThrow("has closed");
+    await rail.lock(window(5_000));
+    expect(chain.opens).toBe(1);
+  });
+});
 describe("pending reference validation", () => {
   it("rejects a completed reference and malformed escrow IDs during recovery", async () => {
     const { recoverFlopReference } = await import("../src/rail.js");
@@ -501,7 +566,7 @@ describe("pending reference validation", () => {
     let pending = "";
     const rail = new FlopRail(
       chain,
-      {},
+      TIGHT,
       () => T0,
       async (ref) => {
         pending = ref;
@@ -520,7 +585,7 @@ describe("pending reference validation", () => {
     let pending = "";
     const rail = new FlopRail(
       chain,
-      {},
+      TIGHT,
       () => T0,
       async (ref) => {
         pending = ref;

@@ -8,6 +8,14 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `@flop-labs/tclk-flop`: `lock` no longer signs when less than `minClaimWindowMs`
+  (default 90 s) of the claim window is left, checked before journaling and again
+  just before signing. A shorter window could close after the open finalized, leaving
+  the escrow unverifiable and the funds locked until refund. The devnet example now
+  waits out a `FlopLockError` escrow's deadline and refunds it instead of exiting with
+  the escrow Open, and VERIFICATION.md records the measured latency the floor is sized
+  against.
+
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.
