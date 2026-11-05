@@ -454,7 +454,11 @@ export function makeAccept(
 
 // ── Line codec ───────────────────────────────────────────────────────────────
 
-/** True iff a room-message text is a tclk/1 frame line. */
+/**
+ * True iff a room-message text carries the `tclk1 ` version prefix. A cheap prefilter,
+ * not a validity check: a prefixed line can still fail `decodeFrame`, so count frames
+ * with `tryDecodeFrame`.
+ */
 export function isTclkLine(text: string): boolean {
   return text.startsWith(TCLK_PREFIX);
 }
