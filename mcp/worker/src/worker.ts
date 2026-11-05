@@ -547,8 +547,11 @@ export async function handleRequest(
     return rpcError(null, PARSE_ERROR, "could not read the request body", 400);
   }
   // Re-checked after reading: `content-length` is the client's claim, and a chunked body
-  // does not carry one at all.
-  if (body.length > MAX_BODY_BYTES) {
+  // does not carry one at all. Measured in UTF-8 bytes, the unit `MAX_BODY_BYTES` and the
+  // 413 both name — `body.length` counts UTF-16 code units, so 1,048,500 three-byte code
+  // points passed as a 3,145,560-byte body and the cap moved with the caller's alphabet.
+  // UTF-8 is never shorter than the code-unit count, so `body.length` stays a fast reject.
+  if (body.length > MAX_BODY_BYTES || new TextEncoder().encode(body).byteLength > MAX_BODY_BYTES) {
     return jsonResponse({ error: `body exceeds ${MAX_BODY_BYTES} bytes` }, 413);
   }
 
