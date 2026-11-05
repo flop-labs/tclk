@@ -9,6 +9,15 @@ import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 const h = `0x${"12".repeat(32)}`;
 const signer = {} as KeyringPair;
+const constant = (value: string) => ({ toString: () => value });
+/** HasStation's R10.2 constants as devnet runtime 1014003 reports them. */
+const r10Constants = () => ({
+  hasStation: {
+    timelockSymmetrySafetyMargin: constant("20"),
+    maxFinalityStall: constant("3600"),
+    finalityFreezeThreshold: constant("120"),
+  },
+});
 const event = (section: string, method: string) => ({
   event: { section, method },
 });
@@ -121,6 +130,7 @@ describe("metadata transport", () => {
           })),
         },
       },
+      consts: r10Constants(),
     };
     const api: any = {
       tx: {
@@ -134,6 +144,7 @@ describe("metadata transport", () => {
         hasStation: { escrows: vi.fn() },
         aleph: { lastFinalized: vi.fn() },
       },
+      consts: r10Constants(),
       rpc: {
         chain: {
           getFinalizedHead: vi.fn(async () => ({ toHex: () => h })),
@@ -158,5 +169,120 @@ describe("metadata transport", () => {
       toHex: () => (n === 0 ? h : `0x${"34".repeat(32)}`),
     }));
     await expect(chain.snapshot(h)).rejects.toThrow("canonical finalized");
+  });
+});
+describe("R10.2 admission block", () => {
+  const genesis = `0x${"ab".repeat(32)}`;
+  const best = `0x${"56".repeat(32)}`;
+  const finalized = `0x${"78".repeat(32)}`;
+  // Heights from a devnet read: best 2161733 with runtime prefix 2161729 (lag 4).
+  function rpc(prefix: unknown = [2_161_729, finalized]) {
+    const heights: Record<string, string> = {
+      [best]: "2161733",
+      [finalized]: "2161729",
+    };
+    const view = {
+      query: { aleph: { lastFinalized: vi.fn(async () => ({ toJSON: () => prefix })) } },
+      consts: r10Constants(),
+    };
+    const api: any = {
+      tx: {
+        hasStation: {
+          openEscrow: vi.fn(),
+          satisfyEscrow: vi.fn(),
+          refundEscrow: vi.fn(),
+        },
+      },
+      query: {
+        hasStation: { escrows: vi.fn() },
+        aleph: { lastFinalized: vi.fn() },
+      },
+      consts: r10Constants(),
+      rpc: {
+        chain: {
+          getFinalizedHead: vi.fn(async () => ({ toHex: () => finalized })),
+          // Called with a hex string or with the codec getFinalizedHead returns.
+          getHeader: vi.fn(async (hash: string | { toHex(): string }) => ({
+            number: {
+              toString: () =>
+                heights[typeof hash === "string" ? hash : hash.toHex()],
+            },
+          })),
+          getBlockHash: vi.fn(async (n?: number) => ({
+            toHex: () =>
+              n === undefined ? best : n === 0 ? genesis : finalized,
+          })),
+        },
+      },
+      at: vi.fn(async () => view),
+    };
+    return { api, view };
+  }
+  const yp = {
+    marginPercent: 20,
+    maxFinalityStallBlocks: 3_600,
+    finalityFreezeThresholdBlocks: 120,
+  };
+
+  it("reads the best block's height, the runtime prefix in it, and its runtime's constants", async () => {
+    const { api, view } = rpc();
+    expect(await new PolkadotFlopChain(api).admissionBlock()).toEqual({
+      genesis,
+      hash: best,
+      number: 2_161_733,
+      finalizedNumber: 2_161_729,
+      params: yp,
+    });
+    expect(api.rpc.chain.getBlockHash).toHaveBeenCalledWith(); // the best block
+    expect(api.at).toHaveBeenCalledWith(best);
+    expect(view.query.aleph.lastFinalized).toHaveBeenCalledOnce();
+  });
+
+  it("reads a requested height only from canonical finalized state", async () => {
+    const { api } = rpc();
+    const chain = new PolkadotFlopChain(api);
+    expect(await chain.admissionBlock(2_161_729)).toMatchObject({
+      hash: finalized,
+      number: 2_161_729,
+    });
+    expect(api.rpc.chain.getBlockHash).toHaveBeenCalledWith(2_161_729);
+    await expect(chain.admissionBlock(2_161_730)).rejects.toThrow(
+      "not finalized",
+    );
+    for (const bad of [-1, 1.5, NaN])
+      await expect(chain.admissionBlock(bad)).rejects.toThrow("height");
+    api.rpc.chain.getHeader = vi.fn(async () => ({
+      number: { toString: () => "7" },
+    }));
+    await expect(chain.admissionBlock(7)).resolves.toMatchObject({ number: 7 });
+    await expect(chain.admissionBlock(6)).rejects.toThrow("height mismatch");
+  });
+
+  it("reads a missing prefix as the block itself (bootstrap) and refuses a malformed one", async () => {
+    expect(
+      await new PolkadotFlopChain(rpc(null).api).admissionBlock(),
+    ).toMatchObject({ number: 2_161_733, finalizedNumber: 2_161_733 });
+    for (const prefix of [[1], "1", [-1, h], ["0x10", h]])
+      await expect(
+        new PolkadotFlopChain(rpc(prefix).api).admissionBlock(),
+      ).rejects.toThrow(/finality prefix|finalized height/);
+  });
+
+  it("fails closed without the R10.2 constants, at connection and per block", async () => {
+    const { api } = rpc();
+    delete api.consts.hasStation.finalityFreezeThreshold;
+    expect(() => new PolkadotFlopChain(api)).toThrow("R10.2 constants");
+    const ok = rpc();
+    delete (ok.view.consts.hasStation as any).maxFinalityStall;
+    await expect(
+      new PolkadotFlopChain(ok.api).admissionBlock(),
+    ).rejects.toThrow("R10.2 constants");
+    for (const value of ["-1", "0x14", "1.5", "9007199254740993"]) {
+      const bad = rpc();
+      bad.view.consts.hasStation.timelockSymmetrySafetyMargin = constant(value);
+      await expect(
+        new PolkadotFlopChain(bad.api).admissionBlock(),
+      ).rejects.toThrow(/timelockSymmetrySafetyMargin/);
+    }
   });
 });

@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import type { SubmittableExtrinsic } from "@polkadot/api/types";
+import type {
+  ApiDecoration,
+  SubmittableExtrinsic,
+} from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import type { Option, Struct } from "@polkadot/types";
-import type { ISubmittableResult } from "@polkadot/types/types";
+import type { Codec, ISubmittableResult } from "@polkadot/types/types";
 import {
   FlopRail,
+  type FlopAdmissionBlock,
   type FlopChain,
   type FlopEscrow,
   type FlopOpenRequest,
@@ -14,6 +18,7 @@ import {
   type FlopPendingWriter,
 } from "./rail.js";
 import { HEX32, resolveFlopConfig, type FlopRailConfig } from "./config.js";
+import type { FlopSymmetryParams } from "./symmetry.js";
 
 /** No secret fields: safe to retain when a transport failure leaves submission ambiguous. */
 export class FlopTransactionError extends Error {
@@ -106,6 +111,29 @@ function integer(value: unknown, field: string): number {
   if (!Number.isSafeInteger(n)) throw new Error(`flop: unsafe ${field}`);
   return n;
 }
+/** The runtime's AlephFinalizedPrefix height as stored in the block at `number`. */
+function prefixHeight(prefix: Codec, number: number): number {
+  const json = prefix.toJSON();
+  if (json !== null && (!Array.isArray(json) || json.length !== 2))
+    throw new Error("flop: malformed runtime finality prefix");
+  // Mirrors AlephFinalizedPrefix's documented bootstrap behavior exactly.
+  return json === null ? number : integer(json[0], "runtime finalized height");
+}
+/** R10.2's parameters: the HasStation constants of the runtime at `view`'s block. */
+function symmetryParams(view: ApiDecoration<"promise">): FlopSymmetryParams {
+  const constants = view.consts.hasStation;
+  const read = (name: string) => {
+    const value = constants?.[name];
+    if (value === undefined)
+      throw new Error("flop: runtime lacks the R10.2 constants");
+    return integer(value.toString(), `HasStation constant ${name}`);
+  };
+  return {
+    marginPercent: read("timelockSymmetrySafetyMargin"),
+    maxFinalityStallBlocks: read("maxFinalityStall"),
+    finalityFreezeThresholdBlocks: read("finalityFreezeThreshold"),
+  };
+}
 
 export class PolkadotFlopChain implements FlopChain {
   readonly account?: string;
@@ -131,6 +159,13 @@ export class PolkadotFlopChain implements FlopChain {
       throw new Error(
         "flop: runtime lacks the required typed escrow/finality API",
       );
+    const r10 = api.consts?.hasStation;
+    if (
+      !r10?.timelockSymmetrySafetyMargin ||
+      !r10.maxFinalityStall ||
+      !r10.finalityFreezeThreshold
+    )
+      throw new Error("flop: runtime lacks the R10.2 constants");
   }
   async snapshot(escrowId?: string, at?: string): Promise<FlopSnapshot> {
     const hash = at ?? (await this.api.rpc.chain.getFinalizedHead()).toHex();
@@ -154,22 +189,13 @@ export class PolkadotFlopChain implements FlopChain {
       view.query.timestamp.now(),
       view.query.aleph.lastFinalized(),
     ]);
-    const prefixJson = prefix.toJSON();
-    if (
-      prefixJson !== null &&
-      (!Array.isArray(prefixJson) || prefixJson.length !== 2)
-    )
-      throw new Error("flop: malformed runtime finality prefix");
+    const finalizedNumber = prefixHeight(prefix, number);
     const snapshot: FlopSnapshot = {
       genesis: genesis.toHex(),
       hash,
       number,
       timestampMs: integer(timestamp.toString(), "timestamp"),
-      // Mirrors AlephFinalizedPrefix's documented bootstrap behavior exactly.
-      finalizedNumber:
-        prefixJson === null
-          ? number
-          : integer(prefixJson[0], "runtime finalized height"),
+      finalizedNumber,
     };
     if (escrowId !== undefined) {
       const codec = (await view.query.hasStation.escrows(
@@ -225,6 +251,41 @@ export class PolkadotFlopChain implements FlopChain {
       }
     }
     return snapshot;
+  }
+  async admissionBlock(height?: number): Promise<FlopAdmissionBlock> {
+    let hash: string;
+    if (height === undefined) {
+      // The best block, which a new open builds on. Not final: FlopRail only refuses on it.
+      hash = (await this.api.rpc.chain.getBlockHash()).toHex();
+    } else {
+      if (!Number.isSafeInteger(height) || height < 0)
+        throw new Error("flop: invalid admission block height");
+      // As in snapshot(), a height-addressed read must be canonical finalized state.
+      const finalized = await this.api.rpc.chain.getHeader(
+        await this.api.rpc.chain.getFinalizedHead(),
+      );
+      if (height > integer(finalized.number.toString(), "finalized height"))
+        throw new Error("flop: admission block is not finalized");
+      hash = (await this.api.rpc.chain.getBlockHash(height)).toHex();
+    }
+    const [view, header, genesis] = await Promise.all([
+      this.api.at(hash),
+      this.api.rpc.chain.getHeader(hash),
+      this.api.rpc.chain.getBlockHash(0),
+    ]);
+    const number = integer(header.number.toString(), "height");
+    if (height !== undefined && number !== height)
+      throw new Error("flop: admission block height mismatch");
+    return {
+      genesis: genesis.toHex(),
+      hash,
+      number,
+      finalizedNumber: prefixHeight(
+        await view.query.aleph.lastFinalized(),
+        number,
+      ),
+      params: symmetryParams(view),
+    };
   }
   private async send(
     tx: SubmittableExtrinsic<"promise">,

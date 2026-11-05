@@ -99,7 +99,17 @@ try {
     expectedGenesisHash: a.rail.config.expectedGenesisHash,
     signer: payee,
   });
-  const createTerms = (claimWindowMs = 180000, refundWindowMs = 240000) => {
+  // FlopRail admits a lock only under R10.2 with the runtime's own constants: refundAfterMs
+  // must trail claimByMs by max_finality_stall plus the finality lag (which stays below
+  // finality_freeze_threshold), or by p% of the claim window if that is larger. On devnet
+  // that is about an hour.
+  const { params } = await a.chain.admissionBlock();
+  const refundGapMs = (claimWindowMs) =>
+    Math.max(
+      Math.ceil(((claimWindowMs / 1000) * params.marginPercent) / 100),
+      params.maxFinalityStallBlocks + params.finalityFreezeThresholdBlocks,
+    ) * 1000;
+  const createTerms = (claimWindowMs = 180000) => {
     const now = Date.now();
     const { preimage, hash } = generateHashLock();
     const offer = makeOffer({
@@ -110,7 +120,7 @@ try {
       asset: "FLOP",
       rails: ["flop-htlc"],
       claimByMs: now + claimWindowMs,
-      refundAfterMs: now + refundWindowMs,
+      refundAfterMs: now + claimWindowMs + refundGapMs(claimWindowMs),
       expiresMs: now + 30000,
     });
     const accept = makeAccept(offer, { from: did(payee), statement: hash });
@@ -127,30 +137,43 @@ try {
   console.log(
     JSON.stringify({ stage: "claimed", contract: deal.terms.contract }),
   );
-  const expiry = createTerms(45000, 60000);
-  const refundRef = await a.rail.lock(expiry.terms);
-  console.log(JSON.stringify({ stage: "refund-pending", ref: refundRef }));
-  const end = Date.now() + 120000;
-  while (true) {
-    try {
-      await a.rail.refund(refundRef);
-      break;
-    } catch (error) {
-      if (
-        error.message !== "flop: refund window is not open" ||
-        Date.now() >= end
-      )
-        throw error;
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+  if (process.argv.includes("--refund")) {
+    // The refund opens the R10.2 gap after the claim deadline, about an hour on devnet.
+    // refund() waits for both that wall time and the finalized block deadline.
+    const expiry = createTerms(45000);
+    const refundRef = await a.rail.lock(expiry.terms);
+    console.log(
+      JSON.stringify({
+        stage: "refund-pending",
+        ref: refundRef,
+        refundAfterMs: expiry.terms.refundAfterMs,
+      }),
+    );
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.max(0, expiry.terms.refundAfterMs - Date.now())),
+    );
+    const end = Date.now() + 600000;
+    while (true) {
+      try {
+        await a.rail.refund(refundRef);
+        break;
+      } catch (error) {
+        if (
+          error.message !== "flop: refund window is not open" ||
+          Date.now() >= end
+        )
+          throw error;
+        await new Promise((resolve) => setTimeout(resolve, 15000));
+      }
     }
+    console.log(
+      JSON.stringify({
+        stage: "refunded",
+        contract: expiry.terms.contract,
+        genesis: a.rail.config.expectedGenesisHash,
+      }),
+    );
   }
-  console.log(
-    JSON.stringify({
-      stage: "refunded",
-      contract: expiry.terms.contract,
-      genesis: a.rail.config.expectedGenesisHash,
-    }),
-  );
 } catch (error) {
   if (error instanceof FlopLockError)
     console.error(JSON.stringify({ stage: "recovery", ref: error.ref }));

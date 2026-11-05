@@ -10,12 +10,17 @@ import {
   FlopRail,
   FlopLockError,
   flopAccountFromDid,
+  type FlopAdmissionBlock,
   type FlopChain,
   type FlopEscrow,
   type FlopSnapshot,
   type FlopOpenRequest,
 } from "../src/rail.js";
 import { resolveFlopConfig } from "../src/config.js";
+import {
+  FlopAdmissionError,
+  type FlopSymmetryParams,
+} from "../src/symmetry.js";
 const h = (n: number) => `0x${n.toString(16).padStart(64, "0")}`;
 const did = (n: number) =>
   `did:key:z${base58.encode(Uint8Array.from([0xed, 1, ...new Array(32).fill(n)]))}`;
@@ -34,6 +39,18 @@ function terms(): LockTerms {
     refundAfterMs: T0 + 60_000,
   };
 }
+// The mock runtime's R10.2 constants: small, so the short deadlines above pass. The R10.2
+// cases below use the yellow paper's values, which devnet runtime 1014003 also reports.
+const TEST_RUNTIME: FlopSymmetryParams = {
+  marginPercent: 20,
+  maxFinalityStallBlocks: 30,
+  finalityFreezeThresholdBlocks: 10,
+};
+const YP: FlopSymmetryParams = {
+  marginPercent: 20,
+  maxFinalityStallBlocks: 3_600,
+  finalityFreezeThresholdBlocks: 120,
+};
 class Chain implements FlopChain {
   account = flopAccountFromDid(did(1));
   head: FlopSnapshot = {
@@ -52,15 +69,39 @@ class Chain implements FlopChain {
   refunds = 0;
   delay = 1;
   fail = false;
+  /** The runtime's R10.2 constants, as every block reports them. */
+  params: FlopSymmetryParams = { ...TEST_RUNTIME };
+  /** The best block, when it runs ahead of the finalized head (a finality stall). */
+  best?: { number: number; finalizedNumber: number };
+  /** The runtime finality lag recorded in the block that includes an open. */
+  inclusionLag = 1;
   async snapshot(_id?: string, at?: string): Promise<FlopSnapshot> {
     if (this.fail) throw new Error("RPC unavailable");
     if (at) return structuredClone(this.history.get(at)!);
     return structuredClone({ ...this.head, escrow: this.held });
   }
+  async admissionBlock(height?: number): Promise<FlopAdmissionBlock> {
+    if (this.fail) throw new Error("RPC unavailable");
+    const block =
+      height === undefined
+        ? { ...this.head, ...this.best }
+        : this.history.get(h(height));
+    if (!block) throw new Error("no such block");
+    return structuredClone({
+      genesis: block.genesis,
+      hash: h(block.number),
+      number: block.number,
+      finalizedNumber: block.finalizedNumber,
+      params: this.params,
+    });
+  }
   async open(request: FlopOpenRequest): Promise<string> {
     this.opens++;
     this.request = request;
     this.tick(this.delay);
+    // The including block records its own runtime finality prefix.
+    this.head.finalizedNumber = this.head.number - this.inclusionLag;
+    this.history.set(this.head.hash, structuredClone(this.head));
     this.held = {
       id: h(99),
       funder: this.account,
@@ -100,7 +141,7 @@ function rewrite(ref: string, update: (r: any) => void): string {
     new TextDecoder().decode(base64urlnopad.decode(ref.slice(6))),
   );
   update(data);
-  return `flop1.${base64urlnopad.encode(new TextEncoder().encode(canonicalJson(data)))}`;
+  return `${ref.slice(0, 6)}${base64urlnopad.encode(new TextEncoder().encode(canonicalJson(data)))}`;
 }
 describe("configuration", () => {
   it("defaults to devnet and exposes explicit timing assumptions", () => {
@@ -136,6 +177,28 @@ describe("configuration", () => {
   ])("rejects malformed config %j", (config) => {
     expect(() => resolveFlopConfig(config as any)).toThrow();
   });
+  it("has no R10.2 option: the parameters come from the chain, never the caller", async () => {
+    expect(resolveFlopConfig()).not.toHaveProperty("symmetry");
+    const lax = {
+      marginPercent: 0,
+      maxFinalityStallBlocks: 0,
+      finalityFreezeThresholdBlocks: 0xffffffff,
+    };
+    expect(resolveFlopConfig({ symmetry: lax } as any)).not.toHaveProperty(
+      "symmetry",
+    );
+    const chain = new Chain();
+    chain.params = { ...YP };
+    const rail = new FlopRail(
+      chain,
+      { symmetry: lax } as any,
+      () => chain.head.timestampMs,
+    );
+    await expect(rail.lock(terms())).rejects.toBeInstanceOf(
+      FlopAdmissionError,
+    );
+    expect(chain.opens).toBe(0);
+  });
 });
 describe("FlopRail", () => {
   it("locks integer base units with exactly two hash leaves and a conservative block deadline", async () => {
@@ -170,6 +233,33 @@ describe("FlopRail", () => {
     await rail.refund(ref);
     expect(chain.refunds).toBe(1);
     await expect(rail.refund(ref)).rejects.toThrow();
+  });
+  it("gates claim, refund and verifyLock on the runtime finality prefix, not the snapshot height", async () => {
+    // The #171 review case in FlopRail's terms: the height reaches the deadline while
+    // the runtime prefix lags 10 behind. A lagging prefix freezes the block deadline
+    // for both fund-releasing paths (yellow paper R2.2).
+    const { chain, rail, t } = setup();
+    const ref = await rail.lock(t); // deadline 191
+    const at = (number: number, prefix: number, timestampMs: number) => {
+      Object.assign(chain.head, {
+        number,
+        finalizedNumber: prefix,
+        timestampMs,
+        hash: h(number),
+      });
+      chain.history.set(chain.head.hash, structuredClone(chain.head));
+    };
+    // Blocks ran faster than nominal: height 191 before claimByMs, prefix 181.
+    at(191, 181, T0 + 20_000);
+    expect(await rail.verifyLock(t, ref)).toBe(true);
+    await expect(rail.claim(ref, h(7))).rejects.toThrow("secret"); // still open
+    // Past refundAfterMs and 109 blocks past the deadline, prefix still 190.
+    at(300, 190, T0 + 120_000);
+    await expect(rail.refund(ref)).rejects.toThrow("not open");
+    at(301, 191, T0 + 121_000);
+    await rail.refund(ref);
+    expect(chain.refunds).toBe(1);
+    expect(chain.claims).toBe(0);
   });
   it("rejects a third-party refund but permits a relayed claim to the fixed payee", async () => {
     const { chain, rail, t } = setup();
@@ -253,12 +343,14 @@ describe("FlopRail", () => {
       (r: any) => (r.blockTimeMs = 500),
       (r: any) => (r.refundMarginBlocks = 1),
       (r: any) => (r.extra = true),
+      (r: any) => (r.v = 1),
+      (r: any) => delete r.symmetry,
     ]) {
       const wrong = rewrite(ref, update);
       expect(await rail.verifyLock(t, wrong)).toBe(false);
       await expect(rail.claim(wrong, secret)).rejects.toThrow();
     }
-    for (const bad of ["", ref + "=", "flop1.invalid", ref.slice(0, -4)])
+    for (const bad of ["", ref + "=", "flop2.invalid", ref.slice(0, -4)])
       expect(await rail.verifyLock(t, bad)).toBe(false);
     chain.head.genesis = h(9);
     expect(await rail.verifyLock(t, ref)).toBe(false);
@@ -529,5 +621,308 @@ describe("pending reference validation", () => {
     await rail.lock(terms());
     await expect(rail.claim(pending, secret)).rejects.toThrow("agreed terms");
     expect(chain.claims).toBe(0);
+  });
+});
+
+describe("R10.2 admission (always on, parameters from the chain)", () => {
+  // The yellow paper's parameters on a chain anchored at height 1000, time T0, with runtime
+  // finality prefix 999 (lag 1). claimByMs is 3600 one-second blocks out, so R10.2 requires
+  // 3600 + max(720, 3600 + lag) = 7200 + lag in the admitting block.
+  const withTimeout = (blocks: number): LockTerms => ({
+    ...terms(),
+    claimByMs: T0 + 3_600_000,
+    refundAfterMs: T0 + (blocks - 30) * 1000, // timeout = ceil(...) + margin 30
+  });
+  function ypChain(): Chain {
+    const chain = new Chain();
+    chain.params = { ...YP };
+    Object.assign(chain.head, {
+      number: 1_000,
+      finalizedNumber: 999,
+      hash: h(1_000),
+    });
+    chain.history.set(chain.head.hash, structuredClone(chain.head));
+    return chain;
+  }
+  const railOn = (chain: Chain, journal?: (pending: string) => Promise<void>) =>
+    new FlopRail(chain, {}, () => chain.head.timestampMs, journal);
+  const carried = (ref: string) =>
+    JSON.parse(new TextDecoder().decode(base64urlnopad.decode(ref.slice(6))))
+      .symmetry;
+
+  it("applies the runtime's parameters without any option, refusing one block short before journaling or sending", async () => {
+    const chain = ypChain();
+    const journal: string[] = [];
+    const rail = railOn(chain, async (pending) => {
+      journal.push(pending);
+    });
+    const error = await rail.lock(withTimeout(7_200)).catch((e) => e);
+    expect(error).toBeInstanceOf(FlopAdmissionError);
+    expect(error.reason).toBe("timelock-symmetry");
+    expect(error.message).toContain(
+      "7200 blocks offered, 7201 required (T_other 3600, finality lag 1)",
+    );
+    expect(journal).toHaveLength(0);
+    expect(chain.opens).toBe(0);
+    // The refusal took neither the duplicate guard nor a journal entry.
+    const t = withTimeout(7_201);
+    const ref = await rail.lock(t);
+    expect(journal).toHaveLength(1);
+    expect(chain.request!.deadlineBlocks).toBe(7_201);
+    expect(await rail.verifyLock(t, ref)).toBe(true);
+    expect(ref.startsWith("flop2.")).toBe(true);
+    expect(carried(ref)).toEqual(YP);
+  });
+
+  it("applies the finality-open gate first: refused at finality_freeze_threshold, admitted below it", async () => {
+    const chain = ypChain();
+    const journal: string[] = [];
+    const rail = railOn(chain, async (pending) => {
+      journal.push(pending);
+    });
+    // A stall at the tip: the best block leads the runtime prefix by 120 while the
+    // finalized anchor still shows lag 1.
+    chain.best = { number: 1_119, finalizedNumber: 999 };
+    // Long enough for any lag, so only the gate can refuse it.
+    const error = await rail.lock(withTimeout(20_000)).catch((e) => e);
+    expect(error).toBeInstanceOf(FlopAdmissionError);
+    expect(error.reason).toBe("finality-freeze");
+    expect(error.message).toContain(
+      "finality lag 120 is at or above the R10.2 freeze threshold 120",
+    );
+    // Refused before the journal, on the best block rather than the anchor.
+    expect(journal).toHaveLength(0);
+    expect(chain.opens).toBe(0);
+    chain.best = { number: 1_118, finalizedNumber: 999 }; // lag 119
+    await expect(rail.lock(withTimeout(7_318))).rejects.toThrow(
+      "7318 blocks offered, 7319 required (T_other 3600, finality lag 119)",
+    );
+    expect(journal).toHaveLength(0);
+    expect(chain.opens).toBe(0);
+    const t = withTimeout(7_319);
+    expect(await rail.verifyLock(t, await rail.lock(t))).toBe(true);
+  });
+
+  it("reads current_finality_lag in the block the open builds on, not at the finalized anchor", async () => {
+    const chain = ypChain();
+    const journal: string[] = [];
+    const rail = railOn(chain, async (pending) => {
+      journal.push(pending);
+    });
+    chain.best = { number: 1_049, finalizedNumber: 999 }; // lag 50; the anchor shows 1
+    await expect(rail.lock(withTimeout(7_201))).rejects.toThrow(
+      "7201 blocks offered, 7250 required (T_other 3600, finality lag 50)",
+    );
+    expect(journal).toHaveLength(0); // the check before the journal read the best block
+    const t = withTimeout(7_250);
+    expect(await rail.verifyLock(t, await rail.lock(t))).toBe(true);
+  });
+
+  it("verifies in the escrow's createdBlock, so the payer's lock and the payee's verifyLock agree", async () => {
+    // The best block showed lag 1 when the payer checked; the block that included the
+    // open recorded lag 10, so R10.2 there requires 7210.
+    for (const [blocks, admitted] of [
+      [7_201, false],
+      [7_209, false],
+      [7_210, true],
+    ] as const) {
+      const chain = ypChain();
+      chain.inclusionLag = 10;
+      const payer = railOn(chain);
+      const payee = railOn(chain);
+      const t = withTimeout(blocks);
+      let ref: string;
+      if (admitted) ref = await payer.lock(t);
+      else {
+        const error = await payer.lock(t).catch((e) => e);
+        expect(error).toBeInstanceOf(FlopLockError); // opened: keep the ref to refund
+        ref = error.ref;
+      }
+      expect(chain.opens).toBe(1);
+      expect(await payer.verifyLock(t, ref)).toBe(admitted);
+      expect(await payee.verifyLock(t, ref)).toBe(admitted);
+    }
+  });
+
+  it("refuses at verification when the block that included the open had reached the freeze threshold", async () => {
+    for (const [lag, admitted] of [
+      [120, false],
+      [119, true],
+    ] as const) {
+      const chain = ypChain();
+      chain.inclusionLag = lag;
+      // Long enough for either lag, so only the gate can refuse it.
+      const t = withTimeout(20_000);
+      const ref = await railOn(chain)
+        .lock(t)
+        .catch((e) => {
+          expect(e).toBeInstanceOf(FlopLockError);
+          return e.ref as string;
+        });
+      expect(await railOn(chain).verifyLock(t, ref)).toBe(admitted);
+    }
+  });
+
+  it("keeps the verdict fixed after inclusion, however far the tip's finality falls behind", async () => {
+    const chain = ypChain();
+    const payer = railOn(chain);
+    const payee = railOn(chain);
+    const t = withTimeout(7_201);
+    const ref = await payer.lock(t);
+    expect(await payee.verifyLock(t, ref)).toBe(true);
+    chain.tick(2_000);
+    // Finality stalls after inclusion: lag 1000 in the finalized head, more at the tip.
+    chain.head.finalizedNumber = chain.head.number - 1_000;
+    chain.best = {
+      number: chain.head.number + 500,
+      finalizedNumber: chain.head.finalizedNumber,
+    };
+    expect(await payee.verifyLock(t, ref)).toBe(true);
+  });
+
+  it("converts claimByMs to one-second blocks, whatever blockTimeMs is", async () => {
+    const chain = ypChain();
+    const rail = new FlopRail(
+      chain,
+      { blockTimeMs: 500 },
+      () => chain.head.timestampMs,
+    );
+    // 1_800_000 ms is 1800 one-second blocks (3600 at the configured 500 ms). T_FLOP is
+    // the pallet timeout, still counted at 500 ms: R10.2 requires 1800 + max(360, 3601).
+    const at500 = (blocks: number, claimMs = 1_800_000): LockTerms => ({
+      ...terms(),
+      claimByMs: T0 + claimMs,
+      refundAfterMs: T0 + (blocks - 30) * 500,
+    });
+    await expect(rail.lock(at500(5_400))).rejects.toThrow(
+      "5400 blocks offered, 5401 required (T_other 1800, finality lag 1)",
+    );
+    // A part of a second rounds up: 1_800_001 ms is 1801 blocks.
+    await expect(rail.lock(at500(5_401, 1_800_001))).rejects.toThrow(
+      "5401 blocks offered, 5402 required (T_other 1801, finality lag 1)",
+    );
+    const t = at500(5_401);
+    expect(await rail.verifyLock(t, await rail.lock(t))).toBe(true);
+  });
+
+  it("binds the parameters into the reference and requires them to be the admitting block's constants", async () => {
+    const chain = ypChain();
+    const rail = railOn(chain);
+    const t = withTimeout(7_201);
+    const ref = await rail.lock(t);
+    // Laxer parameters written into the reference break the policy binding.
+    const lax = rewrite(ref, (r) => {
+      r.symmetry = { ...YP, maxFinalityStallBlocks: 0 };
+    });
+    expect(await rail.verifyLock(t, lax)).toBe(false);
+    await expect(rail.claim(lax, secret)).rejects.toThrow("agreed terms");
+    // The admitting block's runtime reports other constants than the reference carries.
+    chain.params = { ...YP, marginPercent: 25 };
+    expect(await rail.verifyLock(t, ref)).toBe(false);
+    chain.params = { ...YP };
+    expect(await rail.verifyLock(t, ref)).toBe(true);
+  });
+
+  it("evaluates again after journaling and sends nothing if finality fell behind meanwhile", async () => {
+    const chain = ypChain();
+    let stall = true;
+    const rail = railOn(chain, async () => {
+      if (stall) chain.best = { number: 1_120, finalizedNumber: 1_000 }; // lag 120
+    });
+    const error = await rail.lock(withTimeout(7_300)).catch((e) => e);
+    expect(error).toBeInstanceOf(FlopAdmissionError);
+    expect(error.reason).toBe("finality-freeze");
+    expect(chain.opens).toBe(0);
+    // The refusal released the duplicate guard: once finality catches up, a retry locks.
+    stall = false;
+    chain.best = undefined;
+    const t = withTimeout(7_300);
+    expect(await rail.verifyLock(t, await rail.lock(t))).toBe(true);
+  });
+
+  it("sends nothing if the runtime's constants change while the journal runs", async () => {
+    const chain = ypChain();
+    let upgrade = true;
+    const rail = railOn(chain, async () => {
+      if (upgrade) chain.params = { ...YP, maxFinalityStallBlocks: 3_000 };
+      upgrade = false;
+    });
+    await expect(rail.lock(withTimeout(7_201))).rejects.toThrow(
+      "differ from the admitting block's runtime constants",
+    );
+    expect(chain.opens).toBe(0);
+    // A fresh attempt reads, carries and is verified under the new constants.
+    const t = withTimeout(7_201);
+    const ref = await rail.lock(t);
+    expect(carried(ref)).toEqual({ ...YP, maxFinalityStallBlocks: 3_000 });
+    expect(await rail.verifyLock(t, ref)).toBe(true);
+  });
+
+  it("never applies R10.2 to claim or refund, so an escrow it refused stays settleable", async () => {
+    for (const settle of ["claim", "refund"] as const) {
+      const chain = ypChain();
+      chain.inclusionLag = 120;
+      const t = withTimeout(20_000);
+      const error = await railOn(chain).lock(t).catch((e) => e);
+      expect(error).toBeInstanceOf(FlopLockError);
+      const rail = railOn(chain);
+      expect(await rail.verifyLock(t, error.ref)).toBe(false);
+      if (settle === "claim") {
+        await rail.claim(error.ref, secret);
+        expect(chain.claims).toBe(1);
+      } else {
+        chain.tick(20_001); // finalized 21_001 >= deadline 21_001, wall time past refundAfterMs
+        await rail.refund(error.ref);
+        expect(chain.refunds).toBe(1);
+      }
+    }
+  });
+
+  it("fails closed on a malformed or mismatched admission block", async () => {
+    const corruptions: ((block: any) => void)[] = [
+      (b) => (b.finalizedNumber = b.number + 1),
+      (b) => (b.finalizedNumber = NaN),
+      (b) => (b.number = 2 ** 32),
+      (b) => (b.number -= 1),
+      (b) => (b.genesis = h(9)),
+      (b) => (b.hash = "0x12"),
+      (b) => delete b.params.finalityFreezeThresholdBlocks,
+      (b) => (b.params.extra = 1),
+      (b) => (b.params.marginPercent = "20"),
+      (b) => (b.params.maxFinalityStallBlocks = -1),
+    ];
+    const corrupt = (chain: Chain, change: (block: any) => void) => {
+      const read = chain.admissionBlock.bind(chain);
+      chain.admissionBlock = async (height) => {
+        const block = await read(height);
+        change(block);
+        return block;
+      };
+    };
+    for (const change of corruptions) {
+      const before = ypChain();
+      corrupt(before, change);
+      await expect(railOn(before).lock(withTimeout(7_201))).rejects.toThrow();
+      expect(before.opens).toBe(0);
+      const after = ypChain();
+      const t = withTimeout(7_201);
+      const ref = await railOn(after).lock(t);
+      corrupt(after, change);
+      expect(await railOn(after).verifyLock(t, ref)).toBe(false);
+    }
+  });
+
+  it("refuses a flop1 reference, which carries no R10.2 parameters", async () => {
+    const chain = ypChain();
+    const rail = railOn(chain);
+    const t = withTimeout(7_201);
+    const ref = await rail.lock(t);
+    const v1 = `flop1.${rewrite(ref, (r) => {
+      r.v = 1;
+      delete r.symmetry;
+    }).slice(6)}`;
+    expect(await rail.verifyLock(t, v1)).toBe(false);
+    await expect(rail.claim(v1, secret)).rejects.toThrow("malformed reference");
+    await expect(rail.refund(v1)).rejects.toThrow("malformed reference");
   });
 });

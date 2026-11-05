@@ -321,7 +321,11 @@ binds the hash-lock subset to FLOP; other rails remain integrations outside this
   `And[Hash(h), Before(T)]` or `Point(Y)` policy leaf. The statement encodings here are chosen to
   be byte-identical to that escrow's: a 32-byte sha256 digest for `Hash`, a 33-byte
   SEC1-compressed point for `Point`. Block deadlines derive from the ms deadlines with a
-  timelock-symmetry margin. `FlopRail` v1 uses two hash leaves: the payment
+  timelock-symmetry margin. `FlopRail` admits a lock only under the yellow paper's R10.2
+  rule (the finality-open gate, then that margin), with the runtime's own parameters and
+  the finality lag read in the block that includes the escrow; `claimByMs` stands in for
+  the counter-chain duration ([details](flop/README.md#timelock-symmetry-r102)).
+  `FlopRail` v1 uses two hash leaves: the payment
   statement plus a public witness committing all agreed terms, chain identity and
   timing configuration. The pallet enforces its own escrow deadline; no additional
   `Before` leaf is needed. See [the versioned binding](flop/README.md#binding-and-deadlines)

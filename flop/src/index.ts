@@ -6,6 +6,16 @@ export type {
   ResolvedFlopConfig,
 } from "./config.js";
 export {
+  checkTimelockSymmetry,
+  timelockSymmetryMinimum,
+  toOneSecondBlocks,
+  FlopAdmissionError,
+} from "./symmetry.js";
+export type {
+  FlopSymmetryParams,
+  TimelockSymmetryInputs,
+} from "./symmetry.js";
+export {
   FlopRail,
   FlopLockError,
   FlopSubmissionError,
@@ -13,6 +23,7 @@ export {
   flopAccountFromDid,
 } from "./rail.js";
 export type {
+  FlopAdmissionBlock,
   FlopChain,
   FlopSnapshot,
   FlopEscrow,
