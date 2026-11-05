@@ -18,6 +18,7 @@ export type {
   FlopEscrow,
   FlopOpenRequest,
   FlopPendingWriter,
+  FlopSweepEntry,
 } from "./rail.js";
 export {
   connectFlopRail,

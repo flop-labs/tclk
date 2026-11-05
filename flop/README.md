@@ -151,6 +151,16 @@ an uncertain result. There is no on-chain uniqueness key for a tclk contract in
 this pallet: separate wallets/processes must coordinate pending operations to
 avoid duplicate deposits. One escrow cannot be released and refunded twice.
 
+The duplicate guard lives in memory, so a restarted wallet has only its journal.
+`rail.sweep(refs)` takes the journal's references, refunds each Open escrow this
+signer funded once its refund window is open, and returns one entry per distinct
+reference: `{ ref, status, refunded, error? }`. `status` is the finalized escrow
+status, `"pending"` for a zero-escrow `pendingRef` (complete it with
+`recoverFlopReference` first; the sweep cannot find an escrow ID for it), or
+`"failed"`. A failed refund is reported, not retried. Running the sweep again is
+safe, because it reads finalized state before every refund and skips an escrow
+that is no longer Open.
+
 ## Devnet exercise
 
 Set two fresh, distinct Ed25519 seeds locally as `FLOP_PAYER_SEED` and
