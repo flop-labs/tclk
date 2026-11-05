@@ -6,6 +6,11 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Documentation
+
+- Specify the canonical UTF-16 code-unit key order and the safe-integer decimal form for the three
+  Unix-ms frame fields so non-JavaScript implementations can reproduce tclk/1 identifiers exactly.
+
 ### Fixed
 
 - Transcript JSON readers on runtimes without reviver source context now preserve
