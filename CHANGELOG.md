@@ -8,6 +8,10 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `@flop-labs/tclk-flop`: read-only chain snapshots are retried up to three attempts,
+  so a transient RPC failure no longer makes a healthy escrow fail `verifyLock` or
+  throw from `claim`/`refund`. Writes are still never retried.
+
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.
