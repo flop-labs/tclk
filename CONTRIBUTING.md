@@ -83,7 +83,9 @@ One release:
 
 1. Fold `[Unreleased]` in `CHANGELOG.md` into a dated section and set the version in both
    `package.json` and `mcp/package.json` — the workflow refuses to publish if the tag and
-   the two manifests disagree.
+   the two manifests disagree. The MCP server announces `mcp/package.json`'s version, and
+   the Worker's generated manifest carries it: rebuild and run
+   `pnpm --filter @flop-labs/tclk-mcp run gen:worker-manifest`, or its drift test fails.
 2. Tag it `vX.Y.Z` and push the tag.
 3. Approve the `npm` environment when it asks.
 

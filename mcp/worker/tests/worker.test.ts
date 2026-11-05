@@ -4,6 +4,8 @@
 // tool that would reach for one gets the suite's `fakeFetch`, and the tools that decide
 // not to post never call it at all.
 
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -15,6 +17,9 @@ import { TOOLS } from "../src/tool-manifest.generated.js";
 import type { FetchLike } from "../../src/technocore.js";
 
 const ENV: Env = { TECHNOCORE_URL: "https://technocore.chat" };
+const { version: MCP_VERSION } = JSON.parse(
+  readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
+) as { version: string };
 const ROOM = "mb-p-tclk-deadbeefdeadbeef";
 const payer = signerFromSeed(hexToBytes(PAYER_SEED));
 const payee = signerFromSeed(hexToBytes(PAYEE_SEED));
@@ -58,7 +63,7 @@ describe("handshake", () => {
     expect(body.jsonrpc).toBe("2.0");
     expect(body.result.protocolVersion).toBe("2025-06-18");
     expect(body.result.capabilities.tools).toBeDefined();
-    expect(body.result.serverInfo).toEqual({ name: "tclk-mcp", version: "0.1.0" });
+    expect(body.result.serverInfo).toEqual({ name: "tclk-mcp", version: MCP_VERSION });
     expect(body.result.instructions).toContain("holds no custody");
   });
 
