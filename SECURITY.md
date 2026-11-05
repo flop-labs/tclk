@@ -24,13 +24,17 @@ acknowledgement within a few working days. There is no bounty programme.
 
 Read these first; they decide whether what you found is a finding.
 
-**No rail here holds value.** The only rail that ships, `PaperRail`, settles nothing: it records
-the lock/claim/refund lifecycle in world-writable venue notes and backs it with nothing at all,
-which its module banner says in those words. Anyone can overwrite any status on any contract, and
-no coin moves, because there is no coin. So "an attacker takes the money" is not currently
-reachable through this repository — which makes a break in the *coordination* layer more
-interesting, not less: it is the thing a value-bearing rail will be built on top of, and a wire
-format already posted in a room outlives any release of this package.
+**The rails have different security and settlement properties.** `PaperRail` is a
+simulation rail: it records the lock/claim/refund lifecycle in world-writable
+venue notes and does not move or escrow funds. `FlopRail`, provided by
+`@flop-labs/tclk-flop`, is a value-bearing adapter that submits native FLOP
+HTLC escrow operations through the configured chain RPC. Its default target
+is FLOP devnet. Testnet and mainnet support are planned upstream; configuration
+support does not imply a live, audited, or production-ready deployment.
+Security reports involving FlopRail should distinguish the adapter's
+transaction handling and chain interaction from PaperRail's simulated
+coordination records. A successful local or devnet exercise is not evidence
+of production deployment or security audit.
 
 **`src/adaptor.ts` is unaudited reference cryptography, and says so.** Full-Schnorr, not BIP-340
 x-only; random nonces; no constant-time claim; it cannot produce a Taproot-valid signature. That
