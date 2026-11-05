@@ -100,7 +100,10 @@
           "type": "string",
           "pattern": "^0x(?:[0-9a-f]{64}|[0-9a-f]{66})$"
         },
-        "contract": { "$ref": "#/$defs/hex32" },
+        "contract": {
+          "$ref": "#/$defs/hex32",
+          "x-tclk-derived": true
+        },
         "paymentKey": { "$ref": "#/$defs/hex33" },
         "nonce": { "$ref": "#/$defs/nonce" }
       },

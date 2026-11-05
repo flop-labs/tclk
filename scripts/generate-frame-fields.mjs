@@ -30,9 +30,22 @@ const generated = `// SPDX-License-Identifier: Apache-2.0\n` +
   `export const CANONICAL_RAIL_IDS = ${JSON.stringify(schema.$defs.rail["x-tclk-canonicalIds"], null, 2)} as const;\n\n` +
   `export const RAIL_ID_ALIASES = ${JSON.stringify(schema.$defs.rail["x-tclk-aliases"], null, 2)} as const;\n`;
 
+// A required field the sender computes rather than supplies reads, in a list beside five it can
+// copy, like one more thing to fill in — and it is the one that gets left out. Mark it in the
+// table, since the table is what implementers write their frames from.
+const derived = Object.fromEntries(frameNames.map((name) => [
+  name,
+  Object.entries(schema.$defs[name].properties)
+    .filter(([, property]) => property["x-tclk-derived"])
+    .map(([field]) => field),
+]));
+const anyDerived = frameNames.some((name) => derived[name].length > 0);
+
 const rows = frameNames.map((name) => {
   const definition = fields[name];
-  const required = definition.required.map((field) => `\`${field}\``).join(", ");
+  const required = definition.required
+    .map((field) => derived[name].includes(field) ? `\`${field}\`&nbsp;†` : `\`${field}\``)
+    .join(", ");
   const optionalFields = definition.allowed.filter((field) => !definition.required.includes(field));
   const optional = optionalFields.length === 0
     ? "—"
@@ -44,6 +57,14 @@ const table = [
   "| frame | required fields | optional fields |",
   "|---|---|---|",
   ...rows,
+  ...(anyDerived
+    ? [
+      "",
+      "† Derived, not supplied. The sending side computes it from frames that are already public;"
+      + " it is never a value the counterparty fills in later. A frame that omits it is rejected at"
+      + " decode, before it is signed, posted, or used to advance state.",
+    ]
+    : []),
   "<!-- END GENERATED FRAME FIELDS -->",
 ].join("\n");
 
