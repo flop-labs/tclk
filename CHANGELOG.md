@@ -8,6 +8,16 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Added `lossyStateNoteValueDetails` returning `{ value, droppedRef }` while preserving
+  `lossyStateNoteValue`'s string return. `droppedRef` reports note serialization loss only,
+  not signature verification, authority, or verified settlement. All state-note serializers
+  reject invalid runtime statuses. The PaperRail live example uses strict serialization
+  for its representable contract-id references and matching CAS expectations.
+- Callers can use `lossyStateNoteValue` to explicitly choose a status-only coordination pointer
+  when a rail reference cannot fit the note's printable-ASCII, no-space, 256-character grammar;
+  strict `stateNoteValue` still rejects the reference instead of discarding it silently. The
+  exact reference remains in the signed tclk/1 frame and contract state, preserving historical
+  replay and exact reveal/refund/receipt comparisons (#123).
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.
