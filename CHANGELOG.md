@@ -15,6 +15,9 @@ All notable changes to this project are documented here. Format follows
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
   boundary rather than silently rounded.
+- `examples/live-deal.mjs` reads the deal-room window with `parseRecordJson`, as the
+  MCP `readRoom` does since #82. A single record with a nonce above 2^53 no longer makes the
+  third-party verification step throw.
 
 ### Added
 
