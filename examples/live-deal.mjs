@@ -26,7 +26,7 @@ import { randomBytes } from "node:crypto";
 import {
   OFFER_ROOM, PaperRail, applyFrame, dealRoom, encodeFrame, findContractHandshake, foldTranscript,
   generateHashLock, lockTerms, makeAccept, makeOffer, openContract, paperNote,
-  parseTranscriptExport, stateNote, stateNoteValue, transcriptRecord,
+  parseRecordJson, parseTranscriptExport, stateNote, stateNoteValue, transcriptRecord,
 } from "../dist/index.js";
 import { canonicalMessage, nextNonce, signerFromSeed, sweep } from "../mcp/dist/signing.js";
 
@@ -113,7 +113,10 @@ async function req(url, init, what) {
 async function readRoom(room) {
   const res = await req(`${BASE}/r/${room}?format=json`, undefined, `read ${room}`);
   if (!res.ok) throw await refusal(`read ${room}`, res);
-  const view = await res.json();
+  // Not res.json(): the venue sends a signed record's nonce as a bare JSON number, and a
+  // nanosecond-clock signer's 19 digits round past 2^53. transcriptRecord then throws on
+  // that one record and the whole read fails. parseRecordJson keeps the exact digits.
+  const view = parseRecordJson(await res.text());
   if (!view || !Array.isArray(view.messages)) throw new Error(`read ${room}: no messages array`);
   return view.messages.map((message) => transcriptRecord(room, message));
 }
