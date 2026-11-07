@@ -8,6 +8,9 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `SPEC.md` no longer advertises mailbox-delivered `accept` messages as a tclk/1
+  rendezvous alternative: only board-posted signed accepts can complete the
+  authenticated handshake and advance the fold (#198).
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.
