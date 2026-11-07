@@ -19,6 +19,8 @@ const schema = JSON.parse(readFileSync(
 const PAYER_DID = "did:key:z6Mk" + "f".repeat(44);
 const CONTRACT = "0x" + "11".repeat(32);
 const PRESIG_NONCE = "0x02" + "11".repeat(32);
+const OFF_CURVE_PAYMENT_KEY = "0x02fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f";
+const INVALID_COMPRESSED_PAYMENT_KEY = "0x04" + "11".repeat(32);
 
 /**
  * Evaluate one schema string leaf against a value, following at most one `$ref`. Every
@@ -81,6 +83,25 @@ describe("protocol schema", () => {
       expect(schemaAdmits("presig", "s", s), `schema rejects presig.s ${s}`).toBe(true);
       expect(() => validateFrame(lockWithPresigScalar(s))).not.toThrow();
     }
+  });
+
+  it("documents the payment-key runtime point constraint without pretending regex proves it", () => {
+    const paymentKey = schema.$defs.paymentKey;
+
+    expect(paymentKey["x-tclk-runtimeConstraint"]).toBe("secp256k1-compressed-point-on-curve");
+    expect(schemaAdmits("accept", "paymentKey", OFF_CURVE_PAYMENT_KEY)).toBe(true);
+    expect(schemaAdmits("accept", "paymentKey", INVALID_COMPRESSED_PAYMENT_KEY)).toBe(false);
+    expect(schemaAdmits("offer", "paymentKey", INVALID_COMPRESSED_PAYMENT_KEY)).toBe(false);
+
+    expect(() => validateFrame({
+      type: "accept",
+      from: PAYER_DID,
+      ref: CONTRACT,
+      statement: "0x" + "22".repeat(32),
+      contract: "0x" + "33".repeat(32),
+      paymentKey: OFF_CURVE_PAYMENT_KEY,
+      nonce: "9f2c81d04c9e1f7a",
+    })).toThrow(/paymentKey is not a valid secp256k1 point/);
   });
 
   it("admits no job reference the decoder rejects", () => {

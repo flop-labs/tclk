@@ -8,6 +8,7 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- The shipped tclk/1 JSON Schema now rejects uncompressed `0x04` payment-key encodings that the runtime already refused; it specifies SEC1-compressed lexical shape and marks the secp256k1 on-curve check as a runtime constraint rather than pretending a regex can prove curve membership (#182).
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.
