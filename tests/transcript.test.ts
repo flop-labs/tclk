@@ -153,6 +153,29 @@ describe("trusted transcript records", () => {
     });
   });
 
+  it("accepts a signed 19-digit nonce and rejects an otherwise-valid 20-digit nonce", () => {
+    const { offer } = deal();
+    const line = encodeFrame(offer);
+    const nonce19 = "9999999999999999999";
+    const valid = {
+      ...record(BOARD, 1, NOW, payer, line),
+      nonce: nonce19,
+      signature: payer.sign(`${BOARD}|${nonce19}|${line}`),
+    };
+    expect(verifyTranscriptRecord(valid)).toEqual({ ok: true });
+
+    const nonce20 = "10000000000000000000";
+    const impossible = {
+      ...valid,
+      nonce: nonce20,
+      signature: payer.sign(`${BOARD}|${nonce20}|${line}`),
+    };
+    expect(verifyTranscriptRecord(impossible)).toEqual({
+      ok: false,
+      reason: "record nonce is not canonical decimal",
+    });
+  });
+
   it("rejects unsigned records and malformed timestamps without a fallback clock", () => {
     const { offer } = deal();
     const unsigned = record(BOARD, 1, NOW, payer, encodeFrame(offer));
