@@ -13,6 +13,8 @@ import {
   makeAccept,
   makeOffer,
   parseTranscriptExport,
+  parseRecordJson,
+  verifyTranscriptRecord,
   type TranscriptRecord,
 } from "../src/index.js";
 
@@ -215,6 +217,19 @@ describe("trusted transcript records", () => {
     });
     expect(() => parseTranscriptExport(BOARD, withoutTimezone)).toThrow(/timezone-qualified/);
     expect(() => parseTranscriptExport(BOARD, localeTimestamp)).toThrow(/timezone-qualified/);
+  });
+
+  it("preserves exact nonces above 2^53 in export rows (#78)", () => {
+    const { offer } = deal();
+    const line = encodeFrame(offer);
+    const largeNonce = "1730000000000000001";
+    const sig = payer.sign(`${BOARD}|${largeNonce}|${line}`);
+    const rawExportLine = `{"seq":1,"ts":"2026-09-03T23:50:00Z","from":"${payer.did}","nonce":1730000000000000001,"sig":"${sig}","text":${JSON.stringify(line)}}`;
+
+    const records = parseTranscriptExport(BOARD, `${rawExportLine}\n`);
+    expect(records).toHaveLength(1);
+    expect(records[0].nonce).toBe(largeNonce);
+    expect(verifyTranscriptRecord(records[0]).ok).toBe(true);
   });
 
   it("never synthesizes offer-before-accept order while selecting a board handshake", () => {
