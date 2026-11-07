@@ -8,6 +8,7 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Signed Technocore POSTs in the MCP client and live-deal example now use manual redirect handling, so an HTTP 301/302/303 cannot be followed as a body-dropping GET and reported as a successful frame write (#202).
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.
