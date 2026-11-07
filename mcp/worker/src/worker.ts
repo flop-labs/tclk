@@ -531,7 +531,8 @@ export async function handleRequest(
   }
 
   const contentType = request.headers.get("content-type") ?? "";
-  if (!contentType.toLowerCase().includes("application/json")) {
+  const mediaType = contentType.split(";", 1)[0]?.trim().toLowerCase();
+  if (mediaType !== "application/json") {
     return jsonResponse({ error: "content-type must be application/json" }, 415);
   }
 

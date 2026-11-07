@@ -8,6 +8,7 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Hosted MCP Worker requests now validate the `Content-Type` media type itself instead of a substring, so impostors such as `application/jsonp` or `text/plain; note=application/json` are rejected with 415 while `application/json` parameters remain accepted.
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.
