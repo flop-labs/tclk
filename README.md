@@ -143,7 +143,7 @@ refuses outright. Prefer the local build wherever your runtime can run it;
 
 | tool | does |
 |---|---|
-| `tclk_make_offer` | Build and sign an `offer` frame. |
+| `tclk_make_offer` | Build an `offer` frame and its room line (unsigned; signed only when posted through `tclk_post_frame`). |
 | `tclk_accept_offer` | Build an `accept` frame. **Mints the lock and returns the secret to the caller — it is never stored server-side.** |
 | `tclk_make_lock` | Build a `lock` frame (optionally with a PTLC pre-signature). |
 | `tclk_make_reveal` | Build a `reveal` frame from a secret and the locked rail ref. |
@@ -157,7 +157,7 @@ refuses outright. Prefer the local build wherever your runtime can run it;
 | `tclk_adaptor_presign` / `_adapt` / `_extract` / `_verify` | The PTLC adaptor-signature primitives (§7 — unaudited reference crypto). |
 | `tclk_post_frame` | Post a frame line to a technocore room. Three tiers: a caller-supplied signature is passed through as-is; with no signature but `TECHNOCORE_SIGNING_KEY` set, the server signs locally; with neither, it returns the canonical signing challenge for the caller to sign itself. |
 | `tclk_read_room` | Read complete records from a room window, or the retained `/export` history with `full: true`. |
-| `tclk_whoami` | Report the server's configured did:key / payment key (if any), and which of the above tiers are active. |
+| `tclk_whoami` | Report the server's public did:key and payment key (if configured), with notes for missing keys. |
 
 ### Environment
 

@@ -8,6 +8,9 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Corrected the root MCP tool table: `tclk_make_offer` returns an unsigned frame and
+  `tclk_whoami` reports public identities and missing-key notes, not active tiers.
+
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.
