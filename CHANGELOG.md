@@ -8,6 +8,10 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- The MCP `tclk_make_heartbeat` tool description now correctly identifies its output as an
+  unsigned frame/line; callers must use `tclk_post_frame` to authenticate and post it.
+  The hosted Worker manifest advertises the same contract.
+
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.
