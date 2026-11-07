@@ -1,7 +1,7 @@
 /**
  * Tests for the Technocore Lock Protocol (tclk/1) primitives.
  *
- * This suite is the anti-drift gate for docs/design/technocore-lock-protocol.md:
+ * This suite is the anti-drift gate for SPEC.md:
  * the wire codec against the venue's caps (single line, ASCII, ≤4096 chars), the
  * domain-tagged ids, the fail-closed state machine, both lock kinds end-to-end
  * (HTLC preimage; PTLC witness incl. the adaptor pre-sign → adapt → extract cycle),

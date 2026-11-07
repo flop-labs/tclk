@@ -8,6 +8,9 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Correct stale protocol references in library and test headers, and link the normative
+  `SPEC.md` directly from the npm-published MCP README.
+
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.

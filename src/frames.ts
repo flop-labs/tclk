@@ -9,7 +9,7 @@
 // never normalizes; ASCII sidesteps both). Decoding is fail-closed: unknown keys, missing
 // fields, and malformed values reject — nothing is coerced.
 //
-// Spec: technocore-lock-protocol.md
+// Spec: SPEC.md
 
 import { sha256 } from "@noble/hashes/sha2.js";
 import { FRAME_FIELDS, TCLK1_RAIL_PATTERN } from "./frame-fields.generated.js";
