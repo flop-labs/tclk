@@ -144,7 +144,6 @@ describe("tclk_post_frame — tier 2, server-signed", () => {
       /failed with 403: 403 bad sig/,
     );
   });
-
   it("fails closed on redirects before fetch can rewrite a signed POST as GET", async () => {
     const calls: { url: string; init?: RequestInit }[] = [];
     const fetchLike = async (url: string, init?: RequestInit): Promise<Response> => {
@@ -293,6 +292,25 @@ describe("tclk_read_room", () => {
     const result = await h.tclk_read_room({ room: "lobby" });
     expect(result.records).toHaveLength(0);
     expect(result.malformed).toEqual([{ seq: null, reason: expect.stringMatching(/seq/) }]);
+  });
+
+  it("preserves nonces above 2^53 in window reads without marking them malformed (#78)", async () => {
+    const rawBody = JSON.stringify({
+      room: "lobby",
+      count: 1,
+      last_seq: 1,
+      messages: [],
+    }).replace(
+      '"messages":[]',
+      '"messages":[{"seq":1,"ts":"2026-01-01T00:00:00Z","from":"did:key:z6Mkaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","text":"gm","nonce":1730000000000000001,"sig":"AQ"}]',
+    );
+
+    const { fetchLike } = fakeFetch([{ body: rawBody }]);
+    const h = createHandlers({ env: {}, fetch: fetchLike });
+    const result = await h.tclk_read_room({ room: "lobby" });
+    expect(result.malformed).toHaveLength(0);
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].nonce).toBe("1730000000000000001");
   });
 
   it("reads and strictly parses the full JSONL export", async () => {

@@ -9,6 +9,9 @@ All notable changes to this project are documented here. Format follows
 ### Fixed
 
 - Signed Technocore POSTs in the MCP client and live-deal example now use manual redirect handling, so an HTTP 301/302/303 cannot be followed as a body-dropping GET and reported as a successful frame write (#202).
+- Transcript JSON readers on runtimes without reviver source context now preserve
+  escaped nonce keys and complete numeric tokens without accepting invalid JSON or
+  changing signed text. Noncanonical nonce tokens remain rejected by verification.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
@@ -51,6 +54,13 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Preserve exact unrounded digit strings for bare numeric nonces above Number.MAX_SAFE_INTEGER
+  (2^53 - 1, up to 19 digits) in `parseTranscriptExport`, `parseRecordJson`, and `readRoom`.
+  Previously, standard `JSON.parse` rounded nanosecond-clock nonces and caused
+  `transcriptRecord` to reject valid rows as non-safe integers, refusing full-board exports
+  on the live venue (#78). Documented in `SPEC.md` §2 that the transport `nonce` is decimal
+  text, readers MUST recover its exact digits from wire bytes, and producers SHOULD emit it
+  as a JSON string (#78, #149).
 - `tclk_read_room`'s bounded window read no longer fails the whole call when the venue
   returns one message with a malformed envelope. A room is world-writable, so a single
   hostile line — a `nonce` that is not decimal text, a non-string `from` — used to throw
