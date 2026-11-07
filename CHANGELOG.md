@@ -8,6 +8,11 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `tclk_read_room` now fails closed when a `since` window's `first_seq` proves the
+  venue skipped retained records because the bounded tail filled before the caller polled.
+  The error points callers at `full: true` instead of returning a transcript slice with a
+  silent hole. An empty venue window has no `first_seq` evidence and cannot
+  certify continuity; use the retained export when completeness matters.
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.
