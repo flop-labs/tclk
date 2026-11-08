@@ -23,6 +23,9 @@ describe("security policy contract", () => {
     expect(policy).toContain("devnet");
     expect(policy).toContain("escrow");
     expect(policy).toContain('see "Custody in the MCP server" below');
+    const custodySection = policy.split("- **Custody in the MCP server.** ")[1];
+    expect(custodySection).toBeDefined();
+    expect(custodySection).toContain("Any path that stores, logs, or echoes a minted preimage");
     expect(policy).toMatch(/private advisory/i);
     expect(policy).not.toMatch(/No rail here holds value/i);
   });
