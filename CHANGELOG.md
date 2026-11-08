@@ -8,6 +8,10 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Correct the security policy's settlement-rail scope after the in-tree FLOP
+  HTLC adapter landed: distinguish `PaperRail` from value-bearing devnet escrow
+  operations and acknowledge existing published core/MCP releases. No runtime
+  or protocol behavior changes.
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.
