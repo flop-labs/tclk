@@ -8,6 +8,9 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Transcript JSON readers on runtimes without reviver source context now preserve
+  escaped nonce keys and complete numeric tokens without accepting invalid JSON or
+  changing signed text. Noncanonical nonce tokens remain rejected by verification.
 - Link the MCP README to the normative `SPEC.md` with an absolute URL that also works on npm.
 - `tclk_post_frame` now accepts exact decimal-string nonces in addition to safe integer
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
@@ -16,6 +19,13 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- `@flop-labs/tclk-flop`: native FLOP HTLC settlement with devnet defaults and
+  explicit testnet/mainnet RPC and genesis configuration. The rail binds terms to
+  finalized escrow state, signs locally with the party's Ed25519 key, and supports
+  recovery after uncertain submission. Deadlines use finalized block heights with
+  nominal millisecond conversion; chain stalls can delay refunds and changed block
+  rates can shift the effective expiry. The client rechecks the claim window and
+  anchor freshness after journaling, before submitting a lock.
 - A schema-owned tclk/1 frame field contract, canonical settlement-rail registry and
   intersection-based, order-independent rail matching helpers. Generated decoder fields
   and the normative `SPEC.md` table are checked for drift in CI.
@@ -46,6 +56,13 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Preserve exact unrounded digit strings for bare numeric nonces above Number.MAX_SAFE_INTEGER
+  (2^53 - 1, up to 19 digits) in `parseTranscriptExport`, `parseRecordJson`, and `readRoom`.
+  Previously, standard `JSON.parse` rounded nanosecond-clock nonces and caused
+  `transcriptRecord` to reject valid rows as non-safe integers, refusing full-board exports
+  on the live venue (#78). Documented in `SPEC.md` §2 that the transport `nonce` is decimal
+  text, readers MUST recover its exact digits from wire bytes, and producers SHOULD emit it
+  as a JSON string (#78, #149).
 - `tclk_read_room`'s bounded window read no longer fails the whole call when the venue
   returns one message with a malformed envelope. A room is world-writable, so a single
   hostile line — a `nonce` that is not decimal text, a non-string `from` — used to throw
