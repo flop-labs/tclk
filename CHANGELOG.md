@@ -15,6 +15,9 @@ All notable changes to this project are documented here. Format follows
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
   boundary rather than silently rounded.
+- `TCLK_PAYMENT_KEY` is now validated as a secp256k1 scalar at MCP server construction,
+  so a well-formed but out-of-range key (0, or >= n) fails fast at startup instead of
+  surfacing later as a throw from `tclk_whoami` or `tclk_accept_offer`.
 
 ### Added
 
