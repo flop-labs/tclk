@@ -8,6 +8,12 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `FlopRail.lock` measures the inclusion allowance from the best head, where the open is
+  included, rather than from the finalized head, which trails it by the finality lag
+  (3-7 blocks measured on devnet). It used to approve a send in the last blocks of the
+  allowance, or every send when `refundMarginBlocks` did not exceed the lag, that
+  `verifyLock` then refused as late with the funds already escrowed. Latest
+  `FlopSnapshot`s carry an optional `bestNumber`; `PolkadotFlopChain` fills it.
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.

@@ -57,7 +57,7 @@ are supported. PTLC/adaptor signing is not used.
 | `rpcUrl` | `wss://rpc.devnet.flop.network` on devnet | WebSocket RPC; override for local/private deployments |
 | `expectedGenesisHash` | Pin the first connected devnet genesis | Explicit trusted 32-byte lowercase hex pin |
 | `blockTimeMs` | `1000` | Nominal block interval agreed by both parties |
-| `refundMarginBlocks` | `30` | Extra refund blocks and maximum accepted inclusion delay |
+| `refundMarginBlocks` | `30` | Extra refund blocks and maximum accepted inclusion delay, counted from the finalized anchor; must exceed the finality lag |
 | `transactionTimeoutMs` | `120000` | Time to await finalized transaction execution |
 
 Testnet and mainnet require **both** `rpcUrl` and `expectedGenesisHash`. FLOP's
@@ -135,7 +135,8 @@ contains `txHash`; inspect its finalized events before resubmitting. A wallet
 should pass `persistPending: async (pendingRef) => { /* durable wallet journal */ }`
 to `connectFlopRail`. This hook completes before signing/sending; if it fails,
 no transaction is submitted. After the hook finishes, the rail rechecks the
-claim window and the anchor against the latest finalized snapshot. A closed
+claim window and the anchor against the latest finalized snapshot, counting the
+inclusion allowance up to the best head the open will be included above. A closed
 claim window or exhausted inclusion allowance aborts before submission and
 allows the wallet to prepare a fresh attempt. The library itself does not persist state.
 `FlopSubmissionError` carries that same `pendingRef` and, when available, `txHash`.
