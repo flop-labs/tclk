@@ -131,6 +131,13 @@ export function createHandlers(options: HandlerOptions = {}) {
   const paymentKey: string | null = env.TCLK_PAYMENT_KEY?.trim()
     ? normalizeScalar(env.TCLK_PAYMENT_KEY, "TCLK_PAYMENT_KEY")
     : null;
+  // normalizeScalar only checks the 64-hex spelling, so a well-formed but
+  // out-of-range scalar (0, or >= n) would otherwise pass construction and only
+  // fail later, as a throw from tclk_whoami / tclk_accept_offer. Validate the
+  // scalar now so a bad key fails fast at startup instead.
+  if (paymentKey !== null && schnorrAdaptor.getPublicKey(paymentKey) === null) {
+    fail("TCLK_PAYMENT_KEY is not a valid secp256k1 scalar");
+  }
 
   function paymentPublicKey(): string | null {
     if (paymentKey === null) return null;
