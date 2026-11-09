@@ -134,10 +134,12 @@ export class PolkadotFlopChain implements FlopChain {
   }
   async snapshot(escrowId?: string, at?: string): Promise<FlopSnapshot> {
     const hash = at ?? (await this.api.rpc.chain.getFinalizedHead()).toHex();
-    const [view, header, genesis] = await Promise.all([
+    const [view, header, genesis, best] = await Promise.all([
       this.api.at(hash),
       this.api.rpc.chain.getHeader(hash),
       this.api.rpc.chain.getBlockHash(0),
+      // Latest view only: the best head a new extrinsic would be included above.
+      at === undefined ? this.api.rpc.chain.getHeader() : undefined,
     ]);
     const number = integer(header.number.toString(), "height");
     // api.at alone accepts a noncanonical block hash. Explicitly check both canonicality
@@ -171,6 +173,12 @@ export class PolkadotFlopChain implements FlopChain {
           ? number
           : integer(prefixJson[0], "runtime finalized height"),
     };
+    // Read after the finalized head, so it is never behind it; max() covers a reorg race.
+    if (best !== undefined)
+      snapshot.bestNumber = Math.max(
+        number,
+        integer(best.number.toString(), "best height"),
+      );
     if (escrowId !== undefined) {
       const codec = (await view.query.hasStation.escrows(
         escrowId,

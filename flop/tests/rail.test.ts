@@ -494,6 +494,84 @@ describe("post-journal admission", () => {
   });
 });
 
+/**
+ * PolkadotFlopChain answers `snapshot()` at the finalized head, but `open` is included
+ * in the block after the best head, which runs ahead of it by the finality lag, and
+ * resolves once that block is finalized. `Chain` above includes one block past its
+ * snapshot height, which is the zero-lag case of the same thing.
+ */
+class LaggingChain extends Chain {
+  constructor(readonly lag: number) {
+    super();
+    this.delay = lag + 1;
+  }
+  override async snapshot(id?: string, at?: string): Promise<FlopSnapshot> {
+    const s = await super.snapshot(id, at);
+    return at ? s : { ...s, bestNumber: s.number + this.lag };
+  }
+}
+
+describe("inclusion allowance under finality lag", () => {
+  const window = () => ({
+    ...terms(),
+    claimByMs: T0 + 60_000,
+    refundAfterMs: T0 + 90_000,
+  });
+
+  it("refuses before sending when the best head has already used the allowance", async () => {
+    const chain = new LaggingChain(3);
+    const rail = new FlopRail(
+      chain,
+      {},
+      () => chain.head.timestampMs,
+      async () => {
+        chain.tick(27);
+      },
+    );
+    await expect(rail.lock(window())).rejects.toThrow("anchor became stale");
+    expect(chain.opens).toBe(0);
+    expect(chain.held).toBeUndefined();
+  });
+
+  it("refuses before sending when the finality lag alone exceeds the margin", async () => {
+    const chain = new LaggingChain(3);
+    const rail = new FlopRail(
+      chain,
+      { refundMarginBlocks: 2 },
+      () => chain.head.timestampMs,
+    );
+    await expect(rail.lock(window())).rejects.toThrow("anchor became stale");
+    expect(chain.opens).toBe(0);
+  });
+
+  it("accepts inclusion on the last block the best head still permits", async () => {
+    const chain = new LaggingChain(3);
+    const rail = new FlopRail(
+      chain,
+      {},
+      () => chain.head.timestampMs,
+      async () => {
+        chain.tick(26);
+      },
+    );
+    const ref = await rail.lock(window());
+    expect(chain.opens).toBe(1);
+    expect(await rail.verifyLock(window(), ref)).toBe(true);
+  });
+
+  it("rejects a best head below the snapshot height", async () => {
+    const chain = new Chain();
+    const original = chain.snapshot.bind(chain);
+    chain.snapshot = async (id, at) => ({
+      ...(await original(id, at)),
+      bestNumber: chain.head.number - 1,
+    });
+    const rail = new FlopRail(chain, {}, () => T0);
+    await expect(rail.lock(terms())).rejects.toThrow("malformed finalized snapshot");
+    expect(chain.opens).toBe(0);
+  });
+});
+
 describe("pending reference validation", () => {
   it("rejects a completed reference and malformed escrow IDs during recovery", async () => {
     const { recoverFlopReference } = await import("../src/rail.js");

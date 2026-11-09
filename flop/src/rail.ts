@@ -33,6 +33,12 @@ export interface FlopSnapshot {
   timestampMs: number;
   /** Runtime's AlephFinalizedPrefix, read at this same finalized block. */
   finalizedNumber: number;
+  /**
+   * Height of the best head when a latest (no `at`) snapshot was read. A new extrinsic is
+   * included above it, not above `number`. Optional for injected chains; absent means
+   * the transport cannot see past the finalized head.
+   */
+  bestNumber?: number;
   escrow?: FlopEscrow;
 }
 export interface FlopOpenRequest {
@@ -196,7 +202,11 @@ function checkSnapshot(s: FlopSnapshot): void {
     s.finalizedNumber < 0 ||
     s.finalizedNumber > s.number ||
     !Number.isSafeInteger(s.timestampMs) ||
-    s.timestampMs <= 0
+    s.timestampMs <= 0 ||
+    (s.bestNumber !== undefined &&
+      (!Number.isSafeInteger(s.bestNumber) ||
+        s.bestNumber < s.number ||
+        s.bestNumber > 0xffffffff))
   )
     throw new Error("flop: malformed finalized snapshot");
 }
@@ -317,10 +327,14 @@ export class FlopRail implements SettlementRail {
       const current = await this.snapshot();
       if (Math.max(this.now(), current.timestampMs) >= terms.claimByMs)
         throw new Error("flop: claim window has closed");
+      // The open is included above the best head, which runs ahead of the finalized
+      // `current` by the finality lag. Counting from `current` would approve a send that
+      // inspect() then rejects as late, after the funds are already escrowed.
+      const head = current.bestNumber ?? current.number;
       if (
         current.genesis !== anchor.genesis ||
         current.number < anchor.number ||
-        current.number - anchor.number >= ref.refundMarginBlocks
+        head - anchor.number >= ref.refundMarginBlocks
       )
         throw new Error("flop: anchor became stale before submission");
     } catch (error) {

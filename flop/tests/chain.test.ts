@@ -160,3 +160,46 @@ describe("metadata transport", () => {
     await expect(chain.snapshot(h)).rejects.toThrow("canonical finalized");
   });
 });
+describe("best head", () => {
+  function api(finalized: string, best: string) {
+    const view = {
+      query: {
+        timestamp: { now: vi.fn(async () => ({ toString: () => "1790000000000" })) },
+        aleph: { lastFinalized: vi.fn(async () => ({ toJSON: () => null })) },
+        hasStation: { escrows: vi.fn() },
+      },
+    };
+    return {
+      tx: {
+        hasStation: { openEscrow: vi.fn(), satisfyEscrow: vi.fn(), refundEscrow: vi.fn() },
+      },
+      query: { hasStation: { escrows: vi.fn() }, aleph: { lastFinalized: vi.fn() } },
+      rpc: {
+        chain: {
+          getFinalizedHead: vi.fn(async () => ({ toHex: () => h })),
+          // No argument is the best head; a hash is that block.
+          getHeader: vi.fn(async (at?: string) => ({
+            number: { toString: () => (at === undefined ? best : finalized) },
+          })),
+          getBlockHash: vi.fn(async () => ({ toHex: () => h })),
+        },
+      },
+      at: vi.fn(async () => view),
+      registry: { createType: vi.fn() },
+    } as any;
+  }
+  it("reports the best head on a latest read, where a new open is included", async () => {
+    const chain = new PolkadotFlopChain(api("100", "104"));
+    expect(await chain.snapshot()).toMatchObject({ number: 100, bestNumber: 104 });
+  });
+  it("leaves an anchor read at its own block", async () => {
+    const a = api("100", "104");
+    const s = await new PolkadotFlopChain(a).snapshot(undefined, h);
+    expect(s.bestNumber).toBeUndefined();
+    expect(a.rpc.chain.getHeader).not.toHaveBeenCalledWith();
+  });
+  it("never reports a best head behind the finalized one", async () => {
+    const chain = new PolkadotFlopChain(api("100", "99"));
+    expect((await chain.snapshot()).bestNumber).toBe(100);
+  });
+});
