@@ -111,43 +111,6 @@ export function verifyTranscriptRecord(record: TranscriptRecord): TranscriptReco
   return { ok: true };
 }
 
-let supportsReviverContext = false;
-try {
-  JSON.parse('{"a":1}', ((_k: string, v: unknown, ctx?: { source?: string }) => {
-    if (ctx && typeof ctx.source === "string") supportsReviverContext = true;
-    return v;
-  }) as any);
-} catch {
-  // ignore
-}
-
-/**
- * Parse a technocore record line or view payload to JSON while preserving exact
- * numeric nonce source text, including values above Number.MAX_SAFE_INTEGER.
- * Canonical decimal nonce validation remains the verifier's responsibility.
- */
-export function parseRecordJson(text: string): unknown {
-  if (supportsReviverContext) {
-    return JSON.parse(text, ((key: string, value: unknown, context?: { source?: string }) => {
-      if (key === "nonce" && typeof value === "number" && context && typeof context.source === "string") {
-        return context.source.trim();
-      }
-      return value;
-    }) as any);
-  }
-  // Validate first: rewriting must never repair invalid JSON (e.g. leading zeroes).
-  JSON.parse(text);
-  // Consume whole strings so JSON-looking signed text cannot be rewritten. Decode
-  // member names, and preserve the complete number token just like context.source.
-  const safe = text.replace(
-    /("(?:\\.|[^"\\])*")([ \t\r\n]*:[ \t\r\n]*)(-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)|"(?:\\.|[^"\\])*"/g,
-    (token, key: string | undefined, colon: string, raw: string) =>
-      key !== undefined && JSON.parse(key) === "nonce"
-        ? `${key}${colon}${JSON.stringify(raw)}` : token,
-  );
-  return JSON.parse(safe);
-}
-
 function object(value: unknown, where: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`tclk: ${where} is not a JSON object`);
@@ -177,8 +140,6 @@ export function transcriptRecord(room: string, value: unknown): TranscriptRecord
   if (typeof message.nonce === "string") nonce = message.nonce;
   else if (typeof message.nonce === "number" && Number.isSafeInteger(message.nonce)) {
     nonce = String(message.nonce);
-  } else if (typeof message.nonce === "bigint") {
-    nonce = String(message.nonce);
   } else if (message.nonce !== undefined && message.nonce !== null) {
     throw new Error("tclk: transcript message nonce must be decimal text");
   }
@@ -207,7 +168,7 @@ export function parseTranscriptExport(room: string, jsonl: string): TranscriptRe
     if (line.trim() === "") return;
     let value: unknown;
     try {
-      value = parseRecordJson(line);
+      value = JSON.parse(line);
     } catch {
       throw new Error(`tclk: transcript export line ${index + 1} is not JSON`);
     }
