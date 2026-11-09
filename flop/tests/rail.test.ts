@@ -272,7 +272,7 @@ describe("FlopRail", () => {
     chain.head.finalizedNumber = NaN;
     expect(await rail.verifyLock(t, ref)).toBe(false);
     chain.head.finalizedNumber = 101;
-    chain.tick(30);
+    chain.tick(60);
     expect(await rail.verifyLock(t, ref)).toBe(false);
   });
   it("does not submit an incorrect or expired secret", async () => {
@@ -385,7 +385,7 @@ describe("wallet recovery and duplicate submissions", () => {
 });
 
 describe("post-journal admission", () => {
-  it("refuses to send when the local clock reaches claimByMs during journaling", async () => {
+  it("refuses to send when the local clock reaches refundAfterMs during journaling", async () => {
     const chain = new Chain();
     let now = T0;
     const t = terms();
@@ -394,10 +394,10 @@ describe("post-journal admission", () => {
       {},
       () => now,
       async () => {
-        now = t.claimByMs;
+        now = t.refundAfterMs;
       },
     );
-    await expect(rail.lock(t)).rejects.toThrow("claim window has closed");
+    await expect(rail.lock(t)).rejects.toThrow("refund window is already open");
     expect(chain.opens).toBe(0);
     expect(chain.held).toBeUndefined();
   });
@@ -409,10 +409,10 @@ describe("post-journal admission", () => {
       {},
       () => T0,
       async () => {
-        chain.tick(30);
+        chain.tick(60);
       },
     );
-    await expect(rail.lock(terms())).rejects.toThrow("claim window has closed");
+    await expect(rail.lock(terms())).rejects.toThrow("refund window is already open");
     expect(chain.opens).toBe(0);
   });
 
@@ -529,5 +529,36 @@ describe("pending reference validation", () => {
     await rail.lock(terms());
     await expect(rail.claim(pending, secret)).rejects.toThrow("agreed terms");
     expect(chain.claims).toBe(0);
+  });
+});
+
+describe("lock live deadline", () => {
+  it("verifyLock stays true in the late window (after claimByMs, before refundAfterMs)", async () => {
+    const { rail, chain, t } = setup();
+    const ref = await rail.lock(t);
+    // T0+46s: past the payee's safe claim deadline (T0+30s) but the escrow
+    // is still Open, finalized well before its block deadline, and claim()
+    // still accepts (it checks refundAfterMs). verifyLock must agree.
+    chain.tick(45);
+    expect(await rail.verifyLock(t, ref)).toBe(true);
+    await rail.claim(ref, secret);
+    expect(chain.claims).toBe(1);
+  });
+
+  it("locks in the late window the machine also accepts (after claimByMs, before refundAfterMs)", async () => {
+    const { rail, chain, t } = setup();
+    // T0+45s: the machine accepts a lock frame until refundAfterMs (SPEC §4),
+    // so the rail must lock the funds here too, not refuse after claimByMs.
+    chain.tick(45);
+    const ref = await rail.lock(t);
+    expect(chain.opens).toBe(1);
+    expect(await rail.verifyLock(t, ref)).toBe(true);
+  });
+
+  it("refuses to lock once the refund window is open", async () => {
+    const { rail, chain, t } = setup();
+    chain.tick(60);
+    await expect(rail.lock(t)).rejects.toThrow("refund window is already open");
+    expect(chain.opens).toBe(0);
   });
 });

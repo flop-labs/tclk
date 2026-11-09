@@ -8,6 +8,13 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `@flop-labs/tclk-flop`: `FlopRail` now pins `refundAfterMs` as "the lock is
+  live" everywhere, matching the machine, `MemoryRail`, and SPEC §4. `lock`,
+  `verifyLock`, and the anchor check in `inspect` previously used `claimByMs`,
+  so `verifyLock` reported a live, claimable lock as dead in the late-claim
+  window (after `claimByMs`, before `refundAfterMs`), and `lock` refused a
+  lock the machine had already accepted. A lock is now refused only once the
+  refund window is open.
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.
