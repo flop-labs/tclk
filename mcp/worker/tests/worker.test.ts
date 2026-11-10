@@ -11,7 +11,7 @@ import {
 } from "../../tests/fixtures.js";
 import { canonicalMessage, signerFromSeed } from "../../src/signing.js";
 import { handleRequest, type Env } from "../src/worker.js";
-import { TOOLS } from "../src/tool-manifest.generated.js";
+import { PROTOCOL_VERSIONS, TOOLS } from "../src/tool-manifest.generated.js";
 import type { FetchLike } from "../../src/technocore.js";
 
 const ENV: Env = { TECHNOCORE_URL: "https://technocore.chat" };
@@ -345,6 +345,51 @@ describe("no custody", () => {
 
 describe("HTTP and JSON-RPC framing", () => {
   const url = "https://tclk-mcp.example.workers.dev/mcp";
+
+  it.each(["not-a-version", "2099-01-01"])(
+    "rejects MCP-Protocol-Version %s before dispatching a signed post",
+    async (version) => {
+      const { calls, fetchLike } = fakeFetch([{ body: "ok 12" }]);
+      const line = (await callTool("tclk_make_offer", HASH_OFFER)).value.line;
+      const nonce = 7;
+      const request = rpcRequest("tools/call", {
+        name: "tclk_post_frame",
+        arguments: {
+          room: ROOM,
+          line,
+          did: payer.did,
+          sig: payer.sign(canonicalMessage(ROOM, nonce, line)),
+          nonce,
+        },
+      });
+      request.headers.set("accept", "application/json, text/event-stream");
+      request.headers.set("MCP-Protocol-Version", version);
+
+      const response = await handleRequest(request, ENV, fetchLike);
+      expect({ status: response.status, venueRequests: calls.length }).toEqual({
+        status: 400,
+        venueRequests: 0,
+      });
+      expect(((await response.json()) as any).error.message).toContain("MCP-Protocol-Version");
+    },
+  );
+
+  it("rejects an unsupported protocol header on notifications too", async () => {
+    const request = rpcRequest("notifications/initialized", {}, null);
+    request.headers.set("MCP-Protocol-Version", "2099-01-01");
+    const response = await handleRequest(request, ENV);
+    expect(response.status).toBe(400);
+  });
+
+  it("accepts supported protocol headers and headerless clients", async () => {
+    for (const version of [undefined, ...PROTOCOL_VERSIONS]) {
+      const request = rpcRequest("ping");
+      if (version !== undefined) request.headers.set("MCP-Protocol-Version", version);
+      const response = await handleRequest(request, ENV);
+      expect(response.status).toBe(200);
+      expect(((await response.json()) as any).result).toEqual({});
+    }
+  });
 
   it("405s a GET, with an Allow header", async () => {
     const response = await handleRequest(new Request(url), ENV);
