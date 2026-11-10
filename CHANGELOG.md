@@ -8,6 +8,9 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Frame validation rejects non-string `type` values before dispatch, preventing an
+  array-valued type from passing the codec, returning no `applyFrame` result, and
+  interrupting transcript folding instead of producing a rejected step.
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.

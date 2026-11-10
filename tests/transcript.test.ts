@@ -83,6 +83,23 @@ function deal(expiresMs = NOW + 60_000) {
 }
 
 describe("trusted transcript records", () => {
+  it("rejects an array-valued frame type and continues folding later records", () => {
+    const { offer, accept } = deal();
+    const malformed = "tclk1 " + JSON.stringify({
+      type: ["cancel"], from: payer.did, contract: offer.id,
+    });
+    const folded = foldTranscript([
+      record(BOARD, 1, NOW - 2, payer, encodeFrame(offer)),
+      record(BOARD, 2, NOW - 1, payer, malformed),
+      record(BOARD, 3, NOW, payee, encodeFrame(accept)),
+    ]);
+
+    expect(folded.steps.map((step) => step.ok)).toEqual([true, false, true]);
+    expect(folded.steps[1].reason).toMatch(/type/);
+    expect(folded.state?.status).toBe("accepted");
+    expect(folded.state?.contract).toBe(accept.contract);
+  });
+
   it("authenticates and folds a complete deal at each record's own timestamp", () => {
     const { lock, offer, accept } = deal();
     const lockFrame = {
