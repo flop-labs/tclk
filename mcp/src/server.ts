@@ -40,13 +40,13 @@ const job = z.object({
   proto: z.string(),
   id: z.string(),
   context: z.string().optional(),
-});
+}).strict();
 
 // Both a pre-signature and a completed signature are `{ nonce, s }`.
 const presig = z.object({
   nonce: z.string().describe("33-byte SEC1-compressed nonce point, 0x-hex."),
   s: z.string().describe("Scalar, 0x-hex."),
-});
+}).strict();
 
 function ok(value: unknown): CallToolResult {
   return { content: [{ type: "text", text: JSON.stringify(value, null, 2) }] };

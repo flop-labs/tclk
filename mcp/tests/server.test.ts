@@ -8,8 +8,8 @@ import { describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
-import { createServer } from "../src/server.js";
-import { HASH_OFFER } from "./fixtures.js";
+import { createHandlers, createServer } from "../src/server.js";
+import { HASH_OFFER, PAYMENT_KEY } from "./fixtures.js";
 
 async function connect() {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -64,6 +64,58 @@ describe("createServer", () => {
     expect((bad.content as { text: string }[])[0].text).toMatch(/claimByMs must be strictly before/);
 
     await client.close();
+  });
+
+  it("rejects an unknown job field instead of silently dropping the caller's context", async () => {
+    const client = await connect();
+    try {
+      const job = { proto: "a2a", id: "task-7", contextUrl: "https://jobs.example/task-7" };
+      const args = { ...HASH_OFFER, job };
+      expect(() => createHandlers({ env: {} }).tclk_make_offer(args)).toThrow(/unknown field/);
+
+      const bad = await client.callTool({ name: "tclk_make_offer", arguments: args });
+      expect(bad.isError, JSON.stringify(bad.content)).toBe(true);
+      expect((bad.content as { text: string }[])[0].text).toMatch(/contextUrl/);
+
+      const correctedJob = { proto: job.proto, id: job.id, context: job.contextUrl };
+      const good = await client.callTool({
+        name: "tclk_make_offer", arguments: { ...HASH_OFFER, job: correctedJob },
+      });
+      expect(good.isError).toBeFalsy();
+      const built = JSON.parse((good.content as { text: string }[])[0].text);
+      expect(built.frame.job).toEqual(correctedJob);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("rejects unknown presig fields consistently with the frame builder", async () => {
+    const client = await connect();
+    try {
+      const h = createHandlers({ env: { TCLK_PAYMENT_KEY: PAYMENT_KEY } });
+      const presig = { nonce: h.tclk_whoami().paymentPublicKey!, s: `0x${PAYMENT_KEY}` };
+      const args = {
+        from: HASH_OFFER.from,
+        contract: `0x${"ab".repeat(32)}`,
+        rail: "flop-htlc",
+        ref: "escrow-7",
+        presig: { ...presig, curve: "secp256k1" },
+      };
+      expect(() => h.tclk_make_lock(args)).toThrow(/unknown field/);
+
+      const bad = await client.callTool({ name: "tclk_make_lock", arguments: args });
+      expect(bad.isError, JSON.stringify(bad.content)).toBe(true);
+      expect((bad.content as { text: string }[])[0].text).toMatch(/curve/);
+
+      const good = await client.callTool({
+        name: "tclk_make_lock", arguments: { ...args, presig },
+      });
+      expect(good.isError).toBeFalsy();
+      const built = JSON.parse((good.content as { text: string }[])[0].text);
+      expect(built.frame.presig).toEqual(presig);
+    } finally {
+      await client.close();
+    }
   });
 
   it("validates tclk_post_frame nonce: accepts safe int or 1-19 digit string, rejects unsafe numbers and malformed strings", async () => {
