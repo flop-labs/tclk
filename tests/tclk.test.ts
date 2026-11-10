@@ -130,6 +130,14 @@ describe("tclk frames — wire codec", () => {
     })).toThrow(/presig\.s/);
   });
 
+  it("rejects array-valued frame types at the codec boundary", () => {
+    const frame = { type: ["cancel"], from: PAYER_DID, contract: baseOffer().id };
+    const line = TCLK_PREFIX + JSON.stringify(frame);
+    expect(() => decodeFrame(line)).toThrow(/type/);
+    expect(tryDecodeFrame(line)).toBeNull();
+    expect(() => encodeFrame(frame as never)).toThrow(/type/);
+  });
+
   it("tryDecodeFrame skips foreign and hostile lines instead of throwing", () => {
     expect(tryDecodeFrame("hello from ~alice")).toBeNull();
     expect(tryDecodeFrame('tclk1 {"type":"offer"}')).toBeNull();
@@ -384,6 +392,15 @@ describe("tclk state machine", () => {
     const { state } = accepted();
     const step = applyFrame(state, { type: "lock", from: "nonsense" } as never, T0);
     expect(step.ok).toBe(false);
+    expect(step.state).toBe(state);
+  });
+
+  it("returns an unchanged-state rejection for an array-valued frame type", () => {
+    const state = openContract(baseOffer());
+    const step = applyFrame(state, {
+      type: ["cancel"], from: PAYER_DID, contract: state.offer.id,
+    } as never, T0);
+    expect(step).toMatchObject({ ok: false, reason: expect.stringMatching(/type/) });
     expect(step.state).toBe(state);
   });
 });

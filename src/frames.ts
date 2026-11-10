@@ -287,7 +287,7 @@ export function isValidStatement(lock: LockKind, statement: string): boolean {
 export function validateFrame(value: unknown): TclkFrame {
   if (!value || typeof value !== "object" || Array.isArray(value)) fail("frame must be an object");
   const frame = value as Record<string, unknown>;
-  const type = frame.type as TclkFrame["type"];
+  const type = requireString(frame.type, "type") as TclkFrame["type"];
   const keys = FRAME_FIELDS[type];
   if (!keys) fail(`unknown frame type: ${String(frame.type)}`);
   requireKeys(frame, new Set(keys.allowed), keys.required);
