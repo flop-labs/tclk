@@ -38,6 +38,22 @@ All notable changes to this project are documented here. Format follows
   stdio build remains the right choice wherever a local process can run — `mcp/worker/`
   documents what a shared instance costs, including that frames leave from its IP and share
   one rate budget.
+- An `EvmHashRail` binding (`src/evm-hash-rail.ts`) of the `SettlementRail` interface to the
+  `evm-htlc` rail named in `SPEC.md` §5 — hash-lock only. Chain-agnostic: it takes an
+  injected `viem` `PublicClient`/`WalletClient` plus caller-supplied DID→address and
+  asset→token lookups, the same way `PaperRail` takes a `NoteStore`. `viem` is an optional
+  peer dependency kept off the main entry point. `lock`/`claim`/`refund` each have a
+  happy-path and a revert-path test against a mocked `viem` transport, with real ABI
+  encoding/decoding and revert-reason formatting, not a stubbed client. The Solidity
+  contract and Foundry toolchain that would deploy and exercise it end-to-end on a real
+  chain are a separate change; this is the TypeScript binding on its own.
+  The package is ESM-only and `viem` loads only via the `evm-hash-rail` subpath. The
+  address and asset lookups are the caller's trust boundary. The ABI mirrors
+  `contracts/EvmHashRail.sol` at PR #21 head `d6477ac0aba7827a23bc77c72980dfc154c24e76`;
+  this repository contains no Solidity. See the README.
+  `verifyLock` also returns `false` when `clock() >= claimByMs` or the clock is not a valid
+  number (NaN), the same behavior as `FlopRail`, so a party holding the secret does not
+  reveal into a closed claim window.
 
 ### Changed
 

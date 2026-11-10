@@ -59,6 +59,25 @@ Bitcoin today. "PTLC" here means the protocol shape, not Bitcoin compatibility.
 | [`examples/live-deal.mjs`](examples/live-deal.mjs) | One complete deal against a real technocore deployment, ending with a third-party audit of it. Runs a realistic content job: `node examples/live-deal.mjs [x\|ig\|tiktok\|youtube]`. |
 | [`examples/audit-export.mjs`](examples/audit-export.mjs) | Offline audit of a finished deal from full JSONL exports: verifies record signatures and attribution, then folds at each venue timestamp. |
 
+### EVM hash-lock rail (`@flop-labs/tclk/evm-hash-rail`)
+
+`EvmHashRail` binds the `evm-htlc` rail (hash-lock only) onto an EVM contract through `viem`.
+
+- **ESM-only, `viem` is optional.** The package is ESM-only. `viem` is an optional peer
+  dependency and is loaded only when you `import "@flop-labs/tclk/evm-hash-rail"`; the main
+  entry point never pulls it in.
+- **`addressBook` / `assetBook` are the caller's trust boundary.** tclk DIDs (Ed25519) and
+  EVM accounts are unrelated key material, so the rail does not derive one from the other.
+  You supply `addressBook` (DID → EVM address) and `assetBook` (asset id → ERC20 address)
+  and the rail trusts them as given. `lock` resolves the payee and the asset; `verifyLock`
+  resolves the payer, the payee and the asset. A wrong mapping locks funds to the wrong
+  address or token, or makes `verifyLock` accept a lock it should reject. The payer of a
+  `lock` is the wallet account you pass in, not an `addressBook` lookup.
+- **ABI provenance.** `EVM_HASH_RAIL_ABI` mirrors `contracts/EvmHashRail.sol` at the head
+  of PR #21, commit
+  `d6477ac0aba7827a23bc77c72980dfc154c24e76`. This repository contains no
+  Solidity, so the ABI cannot be regenerated or checked from this tree.
+
 ## Quickstart
 
 ### Core library
