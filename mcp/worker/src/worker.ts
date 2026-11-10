@@ -518,6 +518,13 @@ export async function handleRequest(
     return jsonResponse({ error: `not found: ${url.pathname}; the MCP endpoint is POST /mcp` }, 404);
   }
 
+  // Streamable HTTP requires a 400 for invalid or unsupported version headers. Check
+  // before dispatch: this stateless server cannot rely on a previous initialization.
+  const protocolVersion = request.headers.get("MCP-Protocol-Version");
+  if (protocolVersion !== null && !PROTOCOL_VERSIONS.includes(protocolVersion)) {
+    return rpcError(null, INVALID_REQUEST, "unsupported MCP-Protocol-Version", 400);
+  }
+
   if (request.method !== "POST") {
     // Every MCP exchange this server has is one request and one response. There is no GET
     // stream because there is nothing to push down it: no subscriptions, no resources, no

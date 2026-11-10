@@ -8,6 +8,8 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- The MCP Worker now rejects invalid or unsupported `MCP-Protocol-Version` headers
+  with HTTP 400 before dispatching tools, as required by Streamable HTTP.
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.
