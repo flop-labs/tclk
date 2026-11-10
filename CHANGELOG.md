@@ -48,6 +48,9 @@ All notable changes to this project are documented here. Format follows
   address and asset lookups are the caller's trust boundary. The ABI mirrors
   `contracts/EvmHashRail.sol` at PR #21 head `d6477ac0aba7827a23bc77c72980dfc154c24e76`;
   this repository contains no Solidity. See the README.
+  `verifyLock` also returns `false` when `clock() >= claimByMs` or the clock is not a valid
+  number (NaN), the same behavior as `FlopRail`, so a party holding the secret does not
+  reveal into a closed claim window.
 
 ### Changed
 

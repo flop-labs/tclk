@@ -159,6 +159,9 @@ export class EvmHashRail implements SettlementRail {
   async verifyLock(terms: LockTerms, ref: string): Promise<boolean> {
     if (terms.lock !== "hash" || ref !== terms.statement) return false;
     try {
+      // Same semantics as FlopRail.verifyLock: a lock whose claim window has closed is not
+      // safe to reveal into. Written as a negated `<` so a NaN clock fails closed.
+      if (!(this.clock() < terms.claimByMs)) return false;
       const [payer, payee, token, amount, claimByMs, refundAfterMs, status] =
         await this.publicClient.readContract({
           address: this.contractAddress,

@@ -57,7 +57,12 @@ function locksResult(payer: Address, payee: Address, token: Address) {
   ] as const;
 }
 
-function railWith(addressBook: AddressBook, assetBook: AssetBook, onChain: ReturnType<typeof locksResult>) {
+function railWith(
+  addressBook: AddressBook,
+  assetBook: AssetBook,
+  onChain: ReturnType<typeof locksResult>,
+  clock: () => number = () => terms.claimByMs - 1,
+) {
   const publicClient = { readContract: async () => onChain } as unknown as PublicClient;
   const walletClient = {} as unknown as WalletClient<Transport, Chain, Account>;
   return new EvmHashRail({
@@ -66,6 +71,7 @@ function railWith(addressBook: AddressBook, assetBook: AssetBook, onChain: Retur
     contractAddress: "0x0000000000000000000000000000000000dEaD",
     addressBook,
     assetBook,
+    clock,
   });
 }
 
@@ -96,6 +102,32 @@ describe("EvmHashRail.verifyLock — address comparison is case-insensitive", ()
     const rail = railWith(addressBook, assetBook, locksResult(PAYEE_CHECKSUM, PAYEE_CHECKSUM, TOKEN_CHECKSUM));
 
     expect(await rail.verifyLock(terms, terms.statement)).toBe(false);
+  });
+});
+
+describe("EvmHashRail.verifyLock — claim window clock check", () => {
+  const addressBook: AddressBook = {
+    resolve: (did) => (did === terms.payer ? PAYER_CHECKSUM : PAYEE_CHECKSUM),
+  };
+  const assetBook: AssetBook = { resolve: () => TOKEN_CHECKSUM };
+  const onChain = locksResult(PAYER_CHECKSUM, PAYEE_CHECKSUM, TOKEN_CHECKSUM);
+  const verifyAt = (now: number) =>
+    railWith(addressBook, assetBook, onChain, () => now).verifyLock(terms, terms.statement);
+
+  it("is true one ms before claimByMs", async () => {
+    expect(await verifyAt(terms.claimByMs - 1)).toBe(true);
+  });
+
+  it("is false exactly at claimByMs", async () => {
+    expect(await verifyAt(terms.claimByMs)).toBe(false);
+  });
+
+  it("is false after claimByMs", async () => {
+    expect(await verifyAt(terms.claimByMs + 1)).toBe(false);
+  });
+
+  it("fails closed on a NaN clock", async () => {
+    expect(await verifyAt(Number.NaN)).toBe(false);
   });
 });
 
