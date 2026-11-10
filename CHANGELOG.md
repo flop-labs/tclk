@@ -8,6 +8,10 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Concurrent signed posts through one MCP handler now wait their turn per room and
+  DID, preventing a later HTTP request from overtaking an earlier nonce and causing
+  the venue to refuse a valid frame. A refused write releases the next turn without
+  retrying; unrelated rooms and DIDs remain independent.
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.

@@ -67,23 +67,37 @@ export function createClient(opts: { baseUrl?: string; fetch?: FetchLike } = {})
   const baseUrl = (opts.baseUrl ?? DEFAULT_TECHNOCORE_URL).replace(/\/+$/, "");
   const doFetch: FetchLike =
     opts.fetch ?? ((input, init) => globalThis.fetch(input, init) as Promise<Response>);
+  // A later nonce must not overtake an earlier write from this client. Only
+  // in-flight turns are retained; unrelated rooms and DIDs remain independent.
+  const pendingPosts = new Map<string, Promise<void>>();
 
   return {
     baseUrl,
     async postSigned(room, post) {
       assertRoomName(room);
-      const response = await doFetch(`${baseUrl}/r/${room}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          did: post.did,
-          sig: post.sig,
-          nonce: String(post.nonce),
-          text: post.text,
-        }),
-      });
-      if (!response.ok) await fail(response, `POST /r/${room}`);
-      return await response.text();
+      const key = `${room}|${post.did}`;
+      const previous = pendingPosts.get(key) ?? Promise.resolve();
+      let release!: () => void;
+      const turn = new Promise<void>((resolve) => { release = resolve; });
+      pendingPosts.set(key, turn);
+      await previous;
+      try {
+        const response = await doFetch(`${baseUrl}/r/${room}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            did: post.did,
+            sig: post.sig,
+            nonce: String(post.nonce),
+            text: post.text,
+          }),
+        });
+        if (!response.ok) await fail(response, `POST /r/${room}`);
+        return await response.text();
+      } finally {
+        release();
+        if (pendingPosts.get(key) === turn) pendingPosts.delete(key);
+      }
     },
 
     async readRoom(room, since) {

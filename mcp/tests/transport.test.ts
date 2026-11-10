@@ -144,6 +144,95 @@ describe("tclk_post_frame — tier 2, server-signed", () => {
       /failed with 403: 403 bad sig/,
     );
   });
+
+  it("delivers concurrent server-signed posts in nonce order despite a delayed first request", async () => {
+    let releaseFirst!: () => void;
+    const firstArrival = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    let started!: () => void;
+    const firstStarted = new Promise<void>((resolve) => { started = resolve; });
+    let calls = 0;
+    let lastNonce = -1n;
+    const stored: string[] = [];
+    const h = createHandlers({
+      env: { TECHNOCORE_SIGNING_KEY: PAYER_SEED },
+      fetch: async (_url, init) => {
+        const post = JSON.parse(String(init?.body));
+        if (++calls === 1) {
+          started();
+          // Independent HTTP requests can reach the venue in the opposite order.
+          await firstArrival;
+        }
+        expect(ed25519.verify(
+          new Uint8Array(Buffer.from(post.sig, "base64url")),
+          new TextEncoder().encode(canonicalMessage("tclk-offers", post.nonce, post.text)),
+          ed25519.getPublicKey(hexToBytes(PAYER_SEED)),
+        )).toBe(true);
+        // The venue checks a per-DID, per-room replay floor when a write arrives.
+        if (BigInt(post.nonce) <= lastNonce) {
+          return new Response(`400 nonce not greater than ${lastNonce}\n`, { status: 400 });
+        }
+        lastNonce = BigInt(post.nonce);
+        stored.push(post.text);
+        return new Response(`ok ${stored.length}`);
+      },
+    });
+    const first = h.tclk_make_offer(HASH_OFFER).line;
+    const second = h.tclk_make_offer({ ...HASH_OFFER, nonce: "112233445566778899aabbcc" }).line;
+    const pending = Promise.allSettled([
+      h.tclk_post_frame({ room: "tclk-offers", line: first }),
+      h.tclk_post_frame({ room: "tclk-offers", line: second }),
+    ]);
+    await firstStarted;
+    // Let all already-dispatched requests arrive before releasing the slower one.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    releaseFirst();
+    const results = await pending;
+    expect(results.map((r) => r.status === "fulfilled" ? r.value.posted : String(r.reason))).toEqual([
+      true, true,
+    ]);
+    expect(stored).toEqual([first, second]);
+    expect(calls).toBe(2);
+  });
+
+  it("lets a queued post proceed after a venue refusal without retrying the refused write", async () => {
+    const { calls, fetchLike } = fakeFetch([
+      { status: 429, body: "429 write budget exhausted\n" },
+      { body: "ok 1" },
+    ]);
+    const h = createHandlers({ env: { TECHNOCORE_SIGNING_KEY: PAYER_SEED }, fetch: fetchLike });
+    const results = await Promise.allSettled([
+      h.tclk_post_frame({ room: "tclk-offers", line: offerLine() }),
+      h.tclk_post_frame({ room: "tclk-offers", line: offerLine() }),
+    ]);
+    expect(results[0]).toMatchObject({ status: "rejected", reason: expect.any(Error) });
+    expect(results[1]).toMatchObject({ status: "fulfilled", value: { posted: true } });
+    expect(calls).toHaveLength(2);
+  });
+
+  it("does not hold up another room while one room's signed post is in flight", async () => {
+    let releaseFirst!: () => void;
+    const firstResponse = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const arrived: string[] = [];
+    const h = createHandlers({
+      env: { TECHNOCORE_SIGNING_KEY: PAYER_SEED },
+      fetch: async (url) => {
+        arrived.push(url);
+        if (url.endsWith("/tclk-offers")) await firstResponse;
+        return new Response("ok 1");
+      },
+    });
+    const pending = Promise.all([
+      h.tclk_post_frame({ room: "tclk-offers", line: offerLine() }),
+      h.tclk_post_frame({ room: ROOM, line: offerLine() }),
+    ]);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    const arrivedBeforeRelease = [...arrived];
+    releaseFirst();
+    await pending;
+    expect(arrivedBeforeRelease).toEqual([
+      "https://technocore.chat/r/tclk-offers", `https://technocore.chat/r/${ROOM}`,
+    ]);
+  });
 });
 
 describe("tclk_read_room", () => {
