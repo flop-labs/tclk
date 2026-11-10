@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import "@polkadot/api/augment";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";

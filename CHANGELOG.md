@@ -8,6 +8,9 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- Load Polkadot's declaration augmentations with `@flop-labs/tclk-flop`, so
+  TypeScript consumers can import its public API without enabling `skipLibCheck`
+  or adding an unrelated augmentation import to their application.
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.
