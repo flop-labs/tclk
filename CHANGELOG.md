@@ -8,6 +8,9 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `signerFromSeed` now owns a copy of its input seed, including Node Buffer inputs,
+  so overwriting the caller's buffer cannot change signing keys behind an unchanged DID.
+
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.

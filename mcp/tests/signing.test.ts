@@ -107,6 +107,18 @@ describe("canonical string and signature", () => {
     ).toBe(true);
   });
 
+  it.each(["Uint8Array", "Buffer"])("owns its seed after caller overwrite (%s)", (kind) => {
+    const input = kind === "Buffer" ? Buffer.from(SEED_HEX, "hex") : hexToBytes(SEED_HEX);
+    const signer = signerFromSeed(input);
+    input.fill(0);
+
+    const canonical = canonicalMessage("lobby", "1", "caller buffer was overwritten");
+    const signature = Buffer.from(signer.sign(canonical), "base64url");
+    expect(
+      ed25519.verify(signature, new TextEncoder().encode(canonical), hexToBytes(PUBLIC_HEX)),
+    ).toBe(true);
+  });
+
   it("signs the swept text, not the text as typed", () => {
     // U+200B (Cf) and the newline (Cc) both become spaces; then the ends are trimmed.
     expect(sweep("  a\u200bb\nc  ")).toBe("a b c");

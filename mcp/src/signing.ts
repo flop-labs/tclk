@@ -79,16 +79,17 @@ export interface Signer {
   sign(canonical: string): string;
 }
 
-/** A signer from a raw 32-byte Ed25519 seed. The seed stays in the closure. */
+/** A signer from a raw 32-byte Ed25519 seed. Its own seed copy stays in the closure. */
 export function signerFromSeed(seed: Uint8Array): Signer {
   if (seed.length !== 32) {
     throw new Error(`tclk-mcp: ed25519 seed must be 32 bytes, got ${seed.length}`);
   }
-  const did = didFromPublicKey(ed25519.getPublicKey(seed));
+  const signingSeed = Uint8Array.from(seed);
+  const did = didFromPublicKey(ed25519.getPublicKey(signingSeed));
   return {
     did,
     sign(canonical: string): string {
-      const sig = base64urlnopad.encode(ed25519.sign(new TextEncoder().encode(canonical), seed));
+      const sig = base64urlnopad.encode(ed25519.sign(new TextEncoder().encode(canonical), signingSeed));
       // noble emits canonical base64url already; the venue rejects any other spelling,
       // so assert rather than trust — a non-canonical signature would 403 at the venue
       // with nothing here to explain why.
