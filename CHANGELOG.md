@@ -8,6 +8,9 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `tclk_adaptor_presign` is now annotated `WRITES` instead of `READS`. The tool
+  signs a rail claim message with the server's payment key, so a client that
+  auto-approves read-only tools must not auto-approve it.
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.

@@ -193,8 +193,8 @@ export const TOOLS: readonly ManifestTool[] = [
       "$schema": "http://json-schema.org/draft-07/schema#"
     },
     "annotations": {
-      "readOnlyHint": true,
-      "openWorldHint": false
+      "readOnlyHint": false,
+      "openWorldHint": true
     },
     "execution": {
       "taskSupport": "forbidden"
