@@ -269,7 +269,7 @@ export function createServer(options: HandlerOptions = {}): McpServer {
       description:
         "PTLC: pre-sign a rail claim message under a point statement, using this " +
         "server's TCLK_PAYMENT_KEY. Unaudited reference crypto — not for mainnet value.",
-      annotations: READS,
+      annotations: WRITES,
       inputSchema: {
         msg: z.string().describe("The rail's claim message, 0x-hex."),
         statement: z.string().describe("33-byte SEC1 point T, 0x-hex."),
