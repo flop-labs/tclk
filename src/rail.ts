@@ -93,9 +93,11 @@ export class MemoryRail implements SettlementRail {
 
   async verifyLock(terms: LockTerms, ref: string): Promise<boolean> {
     const held = this.locks.get(ref);
+    const now = this.clock();
     return (
       held !== undefined &&
       held.status === "locked" &&
+      Number.isFinite(now) && now >= 0 && now < held.terms.refundAfterMs &&
       canonicalJson(held.terms) === canonicalJson(terms)
     );
   }

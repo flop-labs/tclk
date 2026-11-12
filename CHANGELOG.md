@@ -8,6 +8,9 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `MemoryRail.verifyLock` and `PaperRail.verifyLock` now reject expired locks at
+  `refundAfterMs`, even before a refund is recorded. Verification no longer reports
+  an unclaimable rehearsal lock as live; claim/refund rules and stored bytes are unchanged.
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.

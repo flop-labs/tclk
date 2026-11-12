@@ -311,6 +311,10 @@ or subset. Order therefore never affects negotiation: `["paper","x402"]` matches
 Array order still contributes bytes to a hand-built historical offer id, which is why decode
 preserves it.
 
+For the rehearsal rails `memory` and `paper`, `verifyLock` also checks the injected clock:
+an unclaimed record is no longer a live lock at or after `refundAfterMs`. This read does not
+execute a refund or change the recorded status; the payer must still call `refund`.
+
 `LockTerms` is derived from an accepted contract (id, lock kind, statement, amount, asset,
 parties, deadlines). The library ships `MemoryRail`, a reference implementation that enforces
 the lock/claim/refund predicates in-process — it is the executable spec of what a real rail must
