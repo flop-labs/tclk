@@ -129,9 +129,11 @@ export class PaperRail implements SettlementRail {
   async verifyLock(terms: LockTerms, ref: string): Promise<boolean> {
     if (ref !== terms.contract) return false;
     const record = await this.read(ref);
+    const now = this.clock();
     return (
       record !== null &&
       record.status === "locked" &&
+      Number.isFinite(now) && now >= 0 && now < record.refundAfterMs &&
       record.lock === terms.lock &&
       record.statement === terms.statement &&
       record.refundAfterMs === terms.refundAfterMs
