@@ -35,7 +35,7 @@ export { TCLK_TERMINAL_STATUSES, openContract, applyFrame } from "./machine.js";
 export type { TclkStatus, ContractState, StepResult } from "./machine.js";
 
 export {
-  verifyTranscriptRecord, transcriptRecord, parseTranscriptExport,
+  verifyTranscriptRecord, transcriptRecord, parseTranscriptExport, parseRecordJson,
   findContractHandshake, foldTranscript,
 } from "./transcript.js";
 export type {
