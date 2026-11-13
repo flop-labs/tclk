@@ -49,6 +49,32 @@ adaptor-signature path is **unaudited reference crypto**: full-Schnorr with rand
 BIP-340 x-only, so it cannot produce a Taproot-valid signature and does not interoperate with
 Bitcoin today. "PTLC" here means the protocol shape, not Bitcoin compatibility.
 
+### PaperRail record migration
+
+**Do not upgrade mid-rehearsal.** Finish existing rehearsals before upgrading,
+then upgrade all participants before creating new v2 locks. If a participant has
+already upgraded, v1 records remain readable for claim/refund but are not
+verifiable locks; do not bypass verification or rewrite them as v2.
+
+New PaperRail locks emit `tclkpaper2` records containing the complete lock terms.
+Upgrade all participants that need to read, verify, claim, or refund these locks
+before creating them. Older implementations that only understand `tclkpaper1`
+return `null` from `read()` and `false` from `verifyLock()` for v2 records;
+`claim()` and `refund()` throw, and attempting another lock for the same contract
+also throws. Those participants must upgrade to operate the v2 lock.
+
+The new implementation can still read, claim, and refund existing `tclkpaper1`
+records. Claim/refund updates preserve v1 encoding, so older implementations can
+read them. However, `verifyLock()` returns `false` for every v1 record because it
+lacks the complete terms required for exact verification. An in-flight v1 deal
+therefore cannot pass exact lock verification after a participant upgrades.
+Plan the cutover around existing rehearsals; upgrading does not convert their
+records to v2. Do not bypass verification to continue a deal.
+
+These are PaperRail note-record versions; the `tclk/1` frame format is unchanged.
+PaperRail remains a rehearsal rail and transfers no value. See
+[SPEC.md §5.1](SPEC.md#51-paperrail-record-migration) for the compatibility matrix.
+
 ## Packages
 
 | package | what it is |
