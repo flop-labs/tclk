@@ -18,6 +18,10 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- Documented accept-time preservation of complete signed offer/accept records for
+  offline transcript verification (#181). Clarifies retention limitations, replay
+  requirements, and the distinction between missing evidence and a failed contract.
+  Includes a positional-argument command example for the offline auditor.
 - `@flop-labs/tclk-flop`: native FLOP HTLC settlement with devnet defaults and
   explicit testnet/mainnet RPC and genesis configuration. The rail binds terms to
   finalized escrow state, signs locally with the party's Ed25519 key, and supports
