@@ -39,6 +39,22 @@ describe("the Worker's tool manifest", () => {
     expect(INSTRUCTIONS).toBe(surface.instructions);
   });
 
+  it("never advertises tclk_adaptor_presign as read-only", async () => {
+    // Regression guard for #237's annotation hazard: presign signs with the
+    // server payment key, so it must never read as a read-only tool. The
+    // parity test above only proves the two surfaces agree; this asserts the
+    // actual value, so reverting both to READS fails here.
+    const presign = TOOLS.find((tool) => tool.name === "tclk_adaptor_presign");
+    expect(presign, "tclk_adaptor_presign is missing from the manifest").toBeDefined();
+    expect(presign?.annotations?.readOnlyHint).toBe(false);
+
+    const surface = await readServerSurface(createServer({ env: {} }));
+    const live = surface.tools.find((tool) => tool.name === "tclk_adaptor_presign");
+    expect(live, "tclk_adaptor_presign is missing from the stdio surface").toBeDefined();
+    const liveAnnotations = live?.annotations as Record<string, unknown> | undefined;
+    expect(liveAnnotations?.readOnlyHint).toBe(false);
+  });
+
   it("carries the protocol versions this build of the SDK speaks", () => {
     expect([...PROTOCOL_VERSIONS]).toEqual(SDK_PROTOCOL_VERSIONS.supported);
     expect(LATEST_PROTOCOL_VERSION).toBe(SDK_PROTOCOL_VERSIONS.latest);
