@@ -384,7 +384,7 @@ export class FlopRail implements SettlementRail {
       return (
         escrow.status === "Open" &&
         snapshot.finalizedNumber < escrow.deadline &&
-        Math.max(this.now(), snapshot.timestampMs) < terms.refundAfterMs
+        Math.max(this.now(), snapshot.timestampMs) < terms.claimByMs
       );
     } catch {
       return false;

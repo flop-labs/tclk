@@ -272,7 +272,7 @@ describe("FlopRail", () => {
     chain.head.finalizedNumber = NaN;
     expect(await rail.verifyLock(t, ref)).toBe(false);
     chain.head.finalizedNumber = 101;
-    chain.tick(60);
+    chain.tick(30);
     expect(await rail.verifyLock(t, ref)).toBe(false);
   });
   it("does not submit an incorrect or expired secret", async () => {
@@ -533,26 +533,20 @@ describe("pending reference validation", () => {
 });
 
 describe("lock live deadline", () => {
-  it("verifyLock stays true in the late window (after claimByMs, before refundAfterMs)", async () => {
+  it("lock in the late window opens the escrow but returns FlopLockError, ref still claimable", async () => {
     const { rail, chain, t } = setup();
-    const ref = await rail.lock(t);
-    // T0+46s: past the payee's safe claim deadline (T0+30s) but the escrow
-    // is still Open, finalized well before its block deadline, and claim()
-    // still accepts (it checks refundAfterMs). verifyLock must agree.
+    // T0+45s: past the payee's safe claim deadline (claimByMs, T0+30s) but
+    // before refundAfterMs (T0+60s). lock() passes the moved checks and opens
+    // the escrow, but its self-verification calls verifyLock, which still
+    // answers "safe to reveal" at claimByMs and so refuses to vouch for it.
+    // The escrow is live: the error carries the ref, and claim() accepts it.
     chain.tick(45);
-    expect(await rail.verifyLock(t, ref)).toBe(true);
-    await rail.claim(ref, secret);
-    expect(chain.claims).toBe(1);
-  });
-
-  it("locks in the late window the machine also accepts (after claimByMs, before refundAfterMs)", async () => {
-    const { rail, chain, t } = setup();
-    // T0+45s: the machine accepts a lock frame until refundAfterMs (SPEC §4),
-    // so the rail must lock the funds here too, not refuse after claimByMs.
-    chain.tick(45);
-    const ref = await rail.lock(t);
+    const error = await rail.lock(t).catch((e) => e);
+    expect(error).toBeInstanceOf(FlopLockError);
     expect(chain.opens).toBe(1);
-    expect(await rail.verifyLock(t, ref)).toBe(true);
+    expect(await rail.verifyLock(t, error.ref)).toBe(false);
+    await rail.claim(error.ref, secret);
+    expect(chain.claims).toBe(1);
   });
 
   it("refuses to lock once the refund window is open", async () => {

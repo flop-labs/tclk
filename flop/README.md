@@ -109,7 +109,7 @@ ceil((refundAfterMs - A) / blockTimeMs) + refundMarginBlocks
 
 The pallet sets its absolute deadline to **inclusion block + timeout**. Verification
 checks that exact height and that inclusion happened within `refundMarginBlocks`
-of the anchor. It requires an open escrow before `claimByMs`, the expected parties,
+of the anchor. It requires an open escrow before `refundAfterMs`, the expected parties,
 amount, two-leaf policy, chain identity and a runtime finality prefix below the
 deadline. It fails closed on RPC errors and malformed, stale or mismatched data.
 
