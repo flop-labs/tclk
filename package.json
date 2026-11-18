@@ -42,11 +42,11 @@
   "packageManager": "pnpm@11.25.0",
   "scripts": {
     "prepublishOnly": "pnpm build",
-    "build": "node init && tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "generate:protocol": "node scripts/generate-frame-fields.mjs",
     "check:protocol": "node scripts/generate-frame-fields.mjs --check",
-    "build:all": "node init && pnpm -r --include-workspace-root build",
+    "build:all": "pnpm -r --include-workspace-root build",
     "test:all": "pnpm -r --include-workspace-root test"
   },
   "dependencies": {
