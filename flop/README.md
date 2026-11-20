@@ -109,9 +109,11 @@ ceil((refundAfterMs - A) / blockTimeMs) + refundMarginBlocks
 
 The pallet sets its absolute deadline to **inclusion block + timeout**. Verification
 checks that exact height and that inclusion happened within `refundMarginBlocks`
-of the anchor. It requires an open escrow before `refundAfterMs`, the expected parties,
-amount, two-leaf policy, chain identity and a runtime finality prefix below the
-deadline. It fails closed on RPC errors and malformed, stale or mismatched data.
+of the anchor. Lock admission and `inspect()` require an open escrow before
+`refundAfterMs`, with the expected parties, amount, two-leaf policy, chain identity
+and a runtime finality prefix below the deadline. `verifyLock()` uses the earlier
+deadline: it requires the escrow to be open before `claimByMs`. It fails closed on
+RPC errors and malformed, stale or mismatched data.
 
 **The chain enforces block heights, not Unix milliseconds.** The conversion is a
 nominal schedule plus a margin, not a promise of wall-clock expiry. A stall can
@@ -135,9 +137,12 @@ contains `txHash`; inspect its finalized events before resubmitting. A wallet
 should pass `persistPending: async (pendingRef) => { /* durable wallet journal */ }`
 to `connectFlopRail`. This hook completes before signing/sending; if it fails,
 no transaction is submitted. After the hook finishes, the rail rechecks the
-claim window and the anchor against the latest finalized snapshot. A closed
-claim window or exhausted inclusion allowance aborts before submission and
-allows the wallet to prepare a fresh attempt. The library itself does not persist state.
+claim window and the anchor against the latest finalized snapshot. A stale anchor
+or exhausted inclusion allowance aborts before submission. A closed claim window
+does not: after `claimByMs`, `lock()` can still submit, finalize a real escrow,
+and then throw `FlopLockError` with a recovery ref. That ref remains the recovery
+handle, and the same wallet instance must not retry the contract. The library
+itself does not persist state.
 `FlopSubmissionError` carries that same `pendingRef` and, when available, `txHash`.
 Use `recoverFlopReference(pendingRef, escrowIdFromFinalizedEvent)` to reconstruct
 the reference after a lost receipt, then verify it against the chain. Do not
