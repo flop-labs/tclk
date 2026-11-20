@@ -385,7 +385,7 @@ describe("wallet recovery and duplicate submissions", () => {
 });
 
 describe("post-journal admission", () => {
-  it("refuses to send when the local clock reaches claimByMs during journaling", async () => {
+  it("refuses to send when the local clock reaches refundAfterMs during journaling", async () => {
     const chain = new Chain();
     let now = T0;
     const t = terms();
@@ -394,10 +394,10 @@ describe("post-journal admission", () => {
       {},
       () => now,
       async () => {
-        now = t.claimByMs;
+        now = t.refundAfterMs;
       },
     );
-    await expect(rail.lock(t)).rejects.toThrow("claim window has closed");
+    await expect(rail.lock(t)).rejects.toThrow("refund window is already open");
     expect(chain.opens).toBe(0);
     expect(chain.held).toBeUndefined();
   });
@@ -409,10 +409,10 @@ describe("post-journal admission", () => {
       {},
       () => T0,
       async () => {
-        chain.tick(30);
+        chain.tick(60);
       },
     );
-    await expect(rail.lock(terms())).rejects.toThrow("claim window has closed");
+    await expect(rail.lock(terms())).rejects.toThrow("refund window is already open");
     expect(chain.opens).toBe(0);
   });
 
@@ -529,5 +529,30 @@ describe("pending reference validation", () => {
     await rail.lock(terms());
     await expect(rail.claim(pending, secret)).rejects.toThrow("agreed terms");
     expect(chain.claims).toBe(0);
+  });
+});
+
+describe("lock live deadline", () => {
+  it("lock in the late window opens the escrow but returns FlopLockError, ref still claimable", async () => {
+    const { rail, chain, t } = setup();
+    // T0+45s: past the payee's safe claim deadline (claimByMs, T0+30s) but
+    // before refundAfterMs (T0+60s). lock() passes the moved checks and opens
+    // the escrow, but its self-verification calls verifyLock, which still
+    // answers "safe to reveal" at claimByMs and so refuses to vouch for it.
+    // The escrow is live: the error carries the ref, and claim() accepts it.
+    chain.tick(45);
+    const error = await rail.lock(t).catch((e) => e);
+    expect(error).toBeInstanceOf(FlopLockError);
+    expect(chain.opens).toBe(1);
+    expect(await rail.verifyLock(t, error.ref)).toBe(false);
+    await rail.claim(error.ref, secret);
+    expect(chain.claims).toBe(1);
+  });
+
+  it("refuses to lock once the refund window is open", async () => {
+    const { rail, chain, t } = setup();
+    chain.tick(60);
+    await expect(rail.lock(t)).rejects.toThrow("refund window is already open");
+    expect(chain.opens).toBe(0);
   });
 });
