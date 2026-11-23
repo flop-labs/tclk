@@ -8,6 +8,10 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `@flop-labs/tclk-flop`: `connectFlopRail` no longer keeps the process alive after a
+  connection that fails before the WebSocket handshake (closed port, unresolvable host) on
+  Node 22. The provider's keep-alive interval was cleared only by a socket `close` event,
+  which Node 22's built-in WebSocket does not emit for that failure.
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.

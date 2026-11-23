@@ -274,6 +274,33 @@ export interface ConnectFlopRailOptions extends FlopRailConfig {
   /** Persist public recovery data before any signed open transaction is sent. */
   persistPending?: FlopPendingWriter;
 }
+/**
+ * `WsProvider.connect()` starts a ref'd 5 s interval and clears it only from the socket's
+ * `close` event. Node 22's built-in WebSocket emits `error` but no `close` when a connection
+ * fails before the handshake, so that interval would keep the process alive after a failed
+ * connect. Record the handles the synchronous part of `connect()` creates so the failure path
+ * can clear them itself.
+ */
+function connectTracked(provider: WsProvider): {
+  ready: Promise<void>;
+  release(): void;
+} {
+  const handles: ReturnType<typeof setInterval>[] = [];
+  const original = globalThis.setInterval;
+  globalThis.setInterval = ((...args: Parameters<typeof setInterval>) => {
+    const handle = original(...args);
+    handles.push(handle);
+    return handle;
+  }) as typeof setInterval;
+  try {
+    return {
+      ready: provider.connect(),
+      release: () => handles.forEach((handle) => clearInterval(handle)),
+    };
+  } finally {
+    globalThis.setInterval = original;
+  }
+}
 /** Local wallet connection. The caller owns the signer; no secret is sent to the chat/MCP server. */
 export async function connectFlopRail(
   options: ConnectFlopRailOptions = {},
@@ -286,10 +313,13 @@ export async function connectFlopRail(
   const provider = new WsProvider(config.rpcUrl, false);
   const api = new ApiPromise({ provider, noInitWarn: true });
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let release = () => {};
   try {
     await Promise.race([
       (async () => {
-        await provider.connect();
+        const tracked = connectTracked(provider);
+        release = tracked.release;
+        await tracked.ready;
         await api.isReadyOrError;
       })(),
       new Promise<never>((_, reject) => {
@@ -317,7 +347,11 @@ export async function connectFlopRail(
     await chain.snapshot(); // Check actual finalized storage before returning a usable rail.
     return { rail, chain, disconnect: () => api.disconnect() };
   } catch (error) {
-    await api.disconnect();
+    try {
+      await api.disconnect();
+    } finally {
+      release();
+    }
     throw error;
   } finally {
     clearTimeout(timer);
