@@ -136,6 +136,28 @@ describe("configuration", () => {
   ])("rejects malformed config %j", (config) => {
     expect(() => resolveFlopConfig(config as any)).toThrow();
   });
+  it.each([
+    "not a url",
+    "",
+    "wss://",
+    "wss://user:se cret@node example",
+    42,
+  ])("refuses an unparseable rpcUrl %j with a flop: error", (rpcUrl) => {
+    let thrown: unknown;
+    try {
+      resolveFlopConfig({ rpcUrl } as any);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    expect(thrown).not.toBeInstanceOf(TypeError);
+    expect((thrown as Error).message).toBe(
+      "flop: rpcUrl must be a WebSocket URL without credentials or fragment",
+    );
+    // The raw URL TypeError carried the rejected string, credentials and all.
+    expect(JSON.stringify(thrown)).not.toContain("se cret");
+    expect(Object.keys(thrown as object)).not.toContain("input");
+  });
 });
 describe("FlopRail", () => {
   it("locks integer base units with exactly two hash leaves and a conservative block deadline", async () => {

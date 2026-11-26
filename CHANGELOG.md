@@ -8,6 +8,10 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- `@flop-labs/tclk-flop`: an `rpcUrl` that does not parse as a URL (an empty string, a
+  bare host, a non-string) is now refused with the same `flop: rpcUrl must be a WebSocket
+  URL ...` error as a wrong scheme, instead of a raw `TypeError` whose `input` property
+  carried the rejected string, credentials included.
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.

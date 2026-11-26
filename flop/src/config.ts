@@ -31,8 +31,18 @@ export function resolveFlopConfig(
     );
   }
   const rpcUrl = input.rpcUrl ?? "wss://rpc.devnet.flop.network";
-  const url = new URL(rpcUrl);
+  // `new URL` refuses a malformed string with a bare TypeError whose `input` property is the
+  // whole string, so a mistyped URL carrying credentials would reach any logger that prints
+  // the error object, the exact leak the credential check below exists to prevent. Every
+  // shape that is not a plain WebSocket URL gets the one `flop:` refusal instead.
+  let url: URL | undefined;
+  try {
+    url = typeof rpcUrl === "string" ? new URL(rpcUrl) : undefined;
+  } catch {
+    url = undefined;
+  }
   if (
+    !url ||
     !["ws:", "wss:"].includes(url.protocol) ||
     url.username ||
     url.password ||
