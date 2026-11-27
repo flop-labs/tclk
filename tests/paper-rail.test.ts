@@ -206,4 +206,29 @@ describe("paper rail — reads are anonymous input", () => {
   it("rejects a malformed contract id rather than sharding garbage", () => {
     expect(() => paperNote("nonsense")).toThrow(/malformed contract id/);
   });
+
+  it("stays fail-closed and readable on non-canonical case", async () => {
+    const { rail } = railAt();
+    const deal = terms();
+
+    // Malformed ids read as absent instead of throwing out of a polling loop.
+    await expect(rail.verifyLock({ ...deal.terms, contract: "0xZZZ" }, "0xZZZ")).resolves.toBe(false);
+    await expect(rail.read("0xZZZ")).resolves.toBeNull();
+
+    // An uppercase statement never reaches the note: honest terms are already
+    // lowercase via lockTerms(), anything else is a hand-built caller bug.
+    const upperStatement = deal.terms.statement.toUpperCase().replace("0X", "0x");
+    await expect(rail.lock({ ...deal.terms, statement: upperStatement })).rejects.toThrow(
+      /does not fit its lock kind/,
+    );
+
+    // verifySecret accepts uppercase, so claim does too — but it stores the
+    // canonical lowercase spelling, keeping a successful claim auditable.
+    const ref = await rail.lock(deal.terms);
+    const upperSecret = deal.secret.toUpperCase().replace("0X", "0x");
+    await rail.claim(ref, upperSecret);
+    const record = await rail.read(ref);
+    expect(record?.status).toBe("claimed");
+    expect(record?.secret).toBe(deal.secret.toLowerCase());
+  });
 });
