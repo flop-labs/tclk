@@ -15,6 +15,9 @@ All notable changes to this project are documented here. Format follows
   numbers, so signed Technocore nonces above JavaScript's safe-integer range are preserved
   without precision loss. Unsafe numeric nonces (> 2^53 - 1) are rejected at the MCP schema
   boundary rather than silently rounded.
+- `flop/examples/devnet.mjs --fund` and the `flop/README.md` genesis check use the devnet
+  faucet's own origin, `https://faucet.devnet.flop.network`. `faucet.flop.network` now
+  serves testnet, so `--fund` always stopped with "Faucet chain identity mismatch".
 
 ### Added
 

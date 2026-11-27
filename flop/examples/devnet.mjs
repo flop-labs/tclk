@@ -35,8 +35,10 @@ if (config.network !== "devnet")
 if (payer.address === payee.address)
   throw new Error("Use distinct payer and payee keys");
 if (process.argv.includes("--fund")) {
+  // The devnet faucet's own origin: faucet.flop.network now serves testnet.
+  const faucet = "https://faucet.devnet.flop.network";
   const identity = await (
-    await fetch("https://faucet.flop.network/chain", {
+    await fetch(`${faucet}/chain`, {
       signal: AbortSignal.timeout(15000),
     })
   ).json();
@@ -48,7 +50,7 @@ if (process.argv.includes("--fund")) {
     throw new Error("Faucet chain identity mismatch");
   config.expectedGenesisHash = identity.genesisHash;
   for (const pair of [payer, payee]) {
-    let response = await fetch("https://faucet.flop.network/fund", {
+    let response = await fetch(`${faucet}/fund`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ address: pair.address, amount: 2, source: "sdk" }),
@@ -59,7 +61,7 @@ if (process.argv.includes("--fund")) {
       if (Number.isSafeInteger(seconds) && seconds > 0 && seconds <= 120) {
         console.log(JSON.stringify({ stage: "faucet-wait", seconds }));
         await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
-        response = await fetch("https://faucet.flop.network/fund", {
+        response = await fetch(`${faucet}/fund`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
