@@ -47,8 +47,8 @@ pnpm -r --include-workspace-root build
 pnpm -r --include-workspace-root test
 ```
 
-`--include-workspace-root` is not optional: the library **is** the root package (`mcp/` is the
-only child), so a plain `pnpm -r` skips it and `mcp/` then builds against a stale `dist/`. The
+`--include-workspace-root` is not optional: the library **is** the root package (`mcp/` and
+`flop/` are workspace children), so a plain `pnpm -r` skips it and `mcp/` then builds against a stale `dist/`. The
 same reason means you must build before running `examples/live-deal.mjs` — it imports `dist/`.
 
 ## Making a change
@@ -82,8 +82,8 @@ a tag, so there is no route from an untrusted pull request to the registry.
 One release:
 
 1. Fold `[Unreleased]` in `CHANGELOG.md` into a dated section and set the version in both
-   `package.json` and `mcp/package.json` — the workflow refuses to publish if the tag and
-   the two manifests disagree.
+   `package.json`, `mcp/package.json` and `flop/package.json` — the workflow refuses to
+   publish if the tag and any of the three manifests disagree.
 2. Tag it `vX.Y.Z` and push the tag.
 3. Approve the `npm` environment when it asks.
 

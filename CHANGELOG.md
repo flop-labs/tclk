@@ -8,6 +8,10 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- The release workflow now checks `flop/package.json` against the tag, and
+  `@flop-labs/tclk-flop` declares public access and its repository like the other two
+  packages. Before, a tag release published it unchecked and, as a scoped package
+  without `publishConfig`, with npm's restricted default.
 - Transcript JSON readers on runtimes without reviver source context now preserve
   escaped nonce keys and complete numeric tokens without accepting invalid JSON or
   changing signed text. Noncanonical nonce tokens remain rejected by verification.

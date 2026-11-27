@@ -49,18 +49,18 @@ jobs:
       # The tag is the release's claim about what version this is; the manifests are
       # the fact. A mismatch means one of them is wrong, and finding out after the
       # version is on the registry is too late — npm versions are immutable.
-      - name: Tag matches both manifests
+      - name: Tag matches every published manifest
         if: github.event_name == 'push'
         run: |
           tag="${GITHUB_REF_NAME#v}"
-          for manifest in package.json mcp/package.json; do
+          for manifest in package.json mcp/package.json flop/package.json; do
             version=$(node -p "require('./$manifest').version")
             if [ "$tag" != "$version" ]; then
               echo "tag $GITHUB_REF_NAME says $tag, but $manifest says $version" >&2
               exit 1
             fi
           done
-          echo "both manifests agree: $tag"
+          echo "all manifests agree: $tag"
 
       # `-r --include-workspace-root` publishes in dependency order, so the library
       # lands before the MCP server that depends on it — the order matters, because
@@ -68,7 +68,7 @@ jobs:
       # dependency. Already-published versions are skipped, so a re-run after a partial
       # failure completes the release rather than erroring on what already went out.
       #
-      # No `--access`: `publishConfig` states it in both manifests. No `--provenance`:
+      # No `--access`: `publishConfig` states it in every manifest. No `--provenance`:
       # passing it explicitly *skips* the visibility probe, and letting OIDC decide is
       # what attaches the attestation correctly.
       #
