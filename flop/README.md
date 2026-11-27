@@ -65,7 +65,7 @@ current network registry marks these networks as planned; a configuration label
 is not evidence that either has launched. Supply an operator-published endpoint
 and genesis at launch. Never obtain the trusted genesis from an untrusted lock
 frame. For devnet, independently compare the RPC genesis with the faucet's
-`GET https://faucet.flop.network/chain`, or supply a trusted pin explicitly.
+`GET https://faucet.devnet.flop.network/chain`, or supply a trusted pin explicitly.
 A devnet reset invalidates references from the previous genesis.
 
 ```ts
